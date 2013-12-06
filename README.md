@@ -1,4 +1,4 @@
-# GoogleScraper - A simple module to scrape and extract links from the Google search engine.
+### GoogleScraper - A simple module to scrape and extract links from the Google search engine.
 
 GoogleScraper supports the following scenarious:
 
