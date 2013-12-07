@@ -3,7 +3,7 @@ import urllib.parse
 
 if __name__ == '__main__':
 	
-	urls = GoogleScraper.scrape('inurl:"view.php?tid=23"', number_pages=2)
+	urls = GoogleScraper.scrape('cute cats', number_pages=5)
 	for url in urls:
 		# You can access all parts of the search results like that
 		# url.scheme => URL scheme specifier (Ex: 'http')
