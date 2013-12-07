@@ -1,18 +1,20 @@
-### GoogleScraper - A simple module to scrape and extract links from the Google search engine.
+GoogleScraper - A simple module to scrape and extract links from Google. 
+========================================================================
 
 GoogleScraper supports the following scenarious:
 
-1. Written in Python 3
-2. Uses multihreading/asynchroneous IO.
-3. Supports parallel google scraping with multiple IP addresses.
-4. Provides proxy support:
-..* Socks5
-..* Socks4
-..* HttpProxy
-5. Support for additional google search futures
++ Written in Python 3
++ Uses multihreading/asynchroneous IO.
++ Supports parallel google scraping with multiple IP addresses.
++ Provides proxy support:
+	..* Socks5
+	..* Socks4
+	..* HttpProxy
++ Support for additional google search futures.
 
 
-### Examle Usage
+Examle Usage
+------------
 
 ```python
 import GoogleScraper
