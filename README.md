@@ -13,8 +13,6 @@ There are unlimited use cases:
 + Compile lists of sites to feed your own database.
 + Many more use cases...
 
-<IMG SRC=javascript:alert(String.fromCharCode(88,83,83))>
-
 GoogleScraper is implemented with the following techniques/software:
 
 + Written in Python 3
