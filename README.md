@@ -174,6 +174,9 @@ http://www.blogger.com/?tab=wj
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
 
+### To-do list (As of 22.12.2013)
++ Figure out whether to use threads or asynchroneous I/O for multiple connections.
++ Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
 
 [1]: http://www.webvivant.com/google-hacking.html "Google Dorks"
 [2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
