@@ -1,61 +1,44 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-# This is a little module to use the google search engine
-# It compromises the google terms of service. Please note
-# that.
+# This is a little module that uses Google to automate
+# search queries. It gives access to all data of a search page:
+# - The links of the result page
+# - The title of the links
+# - The caption/description below each link
+# - The number of results for this keyword.
 
-# Of course, when searching for suspicious terms (including
-# dorks or patterns of vulnerable applicatios) google rec-
-# ognizes you pretty fast and blocks your IP address and 
-# maybe even your broswer signature (UA the most notorious
-# needle here). I could implement proxy (socks 4/5, http/s)
-# support, but it seems that urllib3 doesn't support proxies
-# yet. Then I could fall back to use urllib.request instead
-# of requests, but it seems that the module which provides
-# the possibility to socksify your requests (SocksiPy) looks
-# pretty much outdated. Therefore I decided not to implement
-# any complex partly functional solution. Does this mean we 
-# are limited until Google blocks our IP address?
+# GoogleScraper's architecture outlined:
+# Proxy support (Socks5, Socks4, HTTP Proxy).
+# Threading support.
 
-# Absolutely not. There is a wonderful tool called proxychains
-# which hooks all the low level socket stuff and reroutes all
-# traffic through the proxy (Yes, including DNS queries).
+# The module implements some countermeasures to circumvent spamming detection
+# from the Google Servers:
+# {List them here}
 
-# I will work on a not too slow solution to combine proxychains
-# with this module. Seems like it's not a trivial task, since 
-# proxychains only supports configuration files and I need a dynamic
-# configuration, because I want to call proxychains once for google
-# search request with exactly one proxy (no chaining). Proxychains isn't
-# directly made for it, maybe I have to hack some additional functionality
-# into proxychains...
+# Note: Scrapign compromises the google terms of service (TOS).
 
 __VERSION__ = '0.2'
-__UPDATED__ = '06.12.2013' # day.month.year
+__UPDATED__ = '24.12.2013' # day.month.year
 __AUTHOR__ = 'Nikolai'
 __WEBSITE__ = 'incolumitas.com'
 
 import sys
-import gzip
+import os
+import argparse
+import hashlib
 import re
 import lxml.html
 import urllib.parse
 from random import choice
 try:
+    import requests
+    import cssselect
     from bs4 import UnicodeDammit
 except ImportError as e:
     print(e.msg)
-    print('You can install beuatifulsoup with "pip install beautifulsoup4" or "easy_install beautifulsoup4".')
-
-try:
-    import requests
-except ImportError as ierr:
-    print('[-] Required module not found: {}'.format(ierr))
-    print('[-] You have to install the module with '
-          'a command like this %s , whereby X.X '
-          'stands for the python version.'
-            % '/usr/bin/pip-X.X install requests')
-    sys.exit(2)
+    print('You can install missing modules with `pip install modulename`')
+    sys.exit(1)
 
 class GoogleSearchError(Exception):
     def __init__(self):
@@ -69,6 +52,29 @@ class InvalidNumberResultsException(GoogleSearchError):
         self.nres = number_of_results
     def __str__(self):
         return '%d is not a valid number of results per page' % self.nres
+
+def cache_req(search_params, html):
+    '''
+    logs/caches a search response to logs/fname.cache
+    in order to intensify testing and avoid requesting
+    the same resources again and again (such that google would
+    requests us as what we are: Sneaky seo crawlers!)
+    '''
+    sha = hashlib.sha256()
+    sha.update(b''.join(str(s).encode() for s in search_params.values()))
+    fname = '{}.{}'.format(sha.hexdigest(), 'cache')
+    if os.path.exists('scrapecache/') and os.access('scrapecache/', os.R_OK | os.W_OK | os.F_OK):
+        try:
+            if fname in os.listdir('scrapecache/'):
+                with open(fname, 'r') as fd:
+                    return fd.read()
+            else:
+                with open(fname, 'w') as fd:
+                    fd.write(html)
+        except FileNotFoundError as err:
+            raise Exception('Unexpected file not found.')
+    else: # First call ever to cache_req
+        os.mkdir('scrapecache/', 0o644)
 
 
 class GoogleScraper:
@@ -185,6 +191,7 @@ class GoogleScraper:
             sys.exit(1)
        
         html = r.text
+        cache_req(self._GOOGLE_SEARCH_PARAMS, html)
 
         try:
             doc = UnicodeDammit(html, is_html=True)
@@ -200,6 +207,7 @@ class GoogleScraper:
             links = dom.cssselect('a')
             return [e.get('href') for e in links]
         except Exception as ee:
+            print(ee.msg)
             # Most likely cssselect() is not installed!
             # Try iterlinks() [Its probably better anyways]
             return [link for element, attribute, link, position in dom.iterlinks() if attribute == 'href']
@@ -250,3 +258,18 @@ def scrape(query, results_per_page=100, number_pages=1, offset=0):
     scraper = GoogleScraper(query, number_results_page=results_per_page)
     results = scraper.search(number_pages=number_pages)
     return [url for url in results]
+
+
+# For unit tests and direct use of the module
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='GoogleScraper', description='Scrape the Google search engine',
+                                        epilog='This program might infringe Google TOS, so use at your own risk')
+    parser.add_argument('-q', '--query', metavar='search_string', type=str, action='store', dest='query', required=True,
+                       help='The search query.')
+    parser.add_argument('-n', '--num_search_results', metavar='number_of_search_results', type=int, dest='num_search_results', action='store', default=100,
+                       help='The number of results per page. Most be one of [10, 25, 50, 100]')
+    parser.add_argument('-p', '--num_pages', metavar='num_of_pages', type=int, dest='num_pages', action='store', default=1,
+                       help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
+    args = parser.parse_args()
+
+    scrape(args.query, args.num_search_results, args.num_pages)
