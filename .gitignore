@@ -1,5 +1,5 @@
 # PyCharm editor
-.idea
+.idea/
 
 # cache for GoogleScraper testings
 scrapecache/

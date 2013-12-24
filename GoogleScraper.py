@@ -1,22 +1,22 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-# This is a little module that uses Google to automate
-# search queries. It gives access to all data of a search page:
+# This is a little module that uses Google to automate search
+# queries. It gives (pragmatical) access to all data of a search results:
 # - The links of the result page
 # - The title of the links
 # - The caption/description below each link
-# - The number of results for this keyword.
+# - The number of results for this keyword
 
 # GoogleScraper's architecture outlined:
-# Proxy support (Socks5, Socks4, HTTP Proxy).
-# Threading support.
+# - Proxy support (Socks5, Socks4, HTTP Proxy)
+# - Threading support
 
 # The module implements some countermeasures to circumvent spamming detection
 # from the Google Servers:
 # {List them here}
 
-# Note: Scrapign compromises the google terms of service (TOS).
+# Note: Scraping compromises the google terms of service (TOS).
 
 __VERSION__ = '0.2'
 __UPDATED__ = '24.12.2013' # day.month.year
