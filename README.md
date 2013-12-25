@@ -3,7 +3,7 @@
 ### What does GoogleScraper?
 
 GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
-links programmatically and then your application can do whatever it want with them.
+links problematically and then your application can do whatever it want with them.
 
 There are unlimited use cases:
 
@@ -33,151 +33,166 @@ import GoogleScraper
 import urllib.parse
 
 if __name__ == '__main__':
-	
-	urls = GoogleScraper.scrape('inurl:"view.php?tid=23"', number_pages=2)
-	for url in urls:
-		# You can access all parts of the search results like that
-		# url.scheme => URL scheme specifier (Ex: 'http')
-		# url.netloc => Network location part (Ex: 'www.python.org')
-		# url.path => URL scheme specifier (Ex: ''help/Python.html'')
-		# url.params => Parameters for last path element
-		# url.query => Query component
-		print(urllib.parse.unquote(url.geturl()))
 
-	print('#################################################################')	
-	print('[!] Received %d results by asking %d pages with %d results per page' %
-				(len(urls), 2, 100))
+    results = GoogleScraper.scrape('HOly shit', number_pages=1)
+    for link_title, link_snippet, link_url in results['results']:
+        # You can access all parts of the search results like that
+        # link_url.scheme => URL scheme specifier (Ex: 'http')
+        # link_url.netloc => Network location part (Ex: 'www.python.org')
+        # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
+        # link_url.params => Parameters for last path element
+        # link_url.query => Query component
+        try:
+            print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
+        except:
+            pass
 
+# How many urls did we get?
+print(len(results['results']))
+
+# How many hits has google found with our keyword?
+print(results['num_results_for_kw'])
 ```
 
 ### Example Output
 
-This is a example output of *GoogleScraper.py* using the search query **cute cats**:
+This is a example output of the above *use.py*:
 
 ```
-author@arch-linux GoogleScraper]$ python3 use.py 
-http://www.cutecatgifs.com/
-http://imgur.com/QnkFrG3
-http://www.sadanduseless.com/2012/10/hard-truth-from-cats/
-http://www.petmd.com/cat/centers/kitten/top-male-cat-names-for-kittens-cute-popular
-http://www.swcp.com/
-http://www.blogger.com/?tab=wj
-http://stuffonmycat.com/
-http://agentmlovestacos.com/post/1671470859/9-gifs-of-cats-being-cute
-http://www.pinterest.com/lovemypetpics/cute-cats/
-http://greatinspire.com/cute-cat-pictures/
-http://www.boredpanda.com/tag/cute-cats/
-http://www.petmd.com/cat/centers/kitten/top-female-cat-names-for-kittens-cute-popular
-http://on.aol.com/video/viral-video--cute-cat-gets-caught-stealing-from-drawer-517912359
-http://allcutecats.blogspot.com/
-http://i-justreally-like-cats-okay.tumblr.com/
-http://icanhas.cheezburger.com/
-http://www.lifewithcats.tv/category/video/cute-cat-videos/
-http://weheartit.com/tag/cute%20cat
-http://www.bbc.co.uk/news/technology-25103362
-http://lolomoda.com/cute-cats-pictures/
-http://cutecatsdaily.tumblr.com/
-http://www.cute-cats.com/
-http://www.reallycutecats.com/
-http://www.flixxy.com/cute-cats-compilation.htm
-http://photobucket.com/images/cute%20cat
-http://cutecatfaith.com/
-https://www.facebook.com/CatsCuteCat+cute+cats&tbo=1&sa=X&ei=bmOiUqOGHc3bsgaH4ID4DQ&ved=0CE4QHzAK
-http://www.fanpop.com/clubs/cats/images/8477446/title/cute-cats-photo
-http://seenive.com/u/922490028846882816
-http://iheartcatgifs.tumblr.com/
-http://metro.co.uk/2013/08/16/are-these-the-ten-cutest-cats-on-the-internet-3924949/
-http://www.telegraph.co.uk/news/newstopics/howaboutthat/10368191/Cute-cat-or-ugly-cat-The-new-feline-from-China-taking-the-internet-by-storm.html
-http://on.aol.com/video/viral-video--cute-cat-gets-caught-stealing-from-drawer-517912359
-http://hahacats.com/
-http://profilepictures.weebly.com/cute-cats-profile-pictures.html
-http://www.cracked.com/article/226_6-adorable-cat-behaviors-with-shockingly-evil-explanations/
-http://www.pbh2.com/pets-animals/cutest-cat-gifs/
-http://noisey.vice.com/you-review-show/do-cute-cats-like-gangnam-style
-http://catvideooftheweek.com/
-http://cuteboyswithcats.net/
-http://www.girlsgogames.co.uk/games/cat_games/cat_games.html
-http://metro.co.uk/2013/11/27/pictures-of-cute-cats-can-help-you-learn-new-languages-4204229/
-http://we-love-cute-cats.tumblr.com/
-http://www.roflcat.com/
-http://www.cutecatcoverage.com/
-http://www.hiddennumbersgames.com/cute-cats-hidden-numbers-game.html
-http://its-a-cat-world.tumblr.com/
-http://cutegirlswithcats.tumblr.com/
-http://www.recycler.com/cats
-http://www.kittenwar.com/
-http://9meow.blogspot.com/2012/10/cute-cats-5.html
-http://www.ebay.co.uk/bhp/cute-cat-t-shirt
-http://www.the-cat-collection.com/cute-cats.html
-http://cutest-cats.tumblr.com/
-http://www.huffingtonpost.com/tag/cute-cats
-http://slashdot.org/story/13/11/20/1733202/cute-cat-photos-are-data-driven-science-behind-cunning-new-language-learning-app
-http://thefluffingtonpost.com/
-http://www.lolcats.com/
-http://www.amazon.com/Cats-Pajamas-101-Worlds-Cutest/dp/B004IK9F9K
-http://www.telegraph.co.uk/news/newstopics/howaboutthat/10368191/Cute-cat-or-ugly-cat-The-new-feline-from-China-taking-the-internet-by-storm.html
-http://matties3333.edublogs.org/2013/09/19/cute-cats/
-http://www.oregonlive.com/pets/index.ssf/2013/11/pet_of_the_week_alice_is_a_won.html
-http://www.glamour.com/entertainment/blogs/obsessed/2013/11/11-cute-cats-and-dogs-to-be-th.html
-http://www.cutestpaw.com/articles/50-cute-cats-make-your-life-happier/
-http://lolcat.com/
-http://lovemeow.com/tag/cute-cat-video/
-http://www.catsofaustralia.com/cute_kitten_pictures.htm
-http://distractify.com/people/male-models-and-cats/
-http://likes.com/cute/cute-cats-and-their-animal-friends
-http://blogs.wsj.com/tech-europe/2013/11/20/cute-cats-that-help-you-learn-spanish-no-really/
-http://www.pawnation.com/2012/12/26/50-cutest-pawnation-cats-of-2012/
-http://www.slrlounge.com/hot-guys-cute-cats
-http://www.fanpop.com/clubs/cats/images/248645/title/freakin-cute-wallpaper
-http://cutestcats.us/
-http://www.reddit.com/r/aww
-http://techcrunch.com/2013/11/20/catacademy/
-http://www.mnn.com/family/pets/stories/10-cute-quirky-commercials-starring-cats
-http://www.itn.co.uk/And%20Finally/90248/can-cute-cat-pictures-actually-help-you-learn-spanish-
-http://www.fanpop.com/clubs/cats/images/8477446/title/cute-cats-photo
-http://www.buzzfeed.com/ariellecalderon/cats-having-a-way-worse-day-than-you
-http://9meow.blogspot.com/2012/10/cute-cats-5.html
-http://www.girlsgogames.com/game/cute_cat_dress_up.html
-http://catsofinstagram.com/
-http://all-free-download.com/free-photos/cute-cats.html
-http://www.tumblr.com/tagged/cute-cats
-http://www.cutecatvideos.net/
-http://www.tumblr.com/tagged/cute-cat
-http://fuckyeahcuteguyswithcats.tumblr.com/
-http://www.ebay.com/bhp/cute-cat-figurine
-https://www.facebook.com/CatsCuteCat
-http://yamkote.com/channel/cats
-http://www.zazzle.com/cute+cat+gifts
-http://www.break.com/c/animals-videos/cats/
-http://theberry.com/2012/01/19/daily-awww-fluffy-kitty-cats-31-photos/
-http://animal.discovery.com/tv-shows/americas-cutest-pet/videos/americas-cutest-cat.htm
-http://www.123greetings.com/pets/
-http://www.funnycatpix.com/
-http://www.parade.com/221433/jonathanhorowitz/the-daily-cute-national-cat-day/
-http://www.thedailycute.com/category/cats/
-http://www.dailymail.co.uk/news/article-2449836/Is-Snoopybabe-cutest-cat-internet.html
-http://en.rocketnews24.com/2013/11/21/watch-out-for-cute-overload-see-these-cats-with-awesomely-unique-markings%E3%80%90pics%E3%80%91/
-http://www.uproxx.com/gammasquad/2013/11/the-hunger-games-remade-with-cats/
-http://www.huffingtonpost.co.uk/tag/cute-cats
-http://www.smartplanet.com/blog/bulletin/can-cute-cats-help-you-learn-a-language/
-http://9meow.blogspot.com/2012/10/cute-cats-5.html
-http://www.blogger.com/?tab=wj
-http://www.blogger.com/?tab=wj
-http://www.blogger.com/?tab=wj
-http://www.blogger.com/?tab=wj
-#################################################################
-[!] Received 109 results by asking 2 pages with 100 results per page
+http://www.urbandictionary.com/define.php?term=holy%20shit
+http://idioms.thefreedictionary.com/holy+shit
+http://www.youtube.com/watch?v=Uyz-Jk0d_ZM
+http://veryholyshit.com/
+http://en.wiktionary.org/wiki/holy_shit
+https://www.facebook.com/holyshitfreethinkers
+https://www.facebook.com/holyshitwisconsinrules
+http://en.wikipedia.org/wiki/Holy_shit
+http://www.last.fm/music/Holy+Shit
+http://www.amazon.com/Holy-Shit-Oliver-Benjamin-ebook/dp/B004YEMYNY
+https://myspace.com/holyshit
+http://www.reddit.com/r/videos/comments/1lgunv/holy_shit/
+http://www.redbull.com/cs/Satellite/en_INT/RedBull/HolyShit/011242745950125
+http://www.holyshitshopping.de/index.php?id=59
+http://tvtropes.org/pmwiki/pmwiki.php/Main/HolyShitQuotient
+http://www.holy-shit.at/
+http://www.chelseagreen.com/bookstore/item/holy_shit/
+http://www.hotsauceworld.com/holshithabho.html
+http://deadspin.com/tag/holy-shit
+http://hellsheadbangers.bandcamp.com/album/holy-shit
+http://www.redbull.com/cs/Satellite/en_US/Red-Bull-Home/HolyShit/011242746208542
+http://www.tumblr.com/tagged/holy-shit
+http://pitchfork.com/news/52370-watch-holy-shit-perform-at-ryan-mcginley-gallery-opening-in-san-francisco/
+http://rapgenius.com/Sage-the-gemini-dont-you-lyrics/ho-ho-ho-ho-holy-shit?referent=(Ho-ho-ho-ho-holy%20shit)..
+http://members.shaw.ca/rlongpre01/moon.html
+http://www.southparkstudios.com/clips/152613/holy-shit
+http://www.azlyrics.com/lyrics/snowthaproduct/holyshit.html
+http://jalopnik.com/holy-shit-brz-wagon-1467880566
+http://www.plyrics.com/lyrics/againstme/holyshit.html
+http://www.reactiongifs.com/tag/holy-shit/
+http://www.lrb.co.uk/v35/n18/colin-burrow/frogs-knickers
+http://seenive.com/tag/holyshit
+http://www.androidpolice.com/2013/10/28/holy-shit-motorola-announces-project-ara-an-open-modular-smartphone-hardware-platform/
+http://www.poetryfoundation.org/poem/181460
+http://www.wordreference.com/es/translation.asp?tranword=Holy%20shit
+http://www.songkick.com/artists/440811-holy-shit
+http://backtothefuture.wikia.com/wiki/Holy_shit
+http://store.theonion.com/p-4741-holy-shit-man-walks-on-fucking-moon.aspx
+http://gizmodo.com/holy-shit-i-just-spent-236-on-candy-crush-help-1032185653
+http://holyshit.fr/
+http://skunkpharmresearch.com/holy-anointing-oil-and-holy-shit/
+http://holyshitkerorogunso.tumblr.com/
+http://soundcloud.com/owlvision/holy-shit
+http://pando.com/2013/10/15/voxs-new-mega-round-puts-a-bow-on-contents-holy-shit-moment/
+http://holyshitters.com/
+http://groupthink.jezebel.com/holy-shit-1476643223
+https://www.goodreads.com/book/show/9520102-holy-shit
+http://www.goodreads.com/book/show/16225525-holy-sh-t
+http://store.jacvanek.com/ProductDetails.asp?ProductCode=HOLYSHIT-MUSCLETEE
+http://imgur.com/BcEvR
+http://www.penny-arcade.com/2013/07/01/holy-shit5
+http://www.redpeters.com/undies/lyrics/christmas.html
+http://www.pinterest.com/omgitzaimee/do-it-for-the-holy-shit-you-got-hot/
+http://web.stagram.com/tag/holyshit/
+https://twitter.com/medaShitFacts
+http://www.memecenter.com/search/holy%20shit
+http://holyshit.pl/
+http://www.stubhub.com/holy-shit-tickets/
+http://www.discogs.com/Holy-Shit-Stranded-At-Two-Harbors/release/943934
+http://www.discogs.com/artist/Holy+Shit+(2)
+http://n4g.com/comments/redirecttocomment/8326799
+https://medium.com/startup-baby/573e6e7f6e53
+http://dangerpark.storenvy.com/products/143878-holy-shit-a-comics-anthology
+http://www.pbh2.com/wtf/the-14-craziest-holy-shit-gifs/
+http://dictionary.reverso.net/english-french/holy%20shit
+http://www.imdb.com/title/tt0077975/quotes
+http://cargocollective.com/jfpoisson/holy-shit
+http://www.theguardian.com/books/2013/may/23/holy-shit-history-swearing-mohr
+http://kelley-ohara.tumblr.com/
+http://songmeanings.com/songs/view/3530822107858556842/
+http://www.details.com/style-advice/grooming-and-health/201010/why-do-skinny-healthy-men-think-they-are-fat
+http://theoatmeal.com/blog/random_comics
+http://www.ratebeer.com/beer/schoppe-holy-shit-christmas-ale/194835/
+http://www.beatport.com/track/holy-shit-original-mix/4723265
+http://holy-shit.biz/
+http://terribleminds.com/ramble/holy-shit-free-thing/
+http://randsinrepose.com/archives/the-dark-underbelly-of-holy-shit/
+http://holy-shit-a-talking-daisy.tumblr.com/
+http://statigr.am/tag/holyshit
+http://statter911.com/2012/06/27/raw-video-rescue-from-chicagos-holy-shit-fire/
+http://www.hotsauce.com/Holy-Shit-Habanero-Hot-Sauce-p/1907.htm
+http://tabs.ultimate-guitar.com/j/johnny_hobo_and_the_freight_trains/politics_of_holy_shit_i_just_cut_open_my_hand_on_a_broken_bottle_crd.htm
+http://www.amazon.ca/Holy-Shit-Managing-Manure-Mankind/dp/1603582517
+http://www.allmusic.com/album/holy-shit-mw0002125073
+https://itunes.apple.com/us/artist/holy-shit/id59428009
+http://www.tshirthell.com/funny-shirts/holy-fucking-shit
+http://newsbusters.org/blogs/noel-sheppard/2013/10/18/huffington-post-headline-obamacare-nearing-holy-sht-moment
+http://knowyourmeme.com/memes/holy-shit-its-a-dinosaur
+https://www.adbusters.org/magazine/94/holy-shit.html
+http://www.yelp.com/biz/holy-shit-shopping-k%C3%B6ln
+http://www.sing365.com/music/lyric.nsf/Holy-Shit-lyrics-Against-Me/33AB5809261EBE3C4825707E0029A0B6
+http://holyshitamazingcosplay.tumblr.com/
+http://www.patheos.com/blogs/friendlyatheist/2013/09/14/most-holy-water-found-to-contain-not-so-holy-shit/
+http://www.animutationportal.com/modules/debaser/player.php?id=80
+http://www.metacritic.com/music/holy-shit/living-with-lions
+http://pt.bab.la/dicionario/ingles-portugues/holy-shit
+http://fatpossum.com/artists/holy-shit
+http://detail.chiebukuro.yahoo.co.jp/qa/question_detail/q1014176715
+http://vimeo.com/75364288
+http://www.amazon.co.uk/Holy-Shit-Managing-Manure-Mankind/dp/1603582517
+100
+About 55,100,000 results
 ```
 
+### Direct command line usage
+
+In case you want to use GoogleScraper.py as a CLI tool, use it somehow like this:
+
+```
+python GoogleScraper.py -p 1 -n 25 -q 'inurl:".php?id=555"'
+```
+
+But be aware that google might recognize you pretty fast as a abuser if you use such google dorks.
+
+Maybe try a socks proxy then (But don't bet on TOR) [This is just a example, this socks will probably not work anymore when *you are here*]
+
+```
+python GoogleScraper.py -p 1 -n 25 -q 'i hate google' --proxy="221.132.35.5:2214"
+```
 
 ### Contact
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
 
-### To-do list (As of 22.12.2013)
-+ Figure out whether to use threads or asynchroneous I/O for multiple connections.
+### To-do list (As of 25.12.2013)
++ Figure out whether to use threads or asynchronous I/O for multiple connections.
 + Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
+
+### Stable version
+
+This is a development repository. But you can always find a [working GoogleScraper.py script here][4].
+
 
 [1]: http://www.webvivant.com/google-hacking.html "Google Dorks"
 [2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
 [3]: http://incolumitas.com/about/contact/ "Contact with author"
+[4]: http://incolumitas.com/2013/01/06/googlesearch-a-rapid-python-class-to-get-search-results/

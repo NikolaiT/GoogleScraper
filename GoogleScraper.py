@@ -197,10 +197,13 @@ class GoogleScraper:
             # Now try to create ParseResult objects from the URL
             for i, e in enumerate(self._GOOGLE_SEARCH_RESULTS['results']):
                 try:
-                    url = self._REGEX_VALID_URL.search(e.link_url).group()
-                    self._GOOGLE_SEARCH_RESULTS['results'][i].link_url = urllib.parse.urlparse(url)
-                except Exception as e:
-                    pass
+                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
+                    self._GOOGLE_SEARCH_RESULTS['results'][i]=\
+                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url), link_snippet=e.link_snippet)
+                except Exception as err:
+                    pass # Skip if the url wasn't valid
+
+                assert self._REGEX_VALID_URL.match(url).group()
 
         return self._GOOGLE_SEARCH_RESULTS
 
@@ -271,7 +274,7 @@ class GoogleScraper:
                 snippet = snippet_element[0].text_content()
                 links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
         except Exception as e:
-            print(e.msg)
+            print(e.__cause__)
             # Try iterlinks() [Its probably better anyways]
             # may become deprecated
             # return [link for element, attribute, link, position in dom.iterlinks() if attribute == 'href']
@@ -305,7 +308,7 @@ if __name__ == '__main__':
                         default=1,
                         help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
     parser.add_argument('--proxy', metavar='proxycredentials', type=str, dest='proxy', action='store',
-                        default=('127.0.0.1', 9050), required=False,
+                        required=False, #default=('127.0.0.1', 9050)
                         help='A string such as "127.0.0.1:9050" specifying a single proxy server')
     parser.add_argument('--proxy_file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
                         required=False, #default='.proxies'
@@ -330,8 +333,9 @@ if __name__ == '__main__':
 
     import textwrap
     results = scrape(args.query, args.num_search_results, args.num_pages)
-    print('[+] The search with the keyword "{}" yielded `{}`'.format(results['search_keyword'], results['num_results_for_kw']))
+    print('[+] {} links found! The search with the keyword "{}" has `{}`'.format(len(results['results']), results['search_keyword'], results['num_results_for_kw']))
     for link_title, link_snippet, link_url in results['results']:
-        print('[+] Link: {}'.format(link_url))
-        print('[+] Title: \n{}'.format('\n'.join(textwrap.wrap(link_title, 50))))
-        print('[+] Description: \n{}\n'.format('\n'.join(textwrap.wrap(link_snippet, 70))))
+        print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+        print('[+] Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+        print('[+] Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+        print('*'*70)
