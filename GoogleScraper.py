@@ -21,8 +21,8 @@
 
 # Note: Scraping compromises the google terms of service (TOS).
 
-__VERSION__ = '0.3'
-__UPDATED__ = '24.12.2013' # day.month.year
+__VERSION__ = '0.4'
+__UPDATED__ = '16.02.2013' # day.month.year
 __AUTHOR__ = 'Nikolai'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -30,6 +30,7 @@ import sys
 import os
 import socket
 import argparse
+import threading
 from collections import namedtuple
 import hashlib
 import re
@@ -53,7 +54,7 @@ except ImportError as e:
 # Whether caching shall be enabled
 DO_CACHING = True
 # The directory path for cached google results
-CACHEDIR = 'scrapecache/'
+CACHEDIR = '.scrapecache/'
 
 if DO_CACHING:
     if not os.path.exists(CACHEDIR):
@@ -118,12 +119,12 @@ def cache_results(search_params, html):
         fd.write(html)
 
 
-class GoogleScraper:
-    '''
+class GoogleScrape(threading.thread):
+    """
     Offers a fast way to query the google search engine. It returns a list
     of all found URLs found on x pages with n search results per page.
     You can define x and n, sir!
-    '''
+    """
 
     # Valid URL (taken from django)
     _REGEX_VALID_URL = re.compile(
@@ -177,35 +178,28 @@ class GoogleScraper:
         'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36'
     ]
 
-    def __init__(self, search_term, number_results_page=50, offset=0):
+    def __init__(self, search_term, num_results_per_page=10, num_page=0):
         self.search_term = search_term
-        if number_results_page not in [10, 25, 50, 100]:
-            raise InvalidNumberResultsException(number_results_page)
+        if num_results_per_page not in [10, 25, 50, 100]:
+            raise InvalidNumberResultsException(num_results_per_page)
 
-        self.number_results_page = number_results_page
-        self.offset = offset
+        self.num_results_per_page = num_results_per_page
+        self.num_page = num_page
         self._GOOGLE_SEARCH_RESULTS['search_keyword'] = self.search_term
 
-    # Front end
-    # This function returns a list of 5-tuples: 
-    # (addressing scheme, network location, path, query, fragment identifier).
-    def search(self, number_pages=1):
-        for i in range(number_pages):
-            self.offset = int(self.number_results_page * 100 * i)
-            self._search()
+    def run(self):
+        self._search()
 
-            # Now try to create ParseResult objects from the URL
-            for i, e in enumerate(self._GOOGLE_SEARCH_RESULTS['results']):
-                try:
-                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
-                    self._GOOGLE_SEARCH_RESULTS['results'][i]=\
-                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url), link_snippet=e.link_snippet)
-                except Exception as err:
-                    pass # Skip if the url wasn't valid
+        # Now try to create ParseResult objects from the URL
+        for i, e in enumerate(self._GOOGLE_SEARCH_RESULTS['results']):
+            try:
+                url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
+                self._GOOGLE_SEARCH_RESULTS['results'][i]=\
+                    self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url), link_snippet=e.link_snippet)
+            except Exception as err:
+                pass # Skip if the url wasn't valid
 
-                assert self._REGEX_VALID_URL.match(url).group()
-
-        return self._GOOGLE_SEARCH_RESULTS
+            assert self._REGEX_VALID_URL.match(url).group()
 
     # private internal functions who implement the actual stuff 
 
@@ -213,8 +207,8 @@ class GoogleScraper:
     # randomly.
     def _build_query(self, random=False):
         self._GOOGLE_SEARCH_PARAMS['q'] = self.search_term
-        self._GOOGLE_SEARCH_PARAMS['num'] = self.number_results_page
-        self._GOOGLE_SEARCH_PARAMS['start'] = str(self.offset)
+        self._GOOGLE_SEARCH_PARAMS['num'] = self.num_results_per_page
+        self._GOOGLE_SEARCH_PARAMS['start'] = self.num_results_per_page * self.num_page
 
         if random:
             self._HEADERS['User-Agent'] = choice(self._UAS)
@@ -288,11 +282,17 @@ class GoogleScraper:
             print(e.msg)
 
 
-def scrape(query, results_per_page=100, number_pages=1, offset=0):
-    '''Search for terms and return a list of all URLs.'''
-    scraper = GoogleScraper(query, number_results_page=results_per_page)
-    results = scraper.search(number_pages=number_pages)
-    return results
+def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
+    """Search for terms and return a list of all URLs."""
+    threads = [GoogleScrape(query, num_results_per_page, i) for i in range(offset, number_pages+offset, 1)]
+
+    for t in threads:
+        t.start()
+
+    for t in threads:
+        t.join(3.0)
+
+    return [t._GOOGLE_SEARCH_RESULTS for t in threads]
 
 
 # For unit tests and direct use of the module
@@ -301,8 +301,8 @@ if __name__ == '__main__':
                                      epilog='This program might infringe Google TOS, so use at your own risk')
     parser.add_argument('-q', '--query', metavar='search_string', type=str, action='store', dest='query', required=True,
                         help='The search query.')
-    parser.add_argument('-n', '--num_search_results', metavar='number_of_search_results', type=int,
-                        dest='num_search_results', action='store', default=100,
+    parser.add_argument('-n', '--num_results_per_page', metavar='number_of_results_per_page', type=int,
+                        dest='num_results_per_page', action='store', default=100,
                         help='The number of results per page. Most be one of [10, 25, 50, 100]')
     parser.add_argument('-p', '--num_pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1,
@@ -313,6 +313,7 @@ if __name__ == '__main__':
     parser.add_argument('--proxy_file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
                         required=False, #default='.proxies'
                         help='A filename for a list of proxies with the following format: "(proxy_ip|proxy_host):Port\\n"')
+    parser.add_argument('-v', '--verbosity', type=int, default=1, help="The verbosity of the output reporting for the found search results.")
     args = parser.parse_args()
 
     if args.proxy_file:
@@ -332,7 +333,7 @@ if __name__ == '__main__':
         socket.create_connection = create_connection
 
     import textwrap
-    results = scrape(args.query, args.num_search_results, args.num_pages)
+    results = scrape(args.query, args.num_results_per_page, args.num_pages)
     print('[+] {} links found! The search with the keyword "{}" has `{}`'.format(len(results['results']), results['search_keyword'], results['num_results_for_kw']))
     for link_title, link_snippet, link_url in results['results']:
         print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))

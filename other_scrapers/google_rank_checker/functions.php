@@ -722,7 +722,8 @@ function get_google_cc($cc,$lc)
 	global $PROXY;
 	global $LICENSE;
 	global $NL;
-        global $portal;
+	global $portal;
+	
 	$fp = fsockopen("$portal.seo-proxies.com", 80);
 	if (!$fp) 
 	{

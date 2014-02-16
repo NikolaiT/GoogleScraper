@@ -59,7 +59,6 @@ $working_dir="./wd_rank_checker";
  *  + multipage DOM parsing - this tool is an advanced project, it can test for more than one result page and will interpret the results like a real browser (DOM)
  *  + correct proxy management - built in IP management, the tool will use and manage IPs in an optimal way to avoid blocks, wrong results and similar issues
  *  + multi-keyword support - test for more than one keyword
- *  + local cache (file based) to prevent unrequired serp lookups (resolution is one lookup per keyword-page per day)
  *Requirements:
  *  + local write rights to create the working directory and store files in it (script will create directory and files automated)
  *  + Remove timeout for console scripts (when run on console)

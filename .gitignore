@@ -2,7 +2,7 @@
 .idea/
 
 # cache for GoogleScraper testings
-scrapecache/
+.scrapecache/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
