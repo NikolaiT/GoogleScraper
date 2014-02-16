@@ -1,29 +1,31 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-# Complete rewrite.
-# Many thanks go to v3nz3n
+"""
+Complete rewrite.
+Many thanks go to v3nz3n
 
-# This is a little module that uses Google to automate search
-# queries. It gives (pragmatical) access to all data of a search results:
-# - The links of the result page
-# - The title of the links
-# - The caption/description below each link
-# - The number of results for this keyword
+This is a little module that uses Google to automate search
+queries. It gives straightforward access to all relevant data of Google such as
+- The links of the result page
+- The title of the links
+- The caption/description below each link
+- The number of results for this keyword
 
-# GoogleScraper's architecture outlined:
-# - Proxy support (Socks5, Socks4, HTTP Proxy)
-# - Threading support
+GoogleScraper's architecture outlined:
+- Proxy support (Socks5, Socks4, HTTP Proxy)
+- Threading support
 
-# The module implements some countermeasures to circumvent spamming detection
-# from the Google Servers:
-# {List them here}
+The module implements some countermeasures to circumvent spamming detection
+from the Google Servers:
+{List them here}
 
-# Note: Scraping compromises the google terms of service (TOS).
+Note: Scraping compromises the google terms of service (TOS).
+"""
 
 __VERSION__ = '0.4'
-__UPDATED__ = '16.02.2013' # day.month.year
-__AUTHOR__ = 'Nikolai'
+__UPDATED__ = '16.02.2014' # day.month.year
+__AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
 import sys
@@ -46,13 +48,13 @@ try:
     import socks # should be in the same directory
 except ImportError as e:
     print(e.msg)
-    print('You can install missing modules with `pip install modulename`')
+    print('You can install missing modules with `pip install [modulename]`')
     sys.exit(1)
 
 # module wide global variables
 
 # Whether caching shall be enabled
-DO_CACHING = False
+DO_CACHING = True
 # The directory path for cached google results
 CACHEDIR = '.scrapecache/'
 
@@ -85,12 +87,12 @@ def cached_file_name(search_params):
 
 
 def get_cached(search_params):
-    '''
-    loads a cached search results page from scrapecache/fname.cache
-    It help in testing and avoid requesting
-    the same resources again and again (such that google would
-    recognize us as what we are: Sneaky seo crawlers!)
-    '''
+    """Loads a cached search results page from scrapecache/fname.cache
+
+    It helps in testing and avoid requesting
+    the same resources again and again (such that google may
+    recognize us as what we are: Sneaky SEO crawlers!)
+    """
     fname = cached_file_name(search_params)
 
     try:
@@ -109,10 +111,10 @@ def get_cached(search_params):
 
 
 def cache_results(search_params, html):
-    '''
-    Stores a html resource as a file in scrapecache/fname.cache
-    This will always write(overwrite) the file.
-    '''
+    """Stores a html resource as a file in scrapecache/fname.cache
+
+    This will always write(overwrite) the cache file.
+    """
     fname = cached_file_name(search_params)
 
     with open(os.path.join(CACHEDIR, fname), 'w') as fd:
@@ -120,10 +122,10 @@ def cache_results(search_params, html):
 
 
 class GoogleScrape(threading.Thread):
-    """
-    Offers a fast way to query the google search engine. It returns a list
-    of all found URLs found on x pages with n search results per page.
-    You can define x and n, sir!
+    """Offers a fast way to query the google search engine.
+
+    Overrides the run() method of the superclass threading.Thread.
+    Each thread represents a crawl for one Google Results Page.
 
     http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
     """
@@ -138,6 +140,9 @@ class GoogleScrape(threading.Thread):
         r'(?:/?|[/?]\S+)$', re.IGNORECASE)
     _REGEX_VALID_URL_SIMPLE = re.compile(
         'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+
+    # Named tuple type for the search results
+    Result = namedtuple('LinkResult', 'link_title link_snippet link_url')
 
     # Keep the User-Agents updated. 
     # I guess 9 different UA's is engough, since many users
@@ -174,41 +179,43 @@ class GoogleScrape(threading.Thread):
         self.num_results_per_page = num_results_per_page
         self.num_page = num_page
 
-        self._GOOGLE_SEARCH = 'http://www.google.com/search'
+        self._SEARCH_URL = 'http://www.google.com/search'
 
-        self._GOOGLE_SEARCH_PARAMS = {
+        self._SEARCH_PARAMS = {
             'q': '', # the search term
             'num': '', # the number of results per page
             'start': '0', # the offset to the search results. page number = (start / num) + 1
             'pws': '0'      # personalization turned off
         }
 
-        self._GOOGLE_SEARCH_RESULTS = {
+        self.SEARCH_RESULTS = {
             'search_keyword': self.search_term, # The query keyword
             'num_results_for_kw': '', # The number of results for the keyword
             'results': [] # List of Result named tuples
         }
 
     def run(self):
+        """Make the the scrape."""
         self._search()
 
         # Now try to create ParseResult objects from the URL
-        for i, e in enumerate(self._GOOGLE_SEARCH_RESULTS['results']):
+        for i, e in enumerate(self.SEARCH_RESULTS['results']):
             try:
                 url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
                 assert self._REGEX_VALID_URL.match(url).group()
-                self._GOOGLE_SEARCH_RESULTS['results'][i] = \
+                self.SEARCH_RESULTS['results'][i] = \
                     self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
                                 link_snippet=e.link_snippet)
             except Exception as err:
                 pass # Skip if the url wasn't valid
 
-    # private internal functions who implement the actual stuff 
-
-    # When random == True, several headers (like the UA) are chosen
-    # randomly.
     def _build_query(self, random=False):
-        self._GOOGLE_SEARCH_PARAMS.update(
+        """Build the headeres and params for the GET request to the Google server.
+
+        When random == True, several headers (like the UA) are chosen
+        randomly.
+        """
+        self._SEARCH_PARAMS.update(
             {'q': self.search_term,
              'num': str(self.num_results_per_page),
              'start': str(int(self.num_results_per_page) * int(self.num_page))
@@ -217,21 +224,25 @@ class GoogleScrape(threading.Thread):
         if random:
             self._HEADERS['User-Agent'] = choice(self._UAS)
 
-    # Search via google and parse with lxml
-    # private function
     def _search(self):
+        """The actual search and parsing of the results.
+
+        Private, internal method.
+        Parsing is done with lxml and cssselect. The html structure of the Google Search
+        results may change over time. Effective: February 2014
+        """
         self._build_query()
 
         if DO_CACHING:
-            html = get_cached(self._GOOGLE_SEARCH_PARAMS)
+            html = get_cached(self._SEARCH_PARAMS)
         else:
             html = False
 
         if not html:
             try:
-                print("Initiating search with params={}".format(self._GOOGLE_SEARCH_PARAMS))
-                r = requests.get(self._GOOGLE_SEARCH, headers=self._HEADERS,
-                                 params=self._GOOGLE_SEARCH_PARAMS, timeout=3.0)
+                print("Initiating search with params={}".format(self._SEARCH_PARAMS))
+                r = requests.get(self._SEARCH_URL, headers=self._HEADERS,
+                                 params=self._SEARCH_PARAMS, timeout=3.0)
 
             except requests.ConnectionError as cerr:
                 print('Network problem occured {}'.format(cerr.msg))
@@ -250,7 +261,7 @@ class GoogleScrape(threading.Thread):
             html = r.text
             # cache fresh results
             if DO_CACHING:
-                cache_results(self._GOOGLE_SEARCH_PARAMS, html)
+                cache_results(self._SEARCH_PARAMS, html)
 
         # Try to parse the google HTML result using lxml
         try:
@@ -279,19 +290,29 @@ class GoogleScrape(threading.Thread):
             # may become deprecated
             # return [link for element, attribute, link, position in dom.iterlinks() if attribute == 'href']
 
-        self._GOOGLE_SEARCH_RESULTS['results'].extend(links)
+        self.SEARCH_RESULTS['results'].extend(links)
 
         # try to get the number of results for our search query
         try:
-            self._GOOGLE_SEARCH_RESULTS['num_results_for_kw'] =\
+            self.SEARCH_RESULTS['num_results_for_kw'] =\
                 dom.xpath(HTMLTranslator().css_to_xpath('div#resultStats'))[0].text_content()
         except Exception as e:
             print(e.msg)
 
 
 def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
-    """Search for terms and return a list of all URLs."""
-    threads = [GoogleScrape(query + str(i), num_results_per_page, i) for i in range(offset, num_pages + offset, 1)]
+    """Public API function to search for terms and return a list of results.
+
+    arguments:
+    query -- the search query. Can be whatever you want to crawl google for.
+
+    Keyword arguments:
+    num_results_per_page -- the number of results per page. Either 10, 25, 50 or 100.
+    num_pages -- The number of pages to search for.
+    offset -- specifies the offset to the page to begin searching.
+
+    """
+    threads = [GoogleScrape(query, num_results_per_page, i) for i in range(offset, num_pages + offset, 1)]
 
     for t in threads:
         t.start()
@@ -299,10 +320,9 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     for t in threads:
         t.join(3.0)
 
-    return [t._GOOGLE_SEARCH_RESULTS for t in threads]
+    return [t.SEARCH_RESULTS for t in threads]
 
 
-# For unit tests and direct use of the module
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='GoogleScraper', description='Scrape the Google search engine',
                                      epilog='This program might infringe Google TOS, so use at your own risk')
@@ -346,13 +366,10 @@ if __name__ == '__main__':
     results = scrape(args.query, args.num_results_per_page, args.num_pages)
 
     if args.verbosity <= 1:
-        import pprint
-
-        pprint.pprint(results)
-        #for result in results:
-        #    print('[+] {} links found! The search with the keyword "{}" yielded the result:{}'.format(len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-        #    for link_title, link_snippet, link_url in result['results']:
-        #        print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+        for result in results:
+            print('[+] {} links found! The search with the keyword "{}" yielded the result:{}'.format(len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+            for link_title, link_snippet, link_url in result['results']:
+                print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
     else:
         for result in results:
             print('[+] {} links found! The search with the keyword "{}" yielded the result:{}'.format(
