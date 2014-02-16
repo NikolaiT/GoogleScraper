@@ -39,6 +39,7 @@ class TestThread(threading.Thread):
             'Connection': 'close',
             'DNT': '1'
         }
+        print("Initiating search with params={}".format(params))
         r = requests.get('http://www.google.com/search', params=params, headers=headers)
         html = r.text
         # Try to parse the google HTML llresult using lxml
@@ -83,7 +84,7 @@ def with_socket(self):
 
 if __name__ == '__main__':
     searches = ['casablance', 'travel']
-    configs = [{'query': query, 'n_res_page': 10, 'n_page': 0} for query in searches]
+    configs = [{'query': query, 'n_res_page': 10, 'n_page': 2} for query in searches]
     threads = [TestThread(gsearch=config) for config in configs]
     for t in threads:
         t.start()
