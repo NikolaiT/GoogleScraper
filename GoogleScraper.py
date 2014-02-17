@@ -91,6 +91,16 @@ class InvalidNumberResultsException(GoogleSearchError):
         return '{} is not a valid number of results per page'.format(self.nres)
 
 
+def maybe_clean_cache():
+    """Delete all .cache files in the cache directory that are older than 12 hours."""
+    for fname in os.listdir(CACHEDIR):
+        if time.time() > os.path.getmtime(os.path.join(CACHEDIR, fname)) + (60 * 60 * 12):
+            os.remove(os.path.join(CACHEDIR, fname))
+
+if DO_CACHING:
+    # Clean the CACHEDIR once in a while
+    maybe_clean_cache()
+
 def cached_file_name(search_params):
     sha = hashlib.sha256()
     # Make a unique file name based on the values of the google search parameters.
