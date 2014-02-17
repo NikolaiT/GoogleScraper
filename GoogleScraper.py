@@ -31,6 +31,7 @@ __WEBSITE__ = 'incolumitas.com'
 import sys
 import os
 import socket
+import logging
 import argparse
 import threading
 from collections import namedtuple
@@ -51,7 +52,18 @@ except ImportError as e:
     print('You can install missing modules with `pip install [modulename]`')
     sys.exit(1)
 
-# module wide global variables
+# module wide global variables and configuration
+
+# First obtain a logger
+logger = logging.getLogger('GoogleScraper')
+logger.setLevel(logging.INFO)
+
+ch = logging.StreamHandler(stream=sys.stderr)
+ch.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 # Whether caching shall be enabled
 DO_CACHING = True
@@ -144,20 +156,24 @@ class GoogleScrape(threading.Thread):
     # Named tuple type for the search results
     Result = namedtuple('LinkResult', 'link_title link_snippet link_url')
 
-    # Keep the User-Agents updated. 
-    # I guess 9 different UA's is engough, since many users
-    # have the same UA (and only a different IP).
+    # Several different User-Agents to diversify the requests.
+    # Keep the User-Agents updated. Last update: 17th february 14
     # Get them here: http://techblog.willshouse.com/2012/01/03/most-common-user-agents/
     _UAS = [
-        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9) AppleWebKit/537.71 (KHTML, like Gecko) Version/7.0 Safari/537.71',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:25.0) Gecko/20100101 Firefox/25.0',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.101 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.1599.101 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:25.0) Gecko/20100101 Firefox/25.0',
-        'Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.57 Safari/537.36'
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.73.11 (KHTML, like Gecko) Version/7.0.1 Safari/537.73.11',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:26.0) Gecko/20100101 Firefox/26.0',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.107 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.77 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.107 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.102 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.102 Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 7_0_4 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11B554a Safari/9537.53',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:26.0) Gecko/20100101 Firefox/26.0',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0',
+        'Mozilla/5.0 (iPad; CPU OS 7_0_4 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11B554a Safari/9537.53',
+        'Mozilla/5.0 (Windows NT 6.1; rv:26.0) Gecko/20100101 Firefox/26.0',
+        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36'
     ]
 
     _HEADERS = {
@@ -170,7 +186,7 @@ class GoogleScrape(threading.Thread):
 
     def __init__(self, search_term, num_results_per_page=10, num_page=0):
         super().__init__()
-        print("Created new GoogleScrape objectt with params: query={}, num_results_per_page={}, num_page={}".format(
+        logger.debug("Created new GoogleScrape objectt with params: query={}, num_results_per_page={}, num_page={}".format(
             search_term, num_results_per_page, num_page))
         self.search_term = search_term
         if num_results_per_page not in [10, 25, 50, 100]:
@@ -195,7 +211,7 @@ class GoogleScrape(threading.Thread):
         }
 
     def run(self):
-        """Make the the scrape."""
+        """Make the the scrape and clean the URL's."""
         self._search()
 
         # Now try to create ParseResult objects from the URL
@@ -240,7 +256,7 @@ class GoogleScrape(threading.Thread):
 
         if not html:
             try:
-                print("Initiating search with params={}".format(self._SEARCH_PARAMS))
+                logger.debug("Initiating search with params={}".format(self._SEARCH_PARAMS))
                 r = requests.get(self._SEARCH_URL, headers=self._HEADERS,
                                  params=self._SEARCH_PARAMS, timeout=3.0)
 
@@ -286,18 +302,15 @@ class GoogleScrape(threading.Thread):
                 links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
         except Exception as e:
             print(e.__cause__)
-            # Try iterlinks() [Its probably better anyways]
-            # may become deprecated
-            # return [link for element, attribute, link, position in dom.iterlinks() if attribute == 'href']
 
         self.SEARCH_RESULTS['results'].extend(links)
 
         # try to get the number of results for our search query
         try:
-            self.SEARCH_RESULTS['num_results_for_kw'] =\
+            self.SEARCH_RESULTS['num_results_for_kw'] = \
                 dom.xpath(HTMLTranslator().css_to_xpath('div#resultStats'))[0].text_content()
         except Exception as e:
-            print(e.msg)
+            logger.critical(e.msg)
 
 
 def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
@@ -367,16 +380,17 @@ if __name__ == '__main__':
 
     if args.verbosity <= 1:
         for result in results:
-            print('[+] {} links found! The search with the keyword "{}" yielded the result:{}'.format(len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-            for link_title, link_snippet, link_url in result['results']:
-                print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-    else:
-        for result in results:
-            print('[+] {} links found! The search with the keyword "{}" yielded the result:{}'.format(
+            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
                 len(result['results']), result['search_keyword'], result['num_results_for_kw']))
             for link_title, link_snippet, link_url in result['results']:
-                print('[+] Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-                print('[+] Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+                print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+    else:
+        for result in results:
+            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+            for link_title, link_snippet, link_url in result['results']:
+                print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                print('Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
                 print(
-                    '[+] Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+                    'Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
                 print('*' * 70)

@@ -3,7 +3,7 @@
 ### What does GoogleScraper?
 
 GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
-links problematically and then your application can do whatever it want with them.
+links and their titles and descriptions problematically which enables you to process it further.
 
 There are unlimited use cases:
 
@@ -16,17 +16,33 @@ There are unlimited use cases:
 GoogleScraper is implemented with the following techniques/software:
 
 + Written in Python 3
-+ Uses multihreading/asynchroneous IO.
++ Uses multihreading/asynchroneous IO. (two approaches, currently only multi-threading is implemented)
 + Supports parallel google scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2]:
   * Socks5
   * Socks4
   * HttpProxy
-+ Support for additional google search futures.
++ Support for additional google search features.
 
+
+### How does GoogleScraper maximize the amount of extracted information per IP address?
+
+Scraping is a critical and highly complex subject. Google and other search engine giants have a strong inclination
+to make the scrapers life as hard as possible. There are several ways for the Google Servers to detect that a robot is using
+their search engine:
+
++ The User-Agent is not one of a browser.
++ The search params are not identical to the ones that browser used by a human sets:
+  * Javascript generates challenges dynamically on the client side. This might include heuristics that try to detect human behaviour. Example: Only humans move their mouses and hover over the interesting search results.
++ Robots have a strict requests pattern (very fast requests, without a random time between the sent packets).
++ Dorks are heavily used
++ No pictures/ads/css/javascript is loaded (like a browser does normally)
+
+So the biggest hurdle to tackle is the javascript detection algorithms. I don't know what Google does in their javascript, but I will soon investigate it further and then decide if it's not better to change strategies and
+switch to a **approach that scrapes by simulating browsers with a browserlike environment** that can execute javascript. The networking of each of these virtual browsers is proxified and manipulated such that it behaves like
+a real physical user agent. I am pretty sure that it must be possible to handle 20 such browser sessions in a parallel way without getting stressing resources too much. The real problem is as always the lack of good proxies...
 
 ### Example Usage
-
 
 ```python
 import GoogleScraper
@@ -34,133 +50,185 @@ import urllib.parse
 
 if __name__ == '__main__':
 
-    results = GoogleScraper.scrape('HOly shit', number_pages=1)
-    for link_title, link_snippet, link_url in results['results']:
-        # You can access all parts of the search results like that
-        # link_url.scheme => URL scheme specifier (Ex: 'http')
-        # link_url.netloc => Network location part (Ex: 'www.python.org')
-        # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
-        # link_url.params => Parameters for last path element
-        # link_url.query => Query component
-        try:
-            print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
-        except:
-            pass
+    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0)
+    for page in results:
+        for link_title, link_snippet, link_url in page['results']:
+            # You can access all parts of the search results like that
+            # link_url.scheme => URL scheme specifier (Ex: 'http')
+            # link_url.netloc => Network location part (Ex: 'www.python.org')
+            # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
+            # link_url.params => Parameters for last path element
+            # link_url.query => Query component
+            try:
+                print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
+            except:
+                pass
 
-# How many urls did we get?
-print(len(results['results']))
+# How many urls did we get on all pages?
+print(sum(len(page['results']) for page in results))
 
-# How many hits has google found with our keyword?
-print(results['num_results_for_kw'])
+# How many hits has google found with our keyword (as shown on the first page)?
+print(results[0]['num_results_for_kw'])
 ```
 
 ### Example Output
 
-This is a example output of the above *use.py*:
+This is a example output of the above *use.py*. You can execute it by just firing `python use.py` in the project directory:
 
 ```
-http://www.urbandictionary.com/define.php?term=holy%20shit
-http://idioms.thefreedictionary.com/holy+shit
-http://www.youtube.com/watch?v=Uyz-Jk0d_ZM
-http://veryholyshit.com/
-http://en.wiktionary.org/wiki/holy_shit
-https://www.facebook.com/holyshitfreethinkers
-https://www.facebook.com/holyshitwisconsinrules
-http://en.wikipedia.org/wiki/Holy_shit
-http://www.last.fm/music/Holy+Shit
-http://www.amazon.com/Holy-Shit-Oliver-Benjamin-ebook/dp/B004YEMYNY
-https://myspace.com/holyshit
-http://www.reddit.com/r/videos/comments/1lgunv/holy_shit/
-http://www.redbull.com/cs/Satellite/en_INT/RedBull/HolyShit/011242745950125
-http://www.holyshitshopping.de/index.php?id=59
-http://tvtropes.org/pmwiki/pmwiki.php/Main/HolyShitQuotient
-http://www.holy-shit.at/
-http://www.chelseagreen.com/bookstore/item/holy_shit/
-http://www.hotsauceworld.com/holshithabho.html
-http://deadspin.com/tag/holy-shit
-http://hellsheadbangers.bandcamp.com/album/holy-shit
-http://www.redbull.com/cs/Satellite/en_US/Red-Bull-Home/HolyShit/011242746208542
-http://www.tumblr.com/tagged/holy-shit
-http://pitchfork.com/news/52370-watch-holy-shit-perform-at-ryan-mcginley-gallery-opening-in-san-francisco/
-http://rapgenius.com/Sage-the-gemini-dont-you-lyrics/ho-ho-ho-ho-holy-shit?referent=(Ho-ho-ho-ho-holy%20shit)..
-http://members.shaw.ca/rlongpre01/moon.html
-http://www.southparkstudios.com/clips/152613/holy-shit
-http://www.azlyrics.com/lyrics/snowthaproduct/holyshit.html
-http://jalopnik.com/holy-shit-brz-wagon-1467880566
-http://www.plyrics.com/lyrics/againstme/holyshit.html
-http://www.reactiongifs.com/tag/holy-shit/
-http://www.lrb.co.uk/v35/n18/colin-burrow/frogs-knickers
-http://seenive.com/tag/holyshit
-http://www.androidpolice.com/2013/10/28/holy-shit-motorola-announces-project-ara-an-open-modular-smartphone-hardware-platform/
-http://www.poetryfoundation.org/poem/181460
-http://www.wordreference.com/es/translation.asp?tranword=Holy%20shit
-http://www.songkick.com/artists/440811-holy-shit
-http://backtothefuture.wikia.com/wiki/Holy_shit
-http://store.theonion.com/p-4741-holy-shit-man-walks-on-fucking-moon.aspx
-http://gizmodo.com/holy-shit-i-just-spent-236-on-candy-crush-help-1032185653
-http://holyshit.fr/
-http://skunkpharmresearch.com/holy-anointing-oil-and-holy-shit/
-http://holyshitkerorogunso.tumblr.com/
-http://soundcloud.com/owlvision/holy-shit
-http://pando.com/2013/10/15/voxs-new-mega-round-puts-a-bow-on-contents-holy-shit-moment/
-http://holyshitters.com/
-http://groupthink.jezebel.com/holy-shit-1476643223
-https://www.goodreads.com/book/show/9520102-holy-shit
-http://www.goodreads.com/book/show/16225525-holy-sh-t
-http://store.jacvanek.com/ProductDetails.asp?ProductCode=HOLYSHIT-MUSCLETEE
-http://imgur.com/BcEvR
-http://www.penny-arcade.com/2013/07/01/holy-shit5
-http://www.redpeters.com/undies/lyrics/christmas.html
-http://www.pinterest.com/omgitzaimee/do-it-for-the-holy-shit-you-got-hot/
-http://web.stagram.com/tag/holyshit/
-https://twitter.com/medaShitFacts
-http://www.memecenter.com/search/holy%20shit
-http://holyshit.pl/
-http://www.stubhub.com/holy-shit-tickets/
-http://www.discogs.com/Holy-Shit-Stranded-At-Two-Harbors/release/943934
-http://www.discogs.com/artist/Holy+Shit+(2)
-http://n4g.com/comments/redirecttocomment/8326799
-https://medium.com/startup-baby/573e6e7f6e53
-http://dangerpark.storenvy.com/products/143878-holy-shit-a-comics-anthology
-http://www.pbh2.com/wtf/the-14-craziest-holy-shit-gifs/
-http://dictionary.reverso.net/english-french/holy%20shit
-http://www.imdb.com/title/tt0077975/quotes
-http://cargocollective.com/jfpoisson/holy-shit
-http://www.theguardian.com/books/2013/may/23/holy-shit-history-swearing-mohr
-http://kelley-ohara.tumblr.com/
-http://songmeanings.com/songs/view/3530822107858556842/
-http://www.details.com/style-advice/grooming-and-health/201010/why-do-skinny-healthy-men-think-they-are-fat
-http://theoatmeal.com/blog/random_comics
-http://www.ratebeer.com/beer/schoppe-holy-shit-christmas-ale/194835/
-http://www.beatport.com/track/holy-shit-original-mix/4723265
-http://holy-shit.biz/
-http://terribleminds.com/ramble/holy-shit-free-thing/
-http://randsinrepose.com/archives/the-dark-underbelly-of-holy-shit/
-http://holy-shit-a-talking-daisy.tumblr.com/
-http://statigr.am/tag/holyshit
-http://statter911.com/2012/06/27/raw-video-rescue-from-chicagos-holy-shit-fire/
-http://www.hotsauce.com/Holy-Shit-Habanero-Hot-Sauce-p/1907.htm
-http://tabs.ultimate-guitar.com/j/johnny_hobo_and_the_freight_trains/politics_of_holy_shit_i_just_cut_open_my_hand_on_a_broken_bottle_crd.htm
-http://www.amazon.ca/Holy-Shit-Managing-Manure-Mankind/dp/1603582517
-http://www.allmusic.com/album/holy-shit-mw0002125073
-https://itunes.apple.com/us/artist/holy-shit/id59428009
-http://www.tshirthell.com/funny-shirts/holy-fucking-shit
-http://newsbusters.org/blogs/noel-sheppard/2013/10/18/huffington-post-headline-obamacare-nearing-holy-sht-moment
-http://knowyourmeme.com/memes/holy-shit-its-a-dinosaur
-https://www.adbusters.org/magazine/94/holy-shit.html
-http://www.yelp.com/biz/holy-shit-shopping-k%C3%B6ln
-http://www.sing365.com/music/lyric.nsf/Holy-Shit-lyrics-Against-Me/33AB5809261EBE3C4825707E0029A0B6
-http://holyshitamazingcosplay.tumblr.com/
-http://www.patheos.com/blogs/friendlyatheist/2013/09/14/most-holy-water-found-to-contain-not-so-holy-shit/
-http://www.animutationportal.com/modules/debaser/player.php?id=80
-http://www.metacritic.com/music/holy-shit/living-with-lions
-http://pt.bab.la/dicionario/ingles-portugues/holy-shit
-http://fatpossum.com/artists/holy-shit
-http://detail.chiebukuro.yahoo.co.jp/qa/question_detail/q1014176715
-http://vimeo.com/75364288
-http://www.amazon.co.uk/Holy-Shit-Managing-Manure-Mankind/dp/1603582517
-100
-About 55,100,000 results
+[nikolai@niko-arch GoogleScraper]$ python use.py
+http://searchenginewatch.com/article/2303494/21-Best-FREE-SEO-Tools-for-On-Page-Optimization
+http://seo-tools-review.toptenreviews.com/
+http://www.seobook.com/seo-tools-for-2014
+http://moz.com/blog/100-free-seo-tools
+https://blog.kissmetrics.com/6-indispensable-seo-tools/
+http://www.targetinternet.com/seo-tools-comparison-raven-seomoz-buzzstream/
+http://www.hobo-web.co.uk/best-seo-tools/
+http://www.creativebloq.com/netmag/30-best-new-seo-tools-7133746
+http://www.best-seo-tools.net/
+http://www.traffictravis.com/
+http://seotools.scrubtheweb.com/
+http://www.youtube.com/watch?v=WWPzgsojW8w
+https://www.brightlocal.com/
+http://www.wordstream.com/blog/ws/2013/09/18/best-keyword-research-tools
+http://www.matthewwoodward.co.uk/tips/the-best-free-seo-tools-internet-marketing-software/
+http://socialmediatoday.com/amanda-disilvestro/1377151/top-7-must-have-free-seo-tools-beginners
+http://www.poweredbysearch.com/top-10-seo-tools-worth-it/
+http://www.ragesw.com/products/iweb-seo-tool.html
+http://www.searchenginejournal.com/the-best-seo-tools-what-how-and-why/60842/
+http://withnoble.com/10-best-seo-tools-for-keyword-research/
+http://searchengineland.com/moz-2014-industry-survey-google-webmaster-tools-top-ranked-seo-tool-182767
+https://yoast.com/wordpress/plugins/seo/
+https://yoast.com/tools/seo/
+http://www.webceo.com/
+http://www.myseotool.com/
+http://www.smashingmagazine.com/2006/09/22/complete-list-of-best-seo-tools/
+http://www.strategyinternetmarketing.co.uk/best-online-seo-tools/
+http://seoimpression.blogspot.com/2013/02/top-ten-seo-tools-of-2013.html
+http://www.socialable.co.uk/25-best-seo-tools-wordpress-plugins/
+http://vlexo.net/blog-tips-tricks/search/best-seo-tools-resources-youll-need-in-2014/
+https://forums.digitalpoint.com/threads/best-seo-tools-for-2014.2700177/
+http://www.majesticseo.com/
+http://seo-software.findthebest.com/
+http://seometamanager.com/
+https://twitter.com/JohnHen99387191
+http://www.link-assistant.com/
+http://www.techrepublic.com/blog/five-apps/five-seo-tools-that-will-increase-visitors-to-your-website/
+http://www.razorsocial.com/seo-tools-blogging/
+http://www.ibusinesspromoter.com/seo-tools/top-10-seo-software
+http://zoomspring.com/learn-importxml-tutorial/
+http://www.prweb.com/releases/best-seo-tools/seo-in-2014-tips/prweb11381533.htm
+http://seoertools.com/
+http://www.internetmarketingninjas.com/tools/
+http://www.seosuite.com/
+http://www.clickminded.com/free-seo-tools/
+http://www.dreamscapedesign.co.uk/the-best-free-online-seo-tools/
+http://cognitiveseo.com/
+https://support.google.com/webmasters/answer/35291?hl=en
+http://www.wpseotricks.com/best-seo-tools-2013/
+http://www.facebook.com/615013581900538
+http://www.webconfs.com/15-minute-seo.php
+http://www.screamingfrog.co.uk/seo-spider/
+http://www.coconutheadphones.com/search-engine-tools-some-of-the-best-seo-tools-are-free/
+http://zadroweb.com/best-seo-tools-get-site-ranking/
+http://www.seoeffect.com/
+http://www.seoworkers.com/tools/analyzer.html
+http://travisleestreet.com/2013/07/best-seo-tools-for-online-marketers/
+http://2thetopdesign.com/the-4-seo-tools-you-need-to-know/
+http://www.bruceclay.com/seo/search-engine-optimization.htm
+http://www.bestseotool.com/
+http://www.papercutinteractive.com/blog/entry/the-best-seo-tools-for-beginners
+http://rankmondo.com/seo-tools/best-link-building-tools/
+http://blog.dh42.com/best-seo-tools/
+http://www.webseoanalytics.com/
+http://www.seotools.com/
+http://www.3rank.com/top-10-best-seo-tools-for-bloggers-and-webmasters/
+http://www.blogherald.com/2013/11/04/the-best-seo-tools-for-keyword-research/
+https://www.visibilitymagazine.com/buyersguide/best_seo_software
+http://www.localseoguide.com/local-seo-tools/
+http://www.business2community.com/seo/top-emerging-seo-tools-use-2014-0747745
+http://www.benchmarkemail.com/blogs/detail/best-seo-tools
+http://smallbusiness.yahoo.com/advisor/25-best-seo-tools-wordpress-plugins-195102924.html
+http://sourceforge.net/projects/seotoolkit/
+http://seocombine.com/
+http://www.conductor.com/resource-center/presentations/pubcon-new-orleans-2013-brian-mcdowell-best-seo-tools
+http://www.smallbiztechnology.com/archive/2012/06/13-top-seo-tools-for-startups.html/
+http://www.ask.com/question/what-are-the-best-free-online-seo-tools
+http://www.blackhatworld.com/blackhat-seo/f9-black-hat-seo-tools/
+http://www.bestseosuite.com/
+http://www.bestseobot.com/
+http://www.webmaster-talk.com/threads/200470-Which-is-the-best-SEO-tool-for-MAC
+http://blog.jimdo.com/top-5-free-seo-tools/
+http://www.searchenginexperts.com.au/seo-blog/top-10-free-seo-tools
+http://www.theseoace.com/resources/
+http://dashburst.com/top-seo-tools-to-combat-google-panda-and-penguin/
+http://www.atozbuzz.com/2013/02/5-best-seo-tools-for-your-websites.html
+http://www.seoworks.com/seo-tools-tips/best-seo-software-tools/
+http://smallseotools.com/backlink-maker/
+http://www.urlmd.com/seo/best-seo-tool-of-2013/
+http://www.siteopsys.com/
+http://www.trendmx.com/
+http://www.seochat.com/
+http://intechseo.com/seo-tools
+http://vkool.com/11-best-online-seo-tools/
+http://blogsuccessjournal.com/seo-search-engine-optimization/seo-tools/seo-tools-top-free-video/
+http://www.webseotoolbox.com/index.php?/Knowledgebase/List/Index/23/webmaster-tools
+http://www.seocompany.ca/tool/seo-tools.html
+http://www.blackhatprotools.com/
+http://seowebhosting.net/best-seo-tools/
+http://www.grademyseo.com/index.php?do=tools
+http://webmeup.com/seo-tools-review/
+http://seotoolsvps.ca/
+http://extremeseotools.com/signup/knowledgebase.php
+http://sickseo.co.uk/
+http://backlinko.com/white-hat-seo
+http://www.bloggingtips.com/2013/12/28/top-seo-tools-find-targeted-keywords/
+http://www.fatbit.com/fab/tag/best-seo-tool/
+http://seo.venturebeat.com/
+http://www.sheerseo.com/
+http://zwinks.org/blog/general/seo-tools-and-internet-marketing-software-of-choice/
+http://www.clambr.com/link-building-tools/
+http://www.bloggeryard.com/2013/11/best-free-seo-tools.html
+http://my.opera.com/tabreraliboldri/about/
+http://www.seoserviceslosangeles.com/free-seo-tools.php
+https://todaymade.com/blog/google-adwords-seo/
+http://inblurbs.com/blog/the-best-seo-tools-for-keyword-research/
+http://www.webhostingtalk.com/showthread.php?t=1324995
+http://www.hittail.com/
+http://thecreativemomentum.com/blog/2013/12/04/why-blogs-are-one-of-your-best-seo-tools/
+http://www.hubspot.com/products/seo
+http://www.quora.com/SEO-Tools/What-are-the-best-paid-tools-for-link-building
+http://www.getapp.com/seo-sem-software
+http://bestfreeseo.webs.com/
+http://www.seotoolset.com/tools/free_tools.html
+http://www.lakanephotography.co.uk/articles/free-seo-tools
+http://seositecheckup.com/
+http://spydermate.com/
+http://www.best-5.com/seo-tools/
+http://wpvkp.com/best-wordpress-seo-plugins/
+http://www.advancedwebranking.com/
+http://www.linkresearchtools.com/
+http://tripleseo.com/free-seo-tools/
+http://www.linkcollider.com/
+http://nohandsseo.com/
+http://5000best.com/tools/SEO_Tools/
+http://www.tipsandtricks-hq.com/top-10-seo-tools-and-add-ons-for-your-online-business-6510
+http://seotoolonline.com/
+http://www.staples.com/sbd/cre/tech-services/explore-tips-and-advice/tech-articles/optimize-away-top-seo-tools-tricks-to-dominate-google.html
+http://www.blackwoodproductions.com/blackwoodproductions.php?Action=cms&k=rebrand
+http://solutionsbydave.com/best-free-seo-tools-all-on-this-page-seo-expert-tools/
+http://www.bing.com/toolbox/seo-analyzer
+http://www.digitalmillionaires.com/forum/main-category/seo-tools/278-what-is-the-best-seo-tool-this-year
+http://www.quicksprout.com/2013/10/10/are-you-doing-your-seo-wrong/
+http://www.wordtracker.com/
+http://acodez.in/best-free-online-seo-tools-part-3/
+https://monitorbacklinks.com/seo-tools/free-backlink-checker
+http://www.practicalecommerce.com/articles/60622-27-WordPress-SEO-Plugins
+https://swissmademarketing.com/secockpit/
+http://www.seoinpractice.com/seo-software-bundle.html
+http://www.whitespark.ca/
+151
+About 14,100,000 results
 ```
 
 ### Direct command line usage
@@ -171,7 +239,7 @@ In case you want to use GoogleScraper.py as a CLI tool, use it somehow like this
 python GoogleScraper.py -p 1 -n 25 -q 'inurl:".php?id=555"'
 ```
 
-But be aware that google might recognize you pretty fast as a abuser if you use such google dorks.
+But be aware that google might recognize you pretty fast as a abuser if you use such google dorks as given above.
 
 Maybe try a socks proxy then (But don't bet on TOR) [This is just a example, this socks will probably not work anymore when *you are here*]
 
@@ -188,9 +256,10 @@ If you feel like contacting me, do so and send me a mail. You can find my contac
 + Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
 
 ### Stable version
+I will experiment with a threading approach and asynchronous IO. There will always be a stable version that supports threading. It is simply
+called `GoogleScraper.py`. The asynchronous version will be called `GoogleScraperAsync.py`.
 
 This is a development repository. But you can always find a [working GoogleScraper.py script here][4].
-
 
 [1]: http://www.webvivant.com/google-hacking.html "Google Dorks"
 [2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
