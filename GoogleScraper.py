@@ -24,7 +24,7 @@ Note: Scraping compromises the google terms of service (TOS).
 """
 
 __VERSION__ = '0.4'
-__UPDATED__ = '16.02.2014' # day.month.year
+__UPDATED__ = '17.02.2014' # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -88,7 +88,7 @@ class InvalidNumberResultsException(GoogleSearchError):
         self.nres = number_of_results
 
     def __str__(self):
-        return '%d is not a valid number of results per page' % self.nres
+        return '{} is not a valid number of results per page'.format(self.nres)
 
 
 def cached_file_name(search_params):
@@ -184,13 +184,26 @@ class GoogleScrape(threading.Thread):
         'DNT': '1'
     }
 
-    def __init__(self, search_term, num_results_per_page=10, num_page=0):
+    def __init__(self, search_query, num_results_per_page=10, num_page=0, search_params={}):
+        """Initialises an object responsible for scraping one particular results page.
+
+        @param search_query: The query to scrape for.
+        @param num_results_per_page: The number of results per page. Must be smaller than 1000.
+        (My tests though have shown that at most 100 results were returned per page)
+        @param num_page: The number/index of the page.
+        @param search_params: A dictionary with additional search params. The default search params is updated with this parameter.
+        """
         super().__init__()
-        logger.debug("Created new GoogleScrape objectt with params: query={}, num_results_per_page={}, num_page={}".format(
-            search_term, num_results_per_page, num_page))
-        self.search_term = search_term
-        if num_results_per_page not in [10, 25, 50, 100]:
+        logger.debug("Created new GoogleScrape object with params: query={}, num_results_per_page={}, num_page={}".format(
+            search_query, num_results_per_page, num_page))
+        self.search_query = search_query
+        if num_results_per_page not in range(0, 1001): # The maximum value of this parameter is 1000. See search appliance docs
+            logger.error('The parameter -n must be smaller or equal to 1000')
             raise InvalidNumberResultsException(num_results_per_page)
+
+        if num_page*num_results_per_page + num_results_per_page > 1000:
+            logger.error('The maximal number of results for a query is 1000')
+            raise InvalidNumberResultsException(num_page*num_results_per_page + num_results_per_page)
 
         self.num_results_per_page = num_results_per_page
         self.num_page = num_page
@@ -198,14 +211,36 @@ class GoogleScrape(threading.Thread):
         self._SEARCH_URL = 'http://www.google.com/search'
 
         self._SEARCH_PARAMS = {
-            'q': '', # the search term
+            'q': '', # the search query string
             'num': '', # the number of results per page
-            'start': '0', # the offset to the search results. page number = (start / num) + 1
-            'pws': '0'      # personalization turned off
+            'numgm': 3, # Number of KeyMatch results to return with the results. A value between 0 to 50 can be specified for this option.
+            'start': '0', # Specifies the index number of the first entry in the result set that is to be returned. page number = (start / num) + 1
+                          # The maximum number of results available for a query is 1,000, i.e., the value of the start parameter added to the value of the num parameter cannot exceed 1,000.
+            'rc': '', # Request an accurate result count for up to 1M documents. If a user submits a search query without the site parameter, the entire search index is queried.
+            'site': None, # Limits search results to the contents of the specified collection.
+            'sort': '', # Specifies a sorting method. Results can be sorted by date.
+            'client': None, # required parameter. Indicates a valid front end.
+            'output': 'xml', # required parameter. Selects the format of the search results.
+            'partialfields': '', # Restricts the search results to documents with meta tags whose values contain the specified words or phrases.
+            'pws': '0',      # personalization turned off
+            'tbm': None, # Used when you select any of the “special” searches, like image search or video search
+            'tbs': None, # Also undocumented as `tbm`, allows you to specialize the time frame of the results you want to obtain.
+                         # Examples: Any time: tbs=qdr:a, Last second: tbs=qdr:s, Last minute: tbs=qdr:n, Last day: tbs=qdr:d, Time range: tbs=cdr:1,cd_min:3/2/1984,cd_max:6/5/1987
+                         # But the tbs parameter is also used to specify content:
+                         # Examples: Sites with images: tbs=img:1, Results by reading level, Basic level: tbs=rl:1,rls:0, Results that are translated from another language: tbs=clir:1,
+                         # For full documentation, see http://stenevang.wordpress.com/2013/02/22/google-search-url-request-parameters/
+            'lr': 'lang_en', # Restricts searches to pages in the specified language. If there are no results in the specified language, the search appliance displays results in all languages .
+                             # lang_xx where xx is the country code such as en, de, fr, ca, ...
+            'ie': 'latin1', # Sets the character encoding that is used to interpret the query string.
+            'oe': 'latin1' # Sets the character encoding that is used to encode the results.
         }
 
+        # Maybe update the default search params when the user has supplied a dictionary
+        if search_params is not None and isinstance(search_params, dict):
+            self._SEARCH_PARAMS.update(search_params)
+
         self.SEARCH_RESULTS = {
-            'search_keyword': self.search_term, # The query keyword
+            'search_keyword': self.search_query, # The query keyword
             'num_results_for_kw': '', # The number of results for the keyword
             'results': [] # List of Result named tuples
         }
@@ -226,13 +261,13 @@ class GoogleScrape(threading.Thread):
                 pass # Skip if the url wasn't valid
 
     def _build_query(self, random=False):
-        """Build the headeres and params for the GET request to the Google server.
+        """Build the headers and params for the GET request towards the Google server.
 
-        When random == True, several headers (like the UA) are chosen
+        When random is True, several headers (like the UA) are chosen
         randomly.
         """
         self._SEARCH_PARAMS.update(
-            {'q': self.search_term,
+            {'q': self.search_query,
              'num': str(self.num_results_per_page),
              'start': str(int(self.num_results_per_page) * int(self.num_page))
             })
@@ -261,7 +296,7 @@ class GoogleScrape(threading.Thread):
                                  params=self._SEARCH_PARAMS, timeout=3.0)
 
             except requests.ConnectionError as cerr:
-                print('Network problem occured {}'.format(cerr.msg))
+                print('Network problem occurred {}'.format(cerr.msg))
                 return False
             except requests.Timeout as terr:
                 print('Connection timeout {}'.format(terr.msg))
@@ -336,14 +371,26 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     return [t.SEARCH_RESULTS for t in threads]
 
 
+def deep_scrape(query):
+    """The heart of this module. Launches many different Google searches with different parameter combinations to maximize results.
+
+    @param query: The query to search for.
+    @return:
+    """
+
+    # First obtain some synonyms for the search query
+
+    # For each proxy, run the scrapes
+
+
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='GoogleScraper', description='Scrape the Google search engine',
+    parser = argparse.ArgumentParser(prog='GoogleScraper', description='Scrapes the Google search engine',
                                      epilog='This program might infringe Google TOS, so use at your own risk')
     parser.add_argument('-q', '--query', metavar='search_string', type=str, action='store', dest='query', required=True,
                         help='The search query.')
     parser.add_argument('-n', '--num_results_per_page', metavar='number_of_results_per_page', type=int,
-                        dest='num_results_per_page', action='store', default=100,
-                        help='The number of results per page. Most be one of [10, 25, 50, 100]')
+                        dest='num_results_per_page', action='store', default=50,
+                        help='The number of results per page. Most be >= 100')
     parser.add_argument('-p', '--num_pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1,
                         help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
@@ -352,7 +399,10 @@ if __name__ == '__main__':
                         help='A string such as "127.0.0.1:9050" specifying a single proxy server')
     parser.add_argument('--proxy_file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
                         required=False, #default='.proxies'
-                        help='A filename for a list of proxies with the following format: "(proxy_ip|proxy_host):Port\\n"')
+                        help='A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/4a/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"')
+    parser.add_argument('-x', '--deep-scrape', action='store_true', default=False, help='Launches a wide range of parallel searches by modifying the search ' \
+                        'query string with synonyms and by scraping with different Google search parameter combinations that might yield more unique ' \
+                        'results. The algorithm is optimized for maximum of results for a specific keyword whilst trying avoid detection. This is the heart of GoogleScraper.')
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
     args = parser.parse_args()
@@ -374,9 +424,10 @@ if __name__ == '__main__':
         socks.wrap_module(socket)
         socket.create_connection = create_connection
 
-    import textwrap
-
-    results = scrape(args.query, args.num_results_per_page, args.num_pages)
+    if args.deep_scrape:
+        results = deep_scrape(args.query)
+    else:
+        results = scrape(args.query, args.num_results_per_page, args.num_pages)
 
     if args.verbosity <= 1:
         for result in results:
@@ -385,6 +436,7 @@ if __name__ == '__main__':
             for link_title, link_snippet, link_url in result['results']:
                 print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
     else:
+        import textwrap
         for result in results:
             logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
                 len(result['results']), result['search_keyword'], result['num_results_for_kw']))
