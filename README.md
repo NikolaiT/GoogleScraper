@@ -3,7 +3,7 @@
 ### What does GoogleScraper?
 
 GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
-links and their titles and descriptions problematically which enables you to process it further.
+links and their titles and descriptions programmatically which enables you to process it further.
 
 There are unlimited use cases:
 
@@ -40,7 +40,7 @@ their search engine:
 
 So the biggest hurdle to tackle is the javascript detection algorithms. I don't know what Google does in their javascript, but I will soon investigate it further and then decide if it's not better to change strategies and
 switch to a **approach that scrapes by simulating browsers with a browserlike environment** that can execute javascript. The networking of each of these virtual browsers is proxified and manipulated such that it behaves like
-a real physical user agent. I am pretty sure that it must be possible to handle 20 such browser sessions in a parallel way without getting stressing resources too much. The real problem is as always the lack of good proxies...
+a real physical user agent. I am pretty sure that it must be possible to handle 20 such browser sessions in a parallel way without stressing resources too much. The real problem is as always the lack of good proxies...
 
 ### Example Usage
 
@@ -251,13 +251,16 @@ python GoogleScraper.py -p 1 -n 25 -q 'i hate google' --proxy="221.132.35.5:2214
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
 
-### To-do list (As of 25.12.2013)
-+ Figure out whether to use threads or asynchronous I/O for multiple connections.
+### To-do list (As of 25.12.2013, updated at 16th february 2014)
++ Figure out whether to use threads or asynchronous I/O for multiple connections. [x]
 + Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
++ Implement the proxy manager that intelligently uses proxy to maximize the extracted information per IP.
 
 ### Stable version
 I will experiment with a threading approach and asynchronous IO. There will always be a stable version that supports threading. It is simply
 called `GoogleScraper.py`. The asynchronous version will be called `GoogleScraperAsync.py`.
+
+**Last major update:** 17th february 2014
 
 This is a development repository. But you can always find a [working GoogleScraper.py script here][4].
 
