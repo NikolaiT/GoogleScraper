@@ -220,29 +220,45 @@ class GoogleScrape(threading.Thread):
 
         self._SEARCH_URL = 'http://www.google.com/search'
 
+        # http://www.rankpanel.com/blog/google-search-parameters/
         self._SEARCH_PARAMS = {
             'q': '', # the search query string
             'num': '', # the number of results per page
-            'numgm': 3, # Number of KeyMatch results to return with the results. A value between 0 to 50 can be specified for this option.
+            'numgm': None, # Number of KeyMatch results to return with the results. A value between 0 to 50 can be specified for this option.
             'start': '0', # Specifies the index number of the first entry in the result set that is to be returned. page number = (start / num) + 1
                           # The maximum number of results available for a query is 1,000, i.e., the value of the start parameter added to the value of the num parameter cannot exceed 1,000.
             'rc': '', # Request an accurate result count for up to 1M documents. If a user submits a search query without the site parameter, the entire search index is queried.
             'site': None, # Limits search results to the contents of the specified collection.
-            'sort': '', # Specifies a sorting method. Results can be sorted by date.
+            'sort': None, # Specifies a sorting method. Results can be sorted by date.
             'client': None, # required parameter. Indicates a valid front end.
-            'output': 'xml', # required parameter. Selects the format of the search results.
-            'partialfields': '', # Restricts the search results to documents with meta tags whose values contain the specified words or phrases.
+            'output': None, # required parameter. Selects the format of the search results.
+            'partialfields': None, # Restricts the search results to documents with meta tags whose values contain the specified words or phrases.
             'pws': '0',      # personalization turned off
+            'cd': None, # Passes down the keyword rank clicked.
+            'filter': 0, # Include omitted results
+            'complete': 0, #Turn auto-suggest and Google Instant on (=1) or off (=0)
+            'nfpr': 1, #Turn off auto-correction of spelling
+            'ncr': 1, #No country redirect: Allows you to set the Google country engine you would like to use despite your current geographic location.
+            'safe': 'off', # Turns the adult content filter on or off
+            'rls': None, #Source of query with version of the client and language set, other examples are can be found
+            'source': None,  #Google navigational parameter specifying where you came from, here universal search
             'tbm': None, # Used when you select any of the “special” searches, like image search or video search
             'tbs': None, # Also undocumented as `tbm`, allows you to specialize the time frame of the results you want to obtain.
                          # Examples: Any time: tbs=qdr:a, Last second: tbs=qdr:s, Last minute: tbs=qdr:n, Last day: tbs=qdr:d, Time range: tbs=cdr:1,cd_min:3/2/1984,cd_max:6/5/1987
                          # But the tbs parameter is also used to specify content:
                          # Examples: Sites with images: tbs=img:1, Results by reading level, Basic level: tbs=rl:1,rls:0, Results that are translated from another language: tbs=clir:1,
                          # For full documentation, see http://stenevang.wordpress.com/2013/02/22/google-search-url-request-parameters/
-            'lr': 'lang_en', # Restricts searches to pages in the specified language. If there are no results in the specified language, the search appliance displays results in all languages .
+            'lr': 'lang_de', # Restricts searches to pages in the specified language. If there are no results in the specified language, the search appliance displays results in all languages .
                              # lang_xx where xx is the country code such as en, de, fr, ca, ...
-            'ie': 'latin1', # Sets the character encoding that is used to interpret the query string.
-            'oe': 'latin1' # Sets the character encoding that is used to encode the results.
+            'hl': 'en', # Language settings passed down by your browser
+            'cr': 'countryDE', # The region the results should come from
+            'gr': None, # Just as gl shows you how results look in a specified country, gr limits the results to a certain region
+            'gcs': None, # Limits results to a certain city, you can also use latitude and longitude
+            'gpc': None, #Limits results to a certain zip code
+            'gm': None, # Limits results to a certain metropolitan region
+            'gl': 'de', # as if the search was conducted in a specified location. Can be unreliable.
+            'ie': 'utf-8', # Sets the character encoding that is used to interpret the query string.
+            'oe': 'utf-8' # Sets the character encoding that is used to encode the results.
         }
 
         # Maybe update the default search params when the user has supplied a dictionary
@@ -250,6 +266,7 @@ class GoogleScrape(threading.Thread):
             self._SEARCH_PARAMS.update(search_params)
 
         self.SEARCH_RESULTS = {
+            'cache_file': None, # A path to a file that caches the results.
             'search_keyword': self.search_query, # The query keyword
             'num_results_for_kw': '', # The number of results for the keyword
             'results': [] # List of Result named tuples
@@ -268,7 +285,7 @@ class GoogleScrape(threading.Thread):
                     self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
                                 link_snippet=e.link_snippet)
             except Exception as err:
-                pass # Skip if the url wasn't valid
+                logger.warn("URL={} found to be invalid.".format(url))
 
     def _build_query(self, random=False):
         """Build the headers and params for the GET request towards the Google server.
@@ -296,14 +313,16 @@ class GoogleScrape(threading.Thread):
 
         if DO_CACHING:
             html = get_cached(self._SEARCH_PARAMS)
+            self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
         else:
             html = False
 
         if not html:
             try:
-                logger.debug("Initiating search with params={}".format(self._SEARCH_PARAMS))
                 r = requests.get(self._SEARCH_URL, headers=self._HEADERS,
                                  params=self._SEARCH_PARAMS, timeout=3.0)
+
+                logger.debug("Scraped with url: {}".format(r.url))
 
             except requests.ConnectionError as cerr:
                 print('Network problem occurred {}'.format(cerr.msg))
@@ -323,6 +342,7 @@ class GoogleScrape(threading.Thread):
             # cache fresh results
             if DO_CACHING:
                 cache_results(self._SEARCH_PARAMS, html)
+                self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
 
         # Try to parse the google HTML result using lxml
         try:
@@ -331,22 +351,32 @@ class GoogleScrape(threading.Thread):
             dom = lxml.html.document_fromstring(html, parser=parser)
             dom.resolve_base_href()
         except Exception as e:
-            print('Some error occured while lxml tried to parse: {}'.format(e.msg))
+            print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
             return False
 
-        # Try to extract all links, including their snippets(descriptions) and titles.
+        # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
         try:
             li_g_results = dom.xpath(HTMLTranslator().css_to_xpath('li.g'))
             links = []
             for e in li_g_results:
-                link_element = e.xpath(HTMLTranslator().css_to_xpath('h3.r > a:first-child'))
-                link = link_element[0].get('href')
-                title = link_element[0].text_content()
-                snippet_element = e.xpath(HTMLTranslator().css_to_xpath('span.st'))
-                snippet = snippet_element[0].text_content()
+                try:
+                    link_element = e.xpath(HTMLTranslator().css_to_xpath('h3.r > a:first-child'))
+                    link = link_element[0].get('href')
+                    title = link_element[0].text_content()
+                except IndexError as err:
+                    logger.error('Error while parsing link/title element: {}'.format(err))
+                    continue
+                try:
+                    snippet_element = e.xpath(HTMLTranslator().css_to_xpath('div.s > span.st'))
+                    snippet = snippet_element[0].text_content()
+                except IndexError as err:
+                    logger.error('Error while parsing snippet element: {}'.format(err))
+                    continue
+
                 links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
-        except Exception as e:
-            print(e.__cause__)
+        # Catch further errors besides parsing errors that take shape as IndexErrors
+        except Exception as err:
+            logger.error('Error in parsing result links: {}'.format(err))
 
         self.SEARCH_RESULTS['results'].extend(links)
 
@@ -382,10 +412,10 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
 
 
 def deep_scrape(query):
-    """The heart of this module. Launches many different Google searches with different parameter combinations to maximize results.
+    """Launches many different Google searches with different parameter combinations to maximize return of results.
 
     @param query: The query to search for.
-    @return:
+    @return: All the result sets.
     """
 
     # First obtain some synonyms for the search query
@@ -413,6 +443,8 @@ if __name__ == '__main__':
     parser.add_argument('-x', '--deep-scrape', action='store_true', default=False, help='Launches a wide range of parallel searches by modifying the search ' \
                         'query string with synonyms and by scraping with different Google search parameter combinations that might yield more unique ' \
                         'results. The algorithm is optimized for maximum of results for a specific keyword whilst trying avoid detection. This is the heart of GoogleScraper.')
+    parser.add_argument('--view', action='store_true', default=False, help="View the response in a default browser tab."
+                                                                 " Mainly for debug purposes. Works only when caching is enabled.")
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
     args = parser.parse_args()
@@ -439,20 +471,18 @@ if __name__ == '__main__':
     else:
         results = scrape(args.query, args.num_results_per_page, args.num_pages)
 
-    if args.verbosity <= 1:
-        for result in results:
-            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
-                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-            for link_title, link_snippet, link_url in result['results']:
-                print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-    else:
-        import textwrap
-        for result in results:
-            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
-                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-            for link_title, link_snippet, link_url in result['results']:
-                print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+    for result in results:
+        logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+            len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+        if args.view:
+            import webbrowser
+            webbrowser.open(result['cache_file'])
+        for link_title, link_snippet, link_url in result['results']:
+            print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+            if args.verbosity > 1:
+                import textwrap
                 print('Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
                 print(
                     'Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
                 print('*' * 70)
+
