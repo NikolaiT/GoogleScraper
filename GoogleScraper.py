@@ -21,10 +21,13 @@ from the Google Servers:
 {List them here}
 
 Note: Scraping compromises the google terms of service (TOS).
+
+Debug:
+Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
 __VERSION__ = '0.4'
-__UPDATED__ = '17.02.2014' # day.month.year
+__UPDATED__ = '24.02.2014' # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -143,11 +146,13 @@ def cache_results(search_params, html):
         fd.write(html)
 
 
-class GoogleScrape(threading.Thread):
+class GoogleScrape(threading.Timer):
     """Offers a fast way to query the google search engine.
 
-    Overrides the run() method of the superclass threading.Thread.
-    Each thread represents a crawl for one Google Results Page.
+    Overrides the run() method of the superclass threading.Timer.
+    Each thread represents a crawl for one Google Results Page. Inheriting
+    from threading.Timer allows the deriving class to delay execution of the run()
+    method.
 
     http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
     """
@@ -194,18 +199,19 @@ class GoogleScrape(threading.Thread):
         'DNT': '1'
     }
 
-    def __init__(self, search_query, num_results_per_page=10, num_page=0, search_params={}):
+    def __init__(self, search_query, num_results_per_page=10, num_page=0, interval=0.0, search_params={}):
         """Initialises an object responsible for scraping one particular results page.
 
         @param search_query: The query to scrape for.
         @param num_results_per_page: The number of results per page. Must be smaller than 1000.
         (My tests though have shown that at most 100 results were returned per page)
         @param num_page: The number/index of the page.
+        @param interval: The amount of seconds to wait until executing run()
         @param search_params: A dictionary with additional search params. The default search params is updated with this parameter.
         """
-        super().__init__()
-        logger.debug("Created new GoogleScrape object with params: query={}, num_results_per_page={}, num_page={}".format(
-            search_query, num_results_per_page, num_page))
+        # Call the parent class threading.Timer which in turn executes the threading.Thread.run() method
+        # after interval seconds.
+        super().__init__(interval, self.scrape)
         self.search_query = search_query
         if num_results_per_page not in range(0, 1001): # The maximum value of this parameter is 1000. See search appliance docs
             logger.error('The parameter -n must be smaller or equal to 1000')
@@ -221,13 +227,16 @@ class GoogleScrape(threading.Thread):
         self._SEARCH_URL = 'http://www.google.com/search'
 
         # http://www.rankpanel.com/blog/google-search-parameters/
+        # typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8
+        # All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
         self._SEARCH_PARAMS = {
             'q': '', # the search query string
+            'oq': None, # Shows the original query.
             'num': '', # the number of results per page
             'numgm': None, # Number of KeyMatch results to return with the results. A value between 0 to 50 can be specified for this option.
             'start': '0', # Specifies the index number of the first entry in the result set that is to be returned. page number = (start / num) + 1
                           # The maximum number of results available for a query is 1,000, i.e., the value of the start parameter added to the value of the num parameter cannot exceed 1,000.
-            'rc': '', # Request an accurate result count for up to 1M documents. If a user submits a search query without the site parameter, the entire search index is queried.
+            'rc': None, # Request an accurate result count for up to 1M documents. If a user submits a search query without the site parameter, the entire search index is queried.
             'site': None, # Limits search results to the contents of the specified collection.
             'sort': None, # Specifies a sorting method. Results can be sorted by date.
             'client': None, # required parameter. Indicates a valid front end.
@@ -235,30 +244,31 @@ class GoogleScrape(threading.Thread):
             'partialfields': None, # Restricts the search results to documents with meta tags whose values contain the specified words or phrases.
             'pws': '0',      # personalization turned off
             'cd': None, # Passes down the keyword rank clicked.
-            'filter': 0, # Include omitted results
-            'complete': 0, #Turn auto-suggest and Google Instant on (=1) or off (=0)
-            'nfpr': 1, #Turn off auto-correction of spelling
-            'ncr': 1, #No country redirect: Allows you to set the Google country engine you would like to use despite your current geographic location.
+            'filter': None, # Include omitted results
+            'complete': None, #Turn auto-suggest and Google Instant on (=1) or off (=0)
+            'nfpr': None, #Turn off auto-correction of spelling on=1, off=0
+            'ncr': None, #No country redirect: Allows you to set the Google country engine you would like to use despite your current geographic location.
             'safe': 'off', # Turns the adult content filter on or off
             'rls': None, #Source of query with version of the client and language set, other examples are can be found
             'source': None,  #Google navigational parameter specifying where you came from, here universal search
+            'sourceid': None, #
             'tbm': None, # Used when you select any of the “special” searches, like image search or video search
             'tbs': None, # Also undocumented as `tbm`, allows you to specialize the time frame of the results you want to obtain.
                          # Examples: Any time: tbs=qdr:a, Last second: tbs=qdr:s, Last minute: tbs=qdr:n, Last day: tbs=qdr:d, Time range: tbs=cdr:1,cd_min:3/2/1984,cd_max:6/5/1987
                          # But the tbs parameter is also used to specify content:
                          # Examples: Sites with images: tbs=img:1, Results by reading level, Basic level: tbs=rl:1,rls:0, Results that are translated from another language: tbs=clir:1,
                          # For full documentation, see http://stenevang.wordpress.com/2013/02/22/google-search-url-request-parameters/
-            'lr': 'lang_de', # Restricts searches to pages in the specified language. If there are no results in the specified language, the search appliance displays results in all languages .
+            'lr': None, # Restricts searches to pages in the specified language. If there are no results in the specified language, the search appliance displays results in all languages .
                              # lang_xx where xx is the country code such as en, de, fr, ca, ...
-            'hl': 'en', # Language settings passed down by your browser
-            'cr': 'countryDE', # The region the results should come from
+            'hl': None, # Language settings passed down by your browser
+            'cr': None, # The region the results should come from
             'gr': None, # Just as gl shows you how results look in a specified country, gr limits the results to a certain region
             'gcs': None, # Limits results to a certain city, you can also use latitude and longitude
             'gpc': None, #Limits results to a certain zip code
             'gm': None, # Limits results to a certain metropolitan region
-            'gl': 'de', # as if the search was conducted in a specified location. Can be unreliable.
-            'ie': 'utf-8', # Sets the character encoding that is used to interpret the query string.
-            'oe': 'utf-8' # Sets the character encoding that is used to encode the results.
+            'gl': None, # as if the search was conducted in a specified location. Can be unreliable.
+            'ie': 'UTF-8', # Sets the character encoding that is used to interpret the query string.
+            'oe': 'UTF-8' # Sets the character encoding that is used to encode the results.
         }
 
         # Maybe update the default search params when the user has supplied a dictionary
@@ -269,11 +279,13 @@ class GoogleScrape(threading.Thread):
             'cache_file': None, # A path to a file that caches the results.
             'search_keyword': self.search_query, # The query keyword
             'num_results_for_kw': '', # The number of results for the keyword
-            'results': [] # List of Result named tuples
+            'results': [], # List of Result, list of named tuples
+            'ads_main': [], # The google ads in the main result set.
+            'ads_aside': [], # The google ads on the right.
         }
 
-    def run(self):
-        """Make the the scrape and clean the URL's."""
+    def scrape(self):
+        """Do the the scrape and clean the URL's."""
         self._search()
 
         # Now try to create ParseResult objects from the URL
@@ -285,7 +297,11 @@ class GoogleScrape(threading.Thread):
                     self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
                                 link_snippet=e.link_snippet)
             except Exception as err:
-                logger.warn("URL={} found to be invalid.".format(url))
+                # In the case the above regex can't extract the url from the referrer, just use the original parse url
+                self.SEARCH_RESULTS['results'][i] = \
+                                    self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(e.link_url),
+                                                link_snippet=e.link_snippet)
+                logger.warn("URL={} found to be invalid.".format(e))
 
     def _build_query(self, random=False):
         """Build the headers and params for the GET request towards the Google server.
@@ -308,8 +324,21 @@ class GoogleScrape(threading.Thread):
         Private, internal method.
         Parsing is done with lxml and cssselect. The html structure of the Google Search
         results may change over time. Effective: February 2014
+
+        There are several parts of a SERP results page the average user is most likely interested:
+
+        (Probably in this order)
+        - Non-advertisement links, as well as their little snippet and title
+        - The message that indicates how many results were found. For example: "About 834,000,000 results (0.39 seconds)"
+        - Advertisement search results (links, titles, snippets like above)
+
+        Problem: This data comes in a wide range of different formats, depending on the parameters set in the search.
+        Investigations over the different formats are done in the directory tests/serp_formats
         """
         self._build_query()
+
+        # After building the query, all parameters are set, so we know what we're requesting.
+        logger.debug("Created new GoogleScrape object with searchparams={}".format(self._SEARCH_PARAMS))
 
         if DO_CACHING:
             html = get_cached(self._SEARCH_PARAMS)
@@ -354,23 +383,26 @@ class GoogleScrape(threading.Thread):
             print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
             return False
 
+        ### PARSING
+
+        _xpath = HTMLTranslator().css_to_xpath
         # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
         try:
-            li_g_results = dom.xpath(HTMLTranslator().css_to_xpath('li.g'))
+            li_g_results = dom.xpath(_xpath('li.g'))
             links = []
             for e in li_g_results:
                 try:
-                    link_element = e.xpath(HTMLTranslator().css_to_xpath('h3.r > a:first-child'))
+                    link_element = e.xpath(_xpath('h3.r > a:first-child'))
                     link = link_element[0].get('href')
                     title = link_element[0].text_content()
                 except IndexError as err:
-                    logger.error('Error while parsing link/title element: {}'.format(err))
+                    logger.debug('Error while parsing link/title element: {}'.format(err))
                     continue
                 try:
-                    snippet_element = e.xpath(HTMLTranslator().css_to_xpath('div.s > span.st'))
+                    snippet_element = e.xpath(_xpath('div.s > span.st'))
                     snippet = snippet_element[0].text_content()
                 except IndexError as err:
-                    logger.error('Error while parsing snippet element: {}'.format(err))
+                    logger.debug('Error while parsing snippet element={} : {}'.format(repr(e), err))
                     continue
 
                 links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
@@ -380,16 +412,67 @@ class GoogleScrape(threading.Thread):
 
         self.SEARCH_RESULTS['results'].extend(links)
 
+        # Extract center ads (The ones with yellow background before the non-paid results in the main column)
+        try:
+            li_ads_ad_results = dom.xpath(_xpath('div#center_col li.ads-ad'))
+            ads = []
+            for e in li_ads_ad_results:
+                try:
+                    # The first a has style="display:none", so the second has the actual result
+                    ad_link_element = e.xpath(_xpath('h3.r > a'))
+                    ad_link = link_element[1].get('href')
+                    ad_title = link_element[1].text_content()
+                except IndexError as err:
+                    logger.debug('Error while parsing ad_link/ad_title from ads-ad element in center column: {}'.format(err))
+                    continue
+                try:
+                    snippet_element = e.xpath(_xpath('div.ads-creative'))
+                    ad_snippet = snippet_element[0].text_content()
+                except IndexError as err:
+                    logger.debug('Error while parsing snippet from ads-ad element in center column: {}'.format(err))
+                    continue
+                ads.append(self.Result(link_title=ad_title, link_url=ad_link, link_snippet=ad_snippet))
+        except Exception as err:
+            logger.error('Error in parsing ads in center column: {}'.format(err))
+        self.SEARCH_RESULTS['ads_main'].extend(ads)
+
+        # Extract ads on the right side.
+        try:
+            li_ads_ad_results = dom.xpath(_xpath('#rhs_block li.ads-ad'))
+            ads = []
+            for e in li_ads_ad_results:
+                try:
+                    # The first a has style="display:none", so the second has the actual result
+                    link_element = e.xpath(_xpath('h3.r > a'))
+                    ad_link = link_element[1].get('href')
+                    ad_title = link_element[1].text_content()
+                except IndexError as err:
+                    logger.debug('Error while parsing ad_link/ad_title from ads-ad element in aside: {}'.format(err))
+                    continue
+                try:
+                    snippet_element = e.xpath(_xpath('div.ads-creative'))
+                    ad_snippet = snippet_element[0].text_content()
+                except IndexError as err:
+                    logger.debug('Error while parsing snippet from ads-ad element in in aside: {}'.format(err))
+                    continue
+                ads.append(self.Result(link_title=ad_title, link_url=ad_link, link_snippet=ad_snippet))
+        except Exception as err:
+            logger.error('Error in parsing ads in aside: {}'.format(err))
+        self.SEARCH_RESULTS['ads_aside'].extend(ads)
+
         # try to get the number of results for our search query
         try:
             self.SEARCH_RESULTS['num_results_for_kw'] = \
-                dom.xpath(HTMLTranslator().css_to_xpath('div#resultStats'))[0].text_content()
+                dom.xpath(_xpath('div#resultStats'))[0].text_content()
         except Exception as e:
             logger.critical(e.msg)
 
 
 def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     """Public API function to search for terms and return a list of results.
+
+     A default scrape does start each thread in intervals of 1 second.
+    This (maybe) prevents Google to sort us out because of aggressive behaviour.
 
     arguments:
     query -- the search query. Can be whatever you want to crawl google for.
@@ -400,7 +483,8 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     offset -- specifies the offset to the page to begin searching.
 
     """
-    threads = [GoogleScrape(query, num_results_per_page, i) for i in range(offset, num_pages + offset, 1)]
+    threads = [GoogleScrape(query, num_results_per_page, i, interval=i)
+                                for i in range(offset, num_pages + offset, 1)]
 
     for t in threads:
         t.start()
@@ -477,12 +561,14 @@ if __name__ == '__main__':
         if args.view:
             import webbrowser
             webbrowser.open(result['cache_file'])
-        for link_title, link_snippet, link_url in result['results']:
-            print('Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-            if args.verbosity > 1:
-                import textwrap
-                print('Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
-                print(
-                    'Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
-                print('*' * 70)
-
+        import textwrap
+        for result_set in ('results', 'ads_main', 'ads_aside'):
+            print('### Results for "{}" ###'.format(result_set))
+            for link_title, link_snippet, link_url in result[result_set]:
+                print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                if args.verbosity > 1:
+                    print('  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+                    print(
+                        '  Description: \n{}\n'.format(textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+                    print('*' * 70)
+                    print()
