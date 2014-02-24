@@ -50,9 +50,9 @@ try:
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
     import socks # should be in the same directory
-except ImportError as e:
-    print(e.msg)
-    print('You can install missing modules with `pip install [modulename]`')
+except ImportError as ie:
+    print(ie)
+    print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
 
 # module wide global variables and configuration
