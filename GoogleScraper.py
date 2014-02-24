@@ -51,6 +51,8 @@ try:
     from bs4 import UnicodeDammit
     import socks # should be in the same directory
 except ImportError as ie:
+    if ie.name == 'bs4':
+        print('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
     print(ie)
     print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
