@@ -35,6 +35,7 @@ import sys
 import os
 import socket
 import logging
+import pprint
 import argparse
 import threading
 from collections import namedtuple
@@ -59,16 +60,20 @@ except ImportError as ie:
 
 # module wide global variables and configuration
 
-# First obtain a logger
-logger = logging.getLogger('GoogleScraper')
-logger.setLevel(logging.INFO)
+def setup_logger(level=logging.INFO):
+    # First obtain a logger
+    logger = logging.getLogger('GoogleScraper')
+    logger.setLevel(level)
 
-ch = logging.StreamHandler(stream=sys.stderr)
-ch.setLevel(logging.INFO)
+    ch = logging.StreamHandler(stream=sys.stderr)
+    ch.setLevel(level)
 
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
+
+    # add logger to the modules namespace
+    setattr(sys.modules[__name__], 'logger', logger)
 
 # Whether caching shall be enabled
 DO_CACHING = True
@@ -340,7 +345,7 @@ class GoogleScrape(threading.Timer):
         self._build_query()
 
         # After building the query, all parameters are set, so we know what we're requesting.
-        logger.debug("Created new GoogleScrape object with searchparams={}".format(self._SEARCH_PARAMS))
+        logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self._SEARCH_PARAMS)))
 
         if DO_CACHING:
             html = get_cached(self._SEARCH_PARAMS)
@@ -533,7 +538,13 @@ if __name__ == '__main__':
                                                                  " Mainly for debug purposes. Works only when caching is enabled.")
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
+    parser.add_argument('--debug', action='store_true', default=False, help='Whether to set logging to level DEBUG.')
     args = parser.parse_args()
+
+    if args.debug:
+        setup_logger(logging.DEBUG)
+    else:
+        setup_logger(logging.INFO)
 
     if args.proxy_file:
         raise NotImplementedError('Coming soon.')
