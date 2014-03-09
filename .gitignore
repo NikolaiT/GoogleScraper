@@ -4,6 +4,9 @@
 # cache for GoogleScraper testings
 .scrapecache/
 
+# various virtual environments for testings
+.ve32/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

@@ -34,6 +34,7 @@ __WEBSITE__ = 'incolumitas.com'
 import sys
 import os
 import socket
+import types
 import logging
 import pprint
 import argparse
@@ -52,8 +53,9 @@ try:
     from bs4 import UnicodeDammit
     import socks # should be in the same directory
 except ImportError as ie:
-    if ie.name == 'bs4':
+    if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
         print('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
+        sys.exit(1)
     print(ie)
     print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
@@ -153,7 +155,36 @@ def cache_results(search_params, html):
         fd.write(html)
 
 
-class GoogleScrape(threading.Timer):
+def timer_support(Class):
+    """In python versions prior to 3.3, threading.Timer
+    seems to be a function that returns an instance
+    of _Timer which is the class we want.
+    """
+    if isinstance(threading.Timer, (types.FunctionType, types.BuiltinFunctionType)) \
+            and hasattr(threading, '_Timer'):
+        timer_class = threading._Timer
+    else:
+        timer_class = threading.Timer
+
+    class GoogleScrape(timer_class):
+        def __init__(self, *args, **kwargs):
+            # Signature of Timer or _Timer
+            # def __init__(self, interval, function, args=None, kwargs=None):
+            super().__init__(kwargs.get('interval'), self.scrape)
+            self._init(*args, **kwargs)
+
+    # add all attributes excluding __init__() and __dict__
+    for name, attribute in Class.__dict__.items():
+        if name not in ('__init__', '__dict__'):
+            try:
+                setattr(GoogleScrape, name, attribute)
+            except AttributeError as ae:
+                pass
+    return GoogleScrape
+
+
+@timer_support
+class GoogleScrape():
     """Offers a fast way to query the google search engine.
 
     Overrides the run() method of the superclass threading.Timer.
@@ -206,8 +237,12 @@ class GoogleScrape(threading.Timer):
         'DNT': '1'
     }
 
-    def __init__(self, search_query, num_results_per_page=10, num_page=0, interval=0.0, search_params={}):
-        """Initialises an object responsible for scraping one particular results page.
+    def __init__(self, *args, **kwargs):
+        """To be modified by the timer_support class decorator"""
+        pass
+
+    def _init(self, search_query, num_results_per_page=10, num_page=0, interval=0.0, search_params={}):
+        """Initialises an object responsible for scraping one SERP page.
 
         @param search_query: The query to scrape for.
         @param num_results_per_page: The number of results per page. Must be smaller than 1000.
@@ -216,9 +251,6 @@ class GoogleScrape(threading.Timer):
         @param interval: The amount of seconds to wait until executing run()
         @param search_params: A dictionary with additional search params. The default search params is updated with this parameter.
         """
-        # Call the parent class threading.Timer which in turn executes the threading.Thread.run() method
-        # after interval seconds.
-        super().__init__(interval, self.scrape)
         self.search_query = search_query
         if num_results_per_page not in range(0, 1001): # The maximum value of this parameter is 1000. See search appliance docs
             logger.error('The parameter -n must be smaller or equal to 1000')
@@ -324,6 +356,11 @@ class GoogleScrape(threading.Timer):
 
         if random:
             self._HEADERS['User-Agent'] = choice(self._UAS)
+
+    def __iter__(self):
+        """Simple magic method to iterate quickly over found non ad results"""
+        for link_title, link_snippet, link_url in result['results']:
+            yield (link_title, link_snippet, link_url)
 
     def _search(self):
         """The actual search and parsing of the results.
@@ -496,6 +533,7 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     for t in threads:
         t.start()
 
+    # wait for all threads to end running
     for t in threads:
         t.join(3.0)
 
