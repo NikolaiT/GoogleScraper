@@ -3,7 +3,7 @@ import urllib.parse
 
 if __name__ == '__main__':
 
-    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0)
+    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0, searchtype='normal')
     for page in results:
         for link_title, link_snippet, link_url in page['results']:
             # You can access all parts of the search results like that

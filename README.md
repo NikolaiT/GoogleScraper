@@ -1,11 +1,11 @@
-# GoogleScraper - A simple module to scrape and extract links from Google. 
+## GoogleScraper - Scraping the Google Search Engine
 
-### What does GoogleScraper?
+### What does GoogleScraper.py?
 
 GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
-links and their titles and descriptions programmatically which enables you to process it further.
+links and their titles and descriptions programmatically which enables you to process scraped data further.
 
-There are unlimited use cases:
+There are unlimited *usage scenarios*:
 
 + Quickly harvest masses of [google dorks][1].
 + Use it as a SEO tool.
@@ -13,17 +13,23 @@ There are unlimited use cases:
 + Compile lists of sites to feed your own database.
 + Many more use cases...
 
+First of all you need to understand that GoogleScraper uses **two completely different scraping approaches**:
++ Scrape with low level networking libraries such as `urllib.request` or `requests` modules and thus emulate a browser
++ Scrape by controlling a real browser with Python
+
+Whereas the first approach was implemented first, the second approach looks much more promising in comparison.
+Effective: Development for the second approach started around 10.03.2014
+
 GoogleScraper is implemented with the following techniques/software:
 
-+ Written in Python 3
-+ Uses multihreading/asynchroneous IO. (two approaches, currently only multi-threading is implemented)
++ Written in Python 3.3
++ Uses multithreading/asynchroneous IO. (two approaches, currently only multi-threading is implemented)
 + Supports parallel google scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2]:
   * Socks5
   * Socks4
   * HttpProxy
-+ Support for additional google search features.
-
++ Support for additional google search features like news/image/video search.
 
 ### How does GoogleScraper maximize the amount of extracted information per IP address?
 
@@ -36,11 +42,26 @@ their search engine:
   * Javascript generates challenges dynamically on the client side. This might include heuristics that try to detect human behaviour. Example: Only humans move their mouses and hover over the interesting search results.
 + Robots have a strict requests pattern (very fast requests, without a random time between the sent packets).
 + Dorks are heavily used
-+ No pictures/ads/css/javascript is loaded (like a browser does normally)
++ No pictures/ads/css/javascript are loaded (like a browser does normally) which in turn won't trigger certain javascript events
 
 So the biggest hurdle to tackle is the javascript detection algorithms. I don't know what Google does in their javascript, but I will soon investigate it further and then decide if it's not better to change strategies and
-switch to a **approach that scrapes by simulating browsers with a browserlike environment** that can execute javascript. The networking of each of these virtual browsers is proxified and manipulated such that it behaves like
+switch to a **approach that scrapes by simulating browsers in a browserlike environment** that can execute javascript. The networking of each of these virtual browsers is proxified and manipulated such that it behaves like
 a real physical user agent. I am pretty sure that it must be possible to handle 20 such browser sessions in a parallel way without stressing resources too much. The real problem is as always the lack of good proxies...
+
+### How to overcome difficulties of low level (http) scraping?
+
+As mentioned above, there are several drawbacks when scraping with `urllib.request` or `requests` modules and doing the networking on my own:
+
+Browsers are ENORMOUSLY complex software systems. Chrome has around 8 millions line of code and firefox even 10 LOC. Huge companies invest a lot of money to push technoliges forward (HTML5, CSS3, new standards) and each browser
+has a unique behaviour. Therefore it's almost impossible to simulate such a browser manually with HTTP requests.  This means Google has numerous ways to detect anomalies and inconsistencies in the browsing usage. Alone the
+dynamic nature of Javascript makes it impossible to scrape undetected.
+
+This cries for an alternative approach, that automates a **real** browser with Python. Best would be to control the Chrome browser since Google has the least incentives to restrict capabilities for their own native browser.
+Hence I need a way to automate Chrome with Python and controlling several independent instances with different proxies set. Then the output of result grows linearly with the number of used proxies...
+
+Some interesting technologies/software to do so:
++ [Selenium](https://pypi.python.org/pypi/selenium)
++ [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
 
 ### Example Usage
 
@@ -50,7 +71,7 @@ import urllib.parse
 
 if __name__ == '__main__':
 
-    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0)
+    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0, searchtype='normal')
     for page in results:
         for link_title, link_snippet, link_url in page['results']:
             # You can access all parts of the search results like that
@@ -254,13 +275,13 @@ If you feel like contacting me, do so and send me a mail. You can find my contac
 ### To-do list (As of 25.12.2013, updated at 16th february 2014)
 + Figure out whether to use threads or asynchronous I/O for multiple connections. [x]
 + Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
-+ Implement the proxy manager that intelligently uses proxy to maximize the extracted information per IP.
++ Implement the proxy manager that intelligently uses proxies to maximize the extracted information per IP.
 
 ### Stable version
 I will experiment with a threading approach and asynchronous IO. There will always be a stable version that supports threading. It is simply
 called `GoogleScraper.py`. The asynchronous version will be called `GoogleScraperAsync.py`.
 
-**Last major update:** 17th february 2014
+**Last major update:** 10th march 2014
 
 This is a development repository. But you can always find a [working GoogleScraper.py script here][4].
 
