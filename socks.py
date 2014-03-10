@@ -1,6 +1,6 @@
 """
 SocksiPy - Python SOCKS module.
-Version 1.4.2
+Version 1.5.0
 
 Copyright 2006 Dan-Haim. All rights reserved.
 
@@ -52,7 +52,7 @@ Modifications made by Anorov (https://github.com/Anorov)
 -Various small bug fixes
 """
 
-__version__ = "1.4.2"
+__version__ = "1.5.0"
 
 import socket
 import struct
@@ -65,8 +65,22 @@ PRINTABLE_PROXY_TYPES = {SOCKS4: "SOCKS4", SOCKS5: "SOCKS5", HTTP: "HTTP"}
 
 _orgsocket = _orig_socket = socket.socket
 
-class ProxyError(IOError): pass
+class ProxyError(IOError):
+    """
+    socket_err contains original socket.error exception.
+    """
+    def __init__(self, msg, socket_err=None):
+        self.msg = msg
+        self.socket_err = socket_err
+
+        if socket_err:
+            self.msg = msg + ": {}".format(socket_err)
+
+    def __str__(self):
+        return self.msg
+
 class GeneralProxyError(ProxyError): pass
+class ProxyConnectionError(ProxyError): pass
 class SOCKS5AuthError(ProxyError): pass
 class SOCKS5Error(ProxyError): pass
 class SOCKS4Error(ProxyError): pass
@@ -167,6 +181,11 @@ class socksocket(socket.socket):
         self.proxy_sockname = None
         self.proxy_peername = None
 
+        self.proxy_negotiators = { SOCKS4: self._negotiate_SOCKS4,
+                                   SOCKS5: self._negotiate_SOCKS5,
+                                   HTTP: self._negotiate_HTTP
+                                 }
+
     def _recvall(self, count):
         """
         Receive EXACTLY the number of bytes requested from the socket.
@@ -176,7 +195,6 @@ class socksocket(socket.socket):
         while len(data) < count:
             d = self.recv(count - len(data))
             if not d:
-                self.close()
                 raise GeneralProxyError("Connection closed unexpectedly")
             data += d
         return data
@@ -254,7 +272,6 @@ class socksocket(socket.socket):
         if chosen_auth[0:1] != b"\x05":
             # Note: string[i:i+1] is used because indexing of a bytestring 
             # via bytestring[i] yields an integer in Python 3
-            self.close()
             raise GeneralProxyError("SOCKS5 proxy server sent invalid data")
         
         # Check the chosen authentication method
@@ -269,11 +286,9 @@ class socksocket(socket.socket):
             auth_status = self._recvall(2)
             if auth_status[0:1] != b"\x01":
                 # Bad response
-                self.close()
                 raise GeneralProxyError("SOCKS5 proxy server sent invalid data")
             if auth_status[1:2] != b"\x00":
                 # Authentication failed
-                self.close()
                 raise SOCKS5AuthError("SOCKS5 authentication failed")
             
             # Otherwise, authentication succeeded
@@ -281,7 +296,6 @@ class socksocket(socket.socket):
         # No authentication is required if 0x00 
         elif chosen_auth[1:2] != b"\x00":
             # Reaching here is always bad
-            self.close()
             if chosen_auth[1:2] == b"\xFF":
                 raise SOCKS5AuthError("All offered SOCKS5 authentication methods were rejected")
             else:
@@ -311,13 +325,11 @@ class socksocket(socket.socket):
         # Get the response
         resp = self._recvall(4)
         if resp[0:1] != b"\x05":
-            self.close()
             raise GeneralProxyError("SOCKS5 proxy server sent invalid data")
 
         status = ord(resp[1:2])
         if status != 0x00:
             # Connection failed: server returned an error
-            self.close()
             error = SOCKS5_ERRORS.get(status, "Unknown error")
             raise SOCKS5Error("{:#04x}: {}".format(status, error))
         
@@ -328,7 +340,6 @@ class socksocket(socket.socket):
             resp += self.recv(1)
             bound_addr = self._recvall(ord(resp[4:5]))
         else:
-            self.close()
             raise GeneralProxyError("SOCKS5 proxy server sent invalid data")
         
         bound_port = struct.unpack(">H", self._recvall(2))[0]
@@ -375,13 +386,11 @@ class socksocket(socket.socket):
         resp = self._recvall(8)
         if resp[0:1] != b"\x00":
             # Bad data
-            self.close()
             raise GeneralProxyError("SOCKS4 proxy server sent invalid data")
 
         status = ord(resp[1:2])
         if status != 0x5A:
             # Connection failed: server returned an error
-            self.close()
             error = SOCKS4_ERRORS.get(status, "Unknown error")
             raise SOCKS4Error("{:#04x}: {}".format(status, error))
 
@@ -411,7 +420,6 @@ class socksocket(socket.socket):
         fobj.close()
         
         if not status_line:
-            self.close()
             raise GeneralProxyError("Connection closed unexpectedly")
         
         try:
@@ -420,17 +428,14 @@ class socksocket(socket.socket):
             raise GeneralProxyError("HTTP proxy server sent invalid response")
             
         if not proto.startswith("HTTP/"):
-            self.close()
             raise GeneralProxyError("Proxy server does not appear to be an HTTP proxy")
         
         try:
             status_code = int(status_code)
         except ValueError:
-            self.close()
             raise HTTPError("HTTP proxy server did not return a valid HTTP status")
 
         if status_code != 200:
-            self.close()
             error = "{}: {}".format(status_code, status_msg)
             if status_code in (400, 403, 405):
                 # It's likely that the HTTP proxy server does not support the CONNECT tunneling method
@@ -440,6 +445,7 @@ class socksocket(socket.socket):
 
         self.proxy_sockname = (b"0.0.0.0", 0)
         self.proxy_peername = addr, dest_port
+
 
     def connect(self, dest_pair):
         """        
@@ -458,35 +464,41 @@ class socksocket(socket.socket):
                 or not isinstance(dest_addr, type(""))
                 or not isinstance(dest_port, int)):
             raise GeneralProxyError("Invalid destination-connection (host, port) pair")
+
+
+        if proxy_type is None:
+            # Treat like regular socket object
+            _orig_socket.connect(self, (dest_addr, dest_port))
+            return
+
+        proxy_port = proxy_port or DEFAULT_PORTS.get(proxy_type)
+        if not proxy_port:
+            raise GeneralProxyError("Invalid proxy type")
         
         try:
-            if proxy_type is None:
-                _orig_socket.connect(self, (dest_addr, dest_port))
-            else:
-                port = proxy_port or DEFAULT_PORTS.get(proxy_type)
-                if not port:
-                    raise GeneralProxyError("Invalid proxy type")
-
-                _orig_socket.connect(self, (proxy_addr, port))
-                
-                if proxy_type == SOCKS5:
-                    self._negotiate_SOCKS5(dest_addr, dest_port)
-                elif proxy_type == SOCKS4:
-                    self._negotiate_SOCKS4(dest_addr, dest_port)
-                elif proxy_type == HTTP:
-                    self._negotiate_HTTP(dest_addr, dest_port)
+            # Initial connection to proxy server
+            _orig_socket.connect(self, (proxy_addr, proxy_port))
 
         except socket.error as error:
+            # Error while connecting to proxy
             self.close()
             proxy_server = "{}:{}".format(proxy_addr.decode(), proxy_port)
             printable_type = PRINTABLE_PROXY_TYPES[proxy_type]
-            mkmsg = lambda msg: "Error connecting to {} proxy {}: {}".format(printable_type,
-                                                                             proxy_server, msg)
-            if len(error.args) == 0:
-                args = (mkmsg(None),)
-            elif len(error.args) == 1:
-                args = (mkmsg(error.args[0]),)
-            else:
-                args = tuple(error.args)
-                args = args[:1] + (mkmsg(args[1]),) + args[2:]
-            raise socket.error(*args)
+
+            msg = "Error connecting to {} proxy {}".format(printable_type,
+                                                           proxy_server)
+            raise ProxyConnectionError(msg, error)
+
+        else:
+            # Connected to proxy server, now negotiate
+            try:
+                # Calls negotiate_{SOCKS4, SOCKS5, HTTP}
+                self.proxy_negotiators[proxy_type](dest_addr, dest_port)
+            except socket.error as error:
+                # Wrap socket errors
+                self.close()
+                raise GeneralProxyError("Socket error", error)
+            except ProxyError:
+                # Protocol error while negotiating with proxy
+                self.close()
+                raise

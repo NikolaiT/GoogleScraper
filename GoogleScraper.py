@@ -18,7 +18,7 @@ GoogleScraper's architecture outlined:
 
 The module implements some countermeasures to circumvent spamming detection
 from the Google Servers:
-{List them here}
+- Small time interval between parallel requests
 
 Note: Scraping compromises the google terms of service (TOS).
 
@@ -26,8 +26,8 @@ Debug:
 Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
-__VERSION__ = '0.4'
-__UPDATED__ = '24.02.2014' # day.month.year
+__VERSION__ = '0.5'
+__UPDATED__ = '10.03.2014' # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -268,6 +268,9 @@ class GoogleScrape():
         # http://www.rankpanel.com/blog/google-search-parameters/
         # typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8
         # All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
+
+        # All search requests must include the parameters site, client, q, and output. All parameter values
+        # must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
         self._SEARCH_PARAMS = {
             'q': '', # the search query string
             'oq': None, # Shows the original query.
@@ -275,22 +278,56 @@ class GoogleScrape():
             'numgm': None, # Number of KeyMatch results to return with the results. A value between 0 to 50 can be specified for this option.
             'start': '0', # Specifies the index number of the first entry in the result set that is to be returned. page number = (start / num) + 1
                           # The maximum number of results available for a query is 1,000, i.e., the value of the start parameter added to the value of the num parameter cannot exceed 1,000.
-            'rc': None, # Request an accurate result count for up to 1M documents. If a user submits a search query without the site parameter, the entire search index is queried.
-            'site': None, # Limits search results to the contents of the specified collection.
+            'rc': None, # Request an accurate result count for up to 1M documents.
+            'site': None, # Limits search results to the contents of the specified collection. If a user submits a search query without the site parameter, the entire search index is queried.
             'sort': None, # Specifies a sorting method. Results can be sorted by date.
-            'client': None, # required parameter. Indicates a valid front end.
-            'output': None, # required parameter. Selects the format of the search results.
-            'partialfields': None, # Restricts the search results to documents with meta tags whose values contain the specified words or phrases.
+            'client': 'firefox-a', # Required parameter. If this parameter does not have a valid value, other parameters in the query string
+                            #do not work as expected. Set to 'firefox-a' in mozilla firefox
+                            #A string that indicates a valid front end and the policies defined for it, including KeyMatches, related
+                            #queries, filters, remove URLs, and OneBox Modules. Notice that the rendering of the front end is
+                            #determined by the proxystylesheet parameter. Example: client=myfrontend
+            'output': None, # required parameter. Selects the format of the search results. 'xml_no_dtd XML' : XML results or custom HTML, 'xml': XML results with Google DTD reference. When you use this value, omit proxystylesheet.
+            'partialfields': None, # Restricts the search results to documents with meta tags whose values contain the specified words or phrases. Meta tag names or values must be double URL-encoded
+            'requiredfields': None, #Restricts the search results to documents that contain the exact meta tag names or name-value pairs.
+                                    #See “Meta Tags” on page 32 for more information.
             'pws': '0',      # personalization turned off
+            'proxycustom': None, #Specifies custom XML tags to be included in the XML results. The default XSLT stylesheet uses these
+                                #values for this parameter: <HOME/>, <ADVANCED/>. The proxycustom parameter can be used in custom
+                                #XSLT applications. See “Custom HTML” on page 44 for more information.
+                                #This parameter is disabled if the search request does not contain the proxystylesheet tag. If custom
+                                #XML is specified, search results are not returned with the search request.
+            'proxyreload': None, # Instructs the Google Search Appliance when to refresh the XSL stylesheet cache. A value of 1 indicates
+                                # that the Google Search Appliance should update the XSL stylesheet cache to refresh the stylesheet
+                                # currently being requested. This parameter is optional. By default, the XSL stylesheet cache is updated
+                                # approximately every 15 minutes.
+            'proxystylesheet': None, #If the value of the output parameter is xml_no_dtd, the output format is modified by the
+                                    # proxystylesheet value as follows:
+                                    # 'Omitted': Results are in XML format.
+                                    # 'Front End Name': Results are in Custom HTML format. The XSL stylesheet associated
+                                    # with the specified Front End is used to transform the output.
+
             'cd': None, # Passes down the keyword rank clicked.
-            'filter': None, # Include omitted results
+            'filter': 0, # Include omitted results if set to 0
             'complete': None, #Turn auto-suggest and Google Instant on (=1) or off (=0)
             'nfpr': None, #Turn off auto-correction of spelling on=1, off=0
             'ncr': None, #No country redirect: Allows you to set the Google country engine you would like to use despite your current geographic location.
             'safe': 'off', # Turns the adult content filter on or off
-            'rls': None, #Source of query with version of the client and language set, other examples are can be found
-            'source': None,  #Google navigational parameter specifying where you came from, here universal search
-            'sourceid': None, #
+            'rls': None, #Source of query with version of the client and language set. With firefox set to 'org.mozilla:en-US:official'
+            'sa': None, # User search behavior parameter sa=N: User searched, sa=X: User clicked on related searches in the SERP
+            'source': None,  #Google navigational parameter specifying where you came from, univ: universal search
+            'sourceid': None, # When searching with chrome, is set to 'chrome'
+            'tlen': None, #Specifies the number of bytes that would be used to return the search results title. If titles contain
+                            # characters that need more bytes per character, for example in utf-8, this parameter can be used to
+                            # specify a higher number of bytes to get more characters for titles in the search results.
+            'ud': None, #Specifies whether results include ud tags. A ud tag contains internationalized domain name (IDN)
+                        # encoding for a result URL. IDN encoding is a mechanism for including non-ASCII characters. When a ud
+                        # tag is present, the search appliance uses its value to display the result URL, including non-ASCII
+                        # characters.The value of the ud parameter can be zero (0) or one (1):
+                        # • A value of 0 excludes ud tags from the results.
+                        # • A value of 1 includes ud tags in the results.
+                        # As an example, if the result URLs contain files whose names are in Chinese characters and the ud
+                        # parameter is set to 1, the Chinese characters appear. If the ud parameter is set to 0, the Chinese
+                        # characters are escaped.
             'tbm': None, # Used when you select any of the “special” searches, like image search or video search
             'tbs': None, # Also undocumented as `tbm`, allows you to specialize the time frame of the results you want to obtain.
                          # Examples: Any time: tbs=qdr:a, Last second: tbs=qdr:s, Last minute: tbs=qdr:n, Last day: tbs=qdr:d, Time range: tbs=cdr:1,cd_min:3/2/1984,cd_max:6/5/1987
@@ -307,7 +344,45 @@ class GoogleScrape():
             'gm': None, # Limits results to a certain metropolitan region
             'gl': None, # as if the search was conducted in a specified location. Can be unreliable.
             'ie': 'UTF-8', # Sets the character encoding that is used to interpret the query string.
-            'oe': 'UTF-8' # Sets the character encoding that is used to encode the results.
+            'oe': 'UTF-8', # Sets the character encoding that is used to encode the results.
+            'ip': None, # When queries are made using the HTTP protocol, the ip parameter contains the IP address of the user
+                        #who submitted the search query. You do not supply this parameter with the search request. The ip
+                        #parameter is returned in the XML search results. For example:
+                                    'sitesearch': None, # Limits search results to documents in the specified domain, host, or web directory. Has no effect if the q
+                        # parameter is empty. This parameter has the same effect as the site special query term.
+                        # Unlike the as_sitesearch parameter, the sitesearch parameter is not affected by the as_dt
+                        # parameter. The sitesearch and as_sitesearch parameters are handled differently in the XML results.
+                        # The sitesearch parameter’s value is not appended to the search query in the results. The original
+                        # query term is not modified when you use the sitesearch parameter. The specified value for this
+                        # parameter must contain fewer than 125 characters.
+
+            'access': 'a', # Specifies whether to search public content (p), secure content (s), or both (a).
+            'biw': None, #Browser inner width in pixel
+            'bih': None, # Browser inner height in pixel
+
+            'as_dt': None, # If 'i' is supplied: Include only results in the web directory specified by as_sitesearch
+                          # if 'e' is given: Exclude all results in the web directory specified by as_sitesearch
+            'as_epq': None, # Adds the specified phrase to the search query in parameter q. This parameter has the same effect as
+                            # using the phrase special query term (see “Phrase Search” on page 24).
+            'as_eq': None, # Excludes the specified terms from the search results. This parameter has the same effect as using the exclusion (-) special query term (see “Exclusion” on page 22).
+            'as_filetype': None, # Specifies a file format to include or exclude in the search results. Modified by the as_ft parameter.
+            'as_ft': None, # Modifies the as_filetype parameter to specify filetype inclusion and exclusion options. The values for as_ft are: 'i': filetype and 'e': -filetype
+            'as_lq': None, # Specifies a URL, and causes search results to show pages that link to the that URL. This parameter has
+                            #the same effect as the link special query term (see “Back Links” on page 20). No other query terms can
+                            #be used when using this parameter.
+            'as_occt': None, # Specifies where the search engine is to look for the query terms on the page: anywhere on the page, in
+                            #the title, or in the URL.
+            'as_oq': None, # Combines the specified terms to the search query in parameter q, with an OR operation. This parameter
+                        # has the same effect as the OR special query term (see “Boolean OR Search” on page 20).
+            'as_q': None, # Adds the specified query terms to the query terms in parameter q.
+            'as_sitesearch': None, # Limits search results to documents in the specified domain, host or web directory, or excludes results
+                    #from the specified location, depending on the value of as_dt. This parameter has the same effect as the
+                    #site or -site special query terms. It has no effect if the q parameter is empty.
+            'entqr': None, # This parameter sets the query expansion policy according to the following valid values:
+                        # 0: None
+                        # 1: Standard Uses only the search appliance’s synonym file.
+                        # 2: Local Uses all displayed and activated synonym files.
+                        # 3: Full Uses both standard and local synonym files.
         }
 
         # Maybe update the default search params when the user has supplied a dictionary
@@ -320,7 +395,7 @@ class GoogleScrape():
             'num_results_for_kw': '', # The number of results for the keyword
             'results': [], # List of Result, list of named tuples
             'ads_main': [], # The google ads in the main result set.
-            'ads_aside': [], # The google ads on the right.
+            'ads_aside': [], # The google ads on the right aside.
         }
 
     def scrape(self):
@@ -377,7 +452,8 @@ class GoogleScrape():
         - Advertisement search results (links, titles, snippets like above)
 
         Problem: This data comes in a wide range of different formats, depending on the parameters set in the search.
-        Investigations over the different formats are done in the directory tests/serp_formats
+        Investigations over the different formats are done in the directory tests/serp_formats.
+
         """
         self._build_query()
 
@@ -427,82 +503,23 @@ class GoogleScrape():
             print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
             return False
 
-        ### PARSING
-
+        ### PARSING happens here
         _xpath = HTMLTranslator().css_to_xpath
-        # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
-        try:
-            li_g_results = dom.xpath(_xpath('li.g'))
-            links = []
-            for e in li_g_results:
-                try:
-                    link_element = e.xpath(_xpath('h3.r > a:first-child'))
-                    link = link_element[0].get('href')
-                    title = link_element[0].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing link/title element: {}'.format(err))
-                    continue
-                try:
-                    snippet_element = e.xpath(_xpath('div.s > span.st'))
-                    snippet = snippet_element[0].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing snippet element={} : {}'.format(repr(e), err))
-                    continue
 
-                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
-        # Catch further errors besides parsing errors that take shape as IndexErrors
-        except Exception as err:
-            logger.error('Error in parsing result links: {}'.format(err))
+        # There might be several list of different css selectors to handle different SERP formats
+        css_selectors = {
+            # to extract all links of non-ad results, including their snippets(descriptions) and titles.
+            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'], ),
+            # to parse the centered ads
+            'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
+                         ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
+            # the ads on on the right
+            'ads_aside': (['#rhs_block li.ads-ad', 'h3.r > a', 'div.ads-creative'], ),
+        }
 
-        self.SEARCH_RESULTS['results'].extend(links)
-
-        # Extract center ads (The ones with yellow background before the non-paid results in the main column)
-        try:
-            li_ads_ad_results = dom.xpath(_xpath('div#center_col li.ads-ad'))
-            ads = []
-            for e in li_ads_ad_results:
-                try:
-                    # The first a has style="display:none", so the second has the actual result
-                    ad_link_element = e.xpath(_xpath('h3.r > a'))
-                    ad_link = link_element[1].get('href')
-                    ad_title = link_element[1].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing ad_link/ad_title from ads-ad element in center column: {}'.format(err))
-                    continue
-                try:
-                    snippet_element = e.xpath(_xpath('div.ads-creative'))
-                    ad_snippet = snippet_element[0].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing snippet from ads-ad element in center column: {}'.format(err))
-                    continue
-                ads.append(self.Result(link_title=ad_title, link_url=ad_link, link_snippet=ad_snippet))
-        except Exception as err:
-            logger.error('Error in parsing ads in center column: {}'.format(err))
-        self.SEARCH_RESULTS['ads_main'].extend(ads)
-
-        # Extract ads on the right side.
-        try:
-            li_ads_ad_results = dom.xpath(_xpath('#rhs_block li.ads-ad'))
-            ads = []
-            for e in li_ads_ad_results:
-                try:
-                    # The first a has style="display:none", so the second has the actual result
-                    link_element = e.xpath(_xpath('h3.r > a'))
-                    ad_link = link_element[1].get('href')
-                    ad_title = link_element[1].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing ad_link/ad_title from ads-ad element in aside: {}'.format(err))
-                    continue
-                try:
-                    snippet_element = e.xpath(_xpath('div.ads-creative'))
-                    ad_snippet = snippet_element[0].text_content()
-                except IndexError as err:
-                    logger.debug('Error while parsing snippet from ads-ad element in in aside: {}'.format(err))
-                    continue
-                ads.append(self.Result(link_title=ad_title, link_url=ad_link, link_snippet=ad_snippet))
-        except Exception as err:
-            logger.error('Error in parsing ads in aside: {}'.format(err))
-        self.SEARCH_RESULTS['ads_aside'].extend(ads)
+        for key, slist in css_selectors.items():
+            for selectors in slist:
+                self.SEARCH_RESULTS[key].extend(self._parse_links(dom, *selectors))
 
         # try to get the number of results for our search query
         try:
@@ -511,11 +528,38 @@ class GoogleScrape():
         except Exception as e:
             logger.critical(e.msg)
 
+    def _parse_links(self, dom, container_selector,link_selector, snippet_selector):
+        _xpath = HTMLTranslator().css_to_xpath
+        links = []
+        # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
+        try:
+            li_g_results = dom.xpath(_xpath(container_selector))
+            for e in li_g_results:
+                try:
+                    link_element = e.xpath(_xpath(link_selector))
+                    link = link_element[0].get('href')
+                    title = link_element[0].text_content()
+                except IndexError as err:
+                    logger.debug('Error while parsing link/title element with selector={}: {}'.format(link_selector, err))
+                    continue
+                try:
+                    snippet_element = e.xpath(_xpath(snippet_selector))
+                    snippet = snippet_element[0].text_content()
+                except IndexError as err:
+                    logger.debug('Error in parsing snippet with selector={}. Previous element: {}.Error: {}'.format(snippet_selector, links[-1] or None, repr(e), err))
+                    continue
+
+                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
+        # Catch further errors besides parsing errors that take shape as IndexErrors
+        except Exception as err:
+            logger.error('Error in parsing result links with selector={}: {}'.format(container_selector, err))
+
+        return links or []
 
 def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
     """Public API function to search for terms and return a list of results.
 
-     A default scrape does start each thread in intervals of 1 second.
+    A default scrape does start each thread in intervals of 1 second.
     This (maybe) prevents Google to sort us out because of aggressive behaviour.
 
     arguments:
@@ -541,9 +585,25 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0):
 
 
 def deep_scrape(query):
-    """Launches many different Google searches with different parameter combinations to maximize return of results.
+    """Launches many different Google searches with different parameter combinations to maximize return of results. Depth first.
 
-    @param query: The query to search for.
+    This is the heart of GoogleScraper.py. The aim of deep_scrape is to maximize the number of links for a given keyword.
+    In order to achieve this goal, we'll heavily combine and rearrange a predefined set of search parameters to force Google to
+    yield unique links:
+    - different date-ranges for the keyword
+    - using synonyms of the keyword
+    - search for by different reading levels
+    - search by different target languages (and translate the query in this language)
+    - diversify results by scraping image search, news search, web search (the normal one) and maybe video search...
+
+    From the google reference:
+    When the Google Search Appliance filters results, the top 1000 most relevant URLs are found before the
+    filters are applied. A URL that is beyond the top 1000 most relevant results is not affected if you change
+    the filter settings.
+
+    This means that altering filters (duplicate snippet filter and duplicate directory filter) wont' bring us further.
+
+    @param query: The query/keyword to search for.
     @return: All the result sets.
     """
 
@@ -614,9 +674,12 @@ if __name__ == '__main__':
             webbrowser.open(result['cache_file'])
         import textwrap
         for result_set in ('results', 'ads_main', 'ads_aside'):
-            print('### Results for "{}" ###'.format(result_set))
+            print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
             for link_title, link_snippet, link_url in result[result_set]:
-                print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                try:
+                    print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                except AttributeError as ae:
+                    pass
                 if args.verbosity > 1:
                     print('  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
                     print(
