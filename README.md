@@ -52,7 +52,7 @@ a real physical user agent. I am pretty sure that it must be possible to handle 
 
 As mentioned above, there are several drawbacks when scraping with `urllib.request` or `requests` modules and doing the networking on my own:
 
-Browsers are ENORMOUSLY complex software systems. Chrome has around 8 millions line of code and firefox even 10 LOC. Huge companies invest a lot of money to push technoliges forward (HTML5, CSS3, new standards) and each browser
+Browsers are ENORMOUSLY complex software systems. Chrome has around 8 millions line of code and firefox even 10 LOC. Huge companies invest a lot of money to push technology forward (HTML5, CSS3, new standards) and each browser
 has a unique behaviour. Therefore it's almost impossible to simulate such a browser manually with HTTP requests.  This means Google has numerous ways to detect anomalies and inconsistencies in the browsing usage. Alone the
 dynamic nature of Javascript makes it impossible to scrape undetected.
 
