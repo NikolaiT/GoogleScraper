@@ -10,13 +10,18 @@ import time
 import random
 import threading
 import signal
+import types
 import sys
+import pprint
 try:
     from selenium import webdriver
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait # available since 2.4.0
     from selenium.webdriver.support import expected_conditions as EC # available since 2.26.0
+    from cssselect import HTMLTranslator, SelectorError
+    from bs4 import UnicodeDammit
+    import lxml.html
 except ImportError as ie:
     print(ie)
 
@@ -72,8 +77,8 @@ def maybe_create_db():
         (id INTEGER PRIMARY KEY AUTOINCREMENT, requested_at TEXT NOT NULL,
            num_results INTEGER NOT NULL, search_query TEXT NOT NULL)''')
         cursor.execute('''CREATE TABLE results
-        (id INTEGER PRIMARY KEY AUTOINCREMENT, link_title TEXT NOT NULL,
-           link_snippet TEXT NOT NULL, link_url TEXT NOT NULL,
+        (id INTEGER PRIMARY KEY AUTOINCREMENT, link_title TEXT,
+           link_snippet TEXT, link_url TEXT,
            serp_id INTEGER NOT NULL, FOREIGN KEY(serp_id) REFERENCES serp_page(id))''')
 
         conn.commit()
@@ -105,12 +110,16 @@ class SelScraper(threading.Thread):
             if not self.kw:
                 break
             self.element.send_keys(self.kw + Keys.ENTER)
-            self._parse_links()
+            self.webdriver.implicitly_wait(1)
+            self._parse_links_sel() # call here one of _parse_links_native or _parse_links_sel
             time.sleep(random.randint(10, 20) // 10)
         self.webdriver.close()
 
-    def _parse_links(self):
-        """Scrapes the google SERP page"""
+    def _parse_links_sel(self):
+        """Scrapes the google SERP page with selenium methods.
+
+         (is slow, because css selectors are probably done with javascript)
+        """
         self.rlock.acquire()
 
         results = self.webdriver.find_elements_by_css_selector('li.g')
@@ -118,18 +127,61 @@ class SelScraper(threading.Thread):
         self.cursor.execute('INSERT INTO serp_page (requested_at, num_results, search_query) VALUES(?, ?, ?)',
                                                                             (time.ctime(), len(results), self.kw))
         lastrowid = self.cursor.lastrowid
-
         parsed = []
         for result in results:
-            link_element = result.find_element_by_css('h3.r > a:first-child')
-            link = link_element.get_attribute('href')
-            title = link_element.text
-            snippet = result.find_element_by_css('div.s > span.st').text
+            link = title = snippet = ''
+            try:
+                link_element = result.find_element_by_css_selector('h3.r > a:first-child')
+                link = link_element.get_attribute('href')
+                title = link_element.text
+            except Exception as e:
+                pass
+            try:
+                snippet = result.find_element_by_css_selector('div.s > span.st').text
+            except Exception as e:
+                pass
             parsed.append((link, title, snippet))
 
         self.cursor.executemany('INSERT INTO results (link_title, link_title, link_snippet, serp_id) VALUES(?, ?, ?, ?)',
-                                    [tuple.append(lastrowid) for tuple in parsed])
+                                    [tuple + (lastrowid, ) for tuple in parsed])
         self.rlock.release()
+
+    def _parse_links_native(self):
+        """Injects the scraping methods of GoogleScrape in this class. That's some awesome metaprogramming here!"""
+        # fix the path
+        sys.path.append(re.sub(r'\/\w*?$', '', os.getcwd()))
+        from GoogleScraper import GoogleScrape
+        from GoogleScraper import setup_logger
+        setup_logger()
+        for attribute in ('_xp', '_parse_normal_search', '_parse_image_search',
+                       '_parse_video_search', '_parse_news_search', '_parse', '_parse_links'):
+            a = getattr(GoogleScrape, attribute)
+            if not hasattr(self, attribute):
+                # the method needs to be bound
+                if isinstance(a, (types.FunctionType, types.BuiltinFunctionType)):
+                    setattr(self, attribute, types.MethodType(a, self))
+                else:
+                    setattr(self, attribute, a)
+        self.SEARCH_RESULTS = {
+            'search_keyword': self.kw,  # The query keyword
+            'num_results_for_kw': '',  # The number of results for the keyword. Valid vor all kind of searches
+            'results': [],  # List of Result, list of named tuples
+            'ads_main': [],  # The google ads in the main result set.
+            'ads_aside': [],  # The google ads on the right aside.
+        }
+        # Try to parse the google HTML result using lxml
+        try:
+            doc = UnicodeDammit(self.webdriver.page_source, is_html=True)
+            parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
+            dom = lxml.html.document_fromstring(self.webdriver.page_source, parser=parser)
+            dom.resolve_base_href()
+        except Exception as e:
+            print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
+            return False
+
+        self._parse_normal_search(dom)
+        pprint.pprint(self.SEARCH_RESULTS)
+
 
 if __name__ == '__main__':
     args = get_command_line()

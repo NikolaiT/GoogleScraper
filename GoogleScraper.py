@@ -656,7 +656,10 @@ class GoogleScrape():
             logger.critical(e.msg)
 
     def _parse_normal_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a normal search."""
+        """Specifies the CSS selectors to extract links/snippets for a normal search.
+
+        @param dom The page source to parse.
+        """
 
         # There might be several list of different css selectors to handle different SERP formats
         css_selectors = {
