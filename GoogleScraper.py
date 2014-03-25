@@ -174,7 +174,7 @@ def timer_support(Class):
         def __init__(self, *args, **kwargs):
             # Signature of Timer or _Timer
             # def __init__(self, interval, function, args=None, kwargs=None):
-            super().__init__(kwargs.get('interval'), self.scrape)
+            super().__init__(kwargs.get('interval'), self._search)
             self._init(*args, **kwargs)
 
     # add all attributes excluding __init__() and __dict__
@@ -198,18 +198,6 @@ class GoogleScrape():
 
     http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
     """
-
-    # Valid URL (taken from django)
-    _REGEX_VALID_URL = re.compile(
-        r'^(?:http|ftp)s?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-    _REGEX_VALID_URL_SIMPLE = re.compile(
-        'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
-
 
     # Several different User-Agents to diversify the requests.
     # Keep the User-Agents updated. Last update: 17th february 14
@@ -254,6 +242,8 @@ class GoogleScrape():
         @param interval: The amount of seconds to wait until executing run()
         @param search_params: A dictionary with additional search params. The default search params is updated with this parameter.
         """
+
+        self.parser = None
         self.search_query = search_query
         self.searchtype = searchtype
         assert self.searchtype in ('normal', 'image', 'news', 'video')
@@ -427,28 +417,7 @@ class GoogleScrape():
         self.SEARCH_RESULTS = {
             'cache_file': None,  # A path to a file that caches the results.
             'search_keyword': self.search_query,  # The query keyword
-            'num_results_for_kw': '',  # The number of results for the keyword. Valid vor all kind of searches
         }
-
-    def scrape(self):
-        """Do the the scrape and clean the URL's."""
-        self._search()
-
-        # Now try to create ParseResult objects from the URL
-        for key, result_set in self.links.items():
-            for i, e in enumerate(result_set):
-                try:
-                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
-                    assert self._REGEX_VALID_URL.match(url).group()
-                    self.SEARCH_RESULTS[key][i] = \
-                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
-                                    link_snippet=e.link_snippet)
-                except Exception as err:
-                    # In the case the above regex can't extract the url from the referrer, just use the original parse url
-                    self.SEARCH_RESULTS[key][i] = \
-                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(e.link_url),
-                                    link_snippet=e.link_snippet)
-                    logger.debug("URL={} found to be invalid.".format(e))
 
     def reset_search_params(self):
         # Reset all search params to None
@@ -581,10 +550,19 @@ class GoogleScrape():
                 return False
 
             html = r.text
+
             # cache fresh results
             if DO_CACHING:
                 cache_results(self._SEARCH_PARAMS, html)
                 self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
+
+        self.parser = Google_SERP_Parser(html, searchtype=self.searchtype)
+        self.SEARCH_RESULTS.update(self.parser.results)
+
+    @property
+    def results(self):
+        return self.SEARCH_RESULTS
+
 
 class Google_SERP_Parser():
     """Parses data from Google SERPs."""
@@ -594,6 +572,17 @@ class Google_SERP_Parser():
 
     # short alias because we use it so extensively
     _xp = HTMLTranslator().css_to_xpath
+
+    # Valid URL (taken from django)
+    _REGEX_VALID_URL = re.compile(
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    _REGEX_VALID_URL_SIMPLE = re.compile(
+        'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
     def __init__(self, html, searchtype='normal'):
         self.html = html
@@ -645,6 +634,9 @@ class Google_SERP_Parser():
         # Call the correct parsing method
         parsing_actions.get(self.searchtype)(self.dom)
 
+        # Clean the results
+        self._clean_results()
+
     def __iter__(self):
         """Simple magic method to iterate quickly over found non ad results"""
         for link_title, link_snippet, link_url in result['results']:
@@ -658,6 +650,25 @@ class Google_SERP_Parser():
     def links(self):
         return {k:v for k, v in self.SEARCH_RESULTS.items() if k not in
                                 ('num_results_for_kw')}
+
+    def _clean_results(self):
+        """Cleans/extracts the found href attributes."""
+
+        # Now try to create ParseResult objects from the URL
+        for key in ('results', 'ads_aside', 'ads_main'):
+            for i, e in enumerate(self.SEARCH_RESULTS[key]):
+                try:
+                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
+                    assert self._REGEX_VALID_URL.match(url).group()
+                    self.SEARCH_RESULTS[key][i] = \
+                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
+                                    link_snippet=e.link_snippet)
+                except Exception as err:
+                    # In the case the above regex can't extract the url from the referrer, just use the original parse url
+                    self.SEARCH_RESULTS[key][i] = \
+                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(e.link_url),
+                                    link_snippet=e.link_snippet)
+                    logger.debug("URL={} found to be invalid.".format(e))
 
     def _parse_num_results(self):
         # try to get the number of results for our search query
@@ -902,7 +913,7 @@ if __name__ == '__main__':
                     try:
                         print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
                     except AttributeError as ae:
-                        pass
+                        print(ae)
                     if args.verbosity > 1:
                         print('  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
                         print(

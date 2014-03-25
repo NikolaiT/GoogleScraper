@@ -53,6 +53,17 @@ class Google_SERP_Parser():
     # short alias because we use it so extensively
     _xp = HTMLTranslator().css_to_xpath
 
+    # Valid URL (taken from django)
+    _REGEX_VALID_URL = re.compile(
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    _REGEX_VALID_URL_SIMPLE = re.compile(
+        'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+
     def __init__(self, html, searchtype='normal'):
         self.html = html
         self.searchtype = searchtype
@@ -103,6 +114,9 @@ class Google_SERP_Parser():
         # Call the correct parsing method
         parsing_actions.get(self.searchtype)(self.dom)
 
+        # Clean the results
+        self._clean_results()
+
     def __iter__(self):
         """Simple magic method to iterate quickly over found non ad results"""
         for link_title, link_snippet, link_url in result['results']:
@@ -116,6 +130,24 @@ class Google_SERP_Parser():
     def links(self):
         return {k:v for k, v in self.SEARCH_RESULTS.items() if k not in
                                 ('num_results_for_kw')}
+
+    def _clean_results(self):
+        """Cleans/extracts the found href attributes."""
+        # Now try to create ParseResult objects from the URL
+        for key, result_set in self.links.items():
+            for i, e in enumerate(result_set):
+                try:
+                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
+                    assert self._REGEX_VALID_URL.match(url).group()
+                    self.SEARCH_RESULTS[key][i] = \
+                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
+                                    link_snippet=e.link_snippet)
+                except Exception as err:
+                    # In the case the above regex can't extract the url from the referrer, just use the original parse url
+                    self.SEARCH_RESULTS[key][i] = \
+                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(e.link_url),
+                                    link_snippet=e.link_snippet)
+                    logger.debug("URL={} found to be invalid.".format(e))
 
     def _parse_num_results(self):
         # try to get the number of results for our search query
