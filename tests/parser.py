@@ -133,9 +133,10 @@ class Google_SERP_Parser():
 
     def _clean_results(self):
         """Cleans/extracts the found href attributes."""
+
         # Now try to create ParseResult objects from the URL
-        for key, result_set in self.links.items():
-            for i, e in enumerate(result_set):
+        for key in ('results', 'ads_aside', 'ads_main'):
+            for i, e in enumerate(self.SEARCH_RESULTS[key]):
                 try:
                     url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
                     assert self._REGEX_VALID_URL.match(url).group()

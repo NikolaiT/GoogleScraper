@@ -25,12 +25,17 @@ try:
 except ImportError as ie:
     print(ie)
 
+sys.path.insert(1, os.path.join(sys.path[0], '..'))
+from GoogleScraper import Google_SERP_Parser
+
 DB = 'results.db'
+CACHEDIR = '.scrapecache'
 
 def get_command_line():
+    """Parses command line arguments for scraping with selenium browser instances"""
     parser = argparse.ArgumentParser(prog='SelScraper', description='Scrapes the Google search engine by using real browsers',
                                      epilog='This program might infringe Google TOS, so use at your own risk')
-    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords',
+    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', required=True,
                         help='The search keywords to scrape for.')
     parser.add_argument('--keywords-file', type=str, action='store', dest='kwfile',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
@@ -65,6 +70,14 @@ def get_command_line():
     return args
 
 def maybe_create_db():
+    """Creates a little sqlite database to include at least the columns:
+        - query
+       - rank (1-10)
+       - title
+       - snippet
+       - url
+       - domain
+    """
     if os.path.exists(DB) and os.path.getsize(DB) > 0:
         conn = sqlite3.connect(DB, check_same_thread=False)
         cursor = conn.cursor()
@@ -75,20 +88,17 @@ def maybe_create_db():
         cursor = conn.cursor()
         cursor.execute('''CREATE TABLE serp_page
         (id INTEGER PRIMARY KEY AUTOINCREMENT, requested_at TEXT NOT NULL,
-           num_results INTEGER NOT NULL, search_query TEXT NOT NULL)''')
+           num_results INTEGER NOT NULL, search_query TEXT NOT NULL, requested_by TEXT)''')
         cursor.execute('''CREATE TABLE results
         (id INTEGER PRIMARY KEY AUTOINCREMENT, link_title TEXT,
-           link_snippet TEXT, link_url TEXT,
+           link_snippet TEXT, link_url TEXT, link_domain TEXT, link_rank INTEGER NOT NULL,
            serp_id INTEGER NOT NULL, FOREIGN KEY(serp_id) REFERENCES serp_page(id))''')
 
         conn.commit()
         return (conn, cursor)
 
-def setup_db():
-    return maybe_create_db()
-
 class SelScraper(threading.Thread):
-    """A SelScraper automatic browser instance represented in a thread"""
+    """Instances of this class make use of selenium browser objects to query Google"""
     # the google search url
     url = 'https://www.google.com'
 
@@ -97,6 +107,20 @@ class SelScraper(threading.Thread):
         self.cursor = cursor
         self.rlock = rlock
         self.keywords = keywords
+
+    def use_proxy(self, proxycfg = {}):
+        if not set(proxycfg.keys()).issubset({'ip', 'port', 'password', 'proxytype', 'user'}):
+            raise Exception('Invalid proxyconfig: {}'.format(proxycfg))
+        # add pairs to class as attributes
+        {setattr(self, key, value) for key, value in proxycfg.items()}
+        # try to set the proxy for selenium instance
+
+    def maybe_get_cached(self):
+        """"Cache the search that is identified by the search keywords"""
+        self.cachefile = '_'.join(self.keywords)
+
+
+
 
     def run(self):
         self.webdriver = webdriver.Firefox()
@@ -111,14 +135,27 @@ class SelScraper(threading.Thread):
                 break
             self.element.send_keys(self.kw + Keys.ENTER)
             self.webdriver.implicitly_wait(1)
-            self._parse_links_sel() # call here one of _parse_links_native or _parse_links_sel
+            self._parse_links() # call here one of _parse_links_native or _parse_links_sel
             time.sleep(random.randint(10, 20) // 10)
         self.webdriver.close()
+
+    def _parse_links(self):
+        """Parses links with Google_SERP_Parser"""
+        self.parser = Google_SERP_Parser(self.webdriver.page_source)
+        self.results = self.parser.links
+        self.rlock.acquire()
+        self.cursor.execute('INSERT INTO serp_page (requested_at, num_results, search_query, requested_by) VALUES(?, ?, ?, ?)',
+                            (time.asctime(), len(self.results), self.kw, self.ip))
+        lastrowid = self.cursor.lastrowid
+        pprint.pprint(self.results)
+        self.cursor.executemany('INSERT INTO results (link_title, link_url, link_snippet, serp_id) VALUES(?, ?, ?, ?)',
+                                    [tuple + (lastrowid, ) for tuple in self.results])
+        self.rlock.release()
 
     def _parse_links_sel(self):
         """Scrapes the google SERP page with selenium methods.
 
-         (is slow, because css selectors are probably done with javascript)
+         (is slow, because css selectors are probably fired by javascript)
         """
         self.rlock.acquire()
 
@@ -146,52 +183,17 @@ class SelScraper(threading.Thread):
                                     [tuple + (lastrowid, ) for tuple in parsed])
         self.rlock.release()
 
-    def _parse_links_native(self):
-        """Injects the scraping methods of GoogleScrape in this class. That's some awesome metaprogramming here!"""
-        # fix the path
-        sys.path.append(re.sub(r'\/\w*?$', '', os.getcwd()))
-        from GoogleScraper import GoogleScrape
-        from GoogleScraper import setup_logger
-        setup_logger()
-        for attribute in ('_xp', '_parse_normal_search', '_parse_image_search',
-                       '_parse_video_search', '_parse_news_search', '_parse', '_parse_links'):
-            a = getattr(GoogleScrape, attribute)
-            if not hasattr(self, attribute):
-                # the method needs to be bound
-                if isinstance(a, (types.FunctionType, types.BuiltinFunctionType)):
-                    setattr(self, attribute, types.MethodType(a, self))
-                else:
-                    setattr(self, attribute, a)
-        self.SEARCH_RESULTS = {
-            'search_keyword': self.kw,  # The query keyword
-            'num_results_for_kw': '',  # The number of results for the keyword. Valid vor all kind of searches
-            'results': [],  # List of Result, list of named tuples
-            'ads_main': [],  # The google ads in the main result set.
-            'ads_aside': [],  # The google ads on the right aside.
-        }
-        # Try to parse the google HTML result using lxml
-        try:
-            doc = UnicodeDammit(self.webdriver.page_source, is_html=True)
-            parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
-            dom = lxml.html.document_fromstring(self.webdriver.page_source, parser=parser)
-            dom.resolve_base_href()
-        except Exception as e:
-            print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
-            return False
-
-        self._parse_normal_search(dom)
-        pprint.pprint(self.SEARCH_RESULTS)
-
-
 if __name__ == '__main__':
     args = get_command_line()
-    conn, cursor = setup_db()
+    conn, cursor = maybe_create_db()
 
     rlock = threading.RLock()
     browsers = [SelScraper([kw], rlock, cursor) for kw in args.keywords]
 
     def signal_handler(signal, frame):
-        print('Ctrl-c was pressed...')
+        print('Ctrl-c was pressed, shall I commit all changes to db?')
+        if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
+            conn.commit()
         conn.close()
         sys.exit(0)
     signal.signal(signal.SIGINT, signal_handler)

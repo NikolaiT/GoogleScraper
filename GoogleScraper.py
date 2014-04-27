@@ -43,9 +43,12 @@ from collections import namedtuple
 import hashlib
 import re
 import time
+import signal
 import lxml.html
 import urllib.parse
-from random import choice
+import sqlite3
+import itertools
+import random
 
 try:
     import requests
@@ -59,30 +62,44 @@ except ImportError as ie:
     print(ie)
     print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
+try:
+    from selenium import webdriver
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
+    from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
+    from cssselect import HTMLTranslator, SelectorError
+    from bs4 import UnicodeDammit
+    import lxml.html
+except ImportError as ie:
+    print('Scrapemethod {} needs the following library to be installed {}'.format(args.scrapemethod, ie))
 
 # module wide global variables and configuration
 
 def setup_logger(level=logging.INFO):
-    # First obtain a logger
-    logger = logging.getLogger('GoogleScraper')
-    logger.setLevel(level)
+    if not hasattr(sys.modules[__name__], 'logger'):
+        # First obtain a logger
+        logger = logging.getLogger('GoogleScraper')
+        logger.setLevel(level)
 
-    ch = logging.StreamHandler(stream=sys.stderr)
-    ch.setLevel(level)
+        ch = logging.StreamHandler(stream=sys.stderr)
+        ch.setLevel(level)
 
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
 
-    # add logger to the modules namespace
-    setattr(sys.modules[__name__], 'logger', logger)
+        # add logger to the modules namespace
+        setattr(sys.modules[__name__], 'logger', logger)
 
-setup_logger(logging.INFO)
-
+# The database name
+DB = 'results.db'
 # Whether caching shall be enabled
 DO_CACHING = True
 # The directory path for cached google results
 CACHEDIR = '.scrapecache/'
+# The maximal amount of selenium browser windows running in parallel
+MAX_SEL_BROWSERS = 5
 
 if DO_CACHING:
     if not os.path.exists(CACHEDIR):
@@ -231,7 +248,8 @@ class GoogleScrape():
         """To be modified by the timer_support class decorator"""
         pass
 
-    def _init(self, search_query, num_results_per_page=10, num_page=0, searchtype='normal', interval=0.0, search_params={}):
+    def _init(self, search_query, num_results_per_page=10, num_page=0, searchtype='normal', interval=0.0,
+              search_params={}):
         """Initialises an object responsible for scraping one SERP page.
 
         @param search_query: The query to scrape for.
@@ -497,7 +515,7 @@ class GoogleScrape():
                 })
 
         if random:
-            self._HEADERS['User-Agent'] = choice(self._UAS)
+            self._HEADERS['User-Agent'] = random.choice(self._UAS)
 
     def _search(self, searchtype='normal'):
         """The actual search and parsing of the results.
@@ -557,18 +575,115 @@ class GoogleScrape():
                 self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
 
         self.parser = Google_SERP_Parser(html, searchtype=self.searchtype)
-        self.SEARCH_RESULTS.update(self.parser.results)
+        self.SEARCH_RESULTS.update(self.parser.all_results)
 
     @property
     def results(self):
         return self.SEARCH_RESULTS
 
 
+class SelScraper(threading.Thread):
+    """Instances of this class make use of selenium browser objects to query Google"""
+    # the google search url
+    url = 'https://www.google.com'
+
+    def __init__(self, keywords, rlock, cursor):
+        super().__init__()
+        self.cursor = cursor
+        self.rlock = rlock
+        self.html = ''
+        self.keywords = keywords
+        self.searchparams = dict(zip(self.keywords, [0]*len(self.keywords)))
+        self.ip = '127.0.0.1'
+
+    def use_proxy(self, proxycfg={}):
+        if not set(proxycfg.keys()).issubset({'ip', 'port', 'password', 'proxytype', 'user'}):
+            raise Exception('Invalid proxyconfig: {}'.format(proxycfg))
+        # add pairs to class as attributes
+        {setattr(self, key, value) for key, value in proxycfg.items()}
+        # try to set the proxy for selenium instance
+
+    def run(self):
+        self.html = get_cached(self.searchparams)
+        if not self.html:
+            self.webdriver = webdriver.Firefox()
+            self.webdriver.get(self.url)
+            for self.kw in self.keywords:
+                if not self.kw:
+                    break
+                time.sleep(random.randint(10, 50) // 10)
+                try:
+                    self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
+                except Exception as e:
+                    raise Exception(e) # fix that later
+                self.element.clear()
+                self.element.send_keys(self.kw + Keys.ENTER)
+                WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'li.g')))
+                self.html = self.webdriver.page_source
+                # Lock for the sake that two threads write to same file (not probable)
+                self.rlock.acquire()
+                cache_results(self.searchparams, self.html)
+                self.rlock.release()
+                self._parse_links()  # call here one of _parse_links_native or _parse_links_sel
+            self.webdriver.close()
+        else:
+            for self.kw in self.keywords:
+                if not self.kw:
+                    break
+                self._parse_links()
+
+    def _parse_links(self):
+        """Parses links with Google_SERP_Parser"""
+        self.parser = Google_SERP_Parser(self.html)
+        self.results = self.parser.links
+        self.rlock.acquire()
+        self.cursor.execute(
+            'INSERT INTO serp_page (requested_at, num_results, search_query, requested_by) VALUES(?, ?, ?, ?)',
+            (time.asctime(), len(self.results), self.kw, self.ip))
+        lastrowid = self.cursor.lastrowid
+        pprint.pprint(self.results)
+        self.cursor.executemany('INSERT INTO results (link_title, link_url, link_snippet, link_rank, serp_id) VALUES(?, ?, ?, ?, ?)',
+                            [(result.link_title, result.link_url.geturl(), result.link_snippet, result.link_position) + (lastrowid, ) for result in self.results])
+        self.rlock.release()
+
+    def _parse_links_sel(self):
+        """Scrapes the google SERP page with selenium methods.
+
+         (is slow, because css selectors are probably fired by javascript)
+        """
+        self.rlock.acquire()
+
+        results = self.webdriver.find_elements_by_css_selector('li.g')
+
+        self.cursor.execute('INSERT INTO serp_page (requested_at, num_results, search_query) VALUES(?, ?, ?)',
+                            (time.ctime(), len(results), self.kw))
+        lastrowid = self.cursor.lastrowid
+        parsed = []
+        for result in results:
+            link = title = snippet = ''
+            try:
+                link_element = result.find_element_by_css_selector('h3.r > a:first-child')
+                link = link_element.get_attribute('href')
+                title = link_element.text
+            except Exception as e:
+                pass
+            try:
+                snippet = result.find_element_by_css_selector('div.s > span.st').text
+            except Exception as e:
+                pass
+            parsed.append((link, title, snippet))
+
+        self.cursor.executemany(
+            'INSERT INTO results (link_title, link_title, link_snippet, serp_id) VALUES(?, ?, ?, ?)',
+            [tuple + (lastrowid, ) for tuple in parsed])
+        self.rlock.release()
+
+
 class Google_SERP_Parser():
     """Parses data from Google SERPs."""
 
     # Named tuple type for the search results
-    Result = namedtuple('LinkResult', 'link_title link_snippet link_url')
+    Result = namedtuple('LinkResult', 'link_title link_snippet link_url link_position')
 
     # short alias because we use it so extensively
     _xp = HTMLTranslator().css_to_xpath
@@ -609,7 +724,7 @@ class Google_SERP_Parser():
             })
         elif self.searchtype == 'video':
             self.SEARCH_RESULTS.update({
-                'results': [], # Video search results
+                'results': [],  # Video search results
                 'ads_main': [],  # The google ads in the main result set.
                 'ads_aside': [],  # The google ads on the right aside.
             })
@@ -642,33 +757,40 @@ class Google_SERP_Parser():
         for link_title, link_snippet, link_url in result['results']:
             yield (link_title, link_snippet, link_url)
 
+    def num_results(self):
+        """Returns the number of pages found by keyword as shown in top of SERP page."""
+        return self.SEARCH_RESULTS['num_results_for_kw']
+
     @property
     def results(self):
+        """Returns all results including sidebar and main result advertisements"""
+        return {k: v for k, v in self.SEARCH_RESULTS.items() if k not in
+                                                                ('num_results_for_kw', )}
+    @property
+    def all_results(self):
         return self.SEARCH_RESULTS
 
     @property
     def links(self):
-        return {k:v for k, v in self.SEARCH_RESULTS.items() if k not in
-                                ('num_results_for_kw')}
+        """Only returns non ad results"""
+        return self.SEARCH_RESULTS['results']
 
     def _clean_results(self):
-        """Cleans/extracts the found href attributes."""
+        """Cleans/extracts the found href or data-href attributes."""
 
         # Now try to create ParseResult objects from the URL
         for key in ('results', 'ads_aside', 'ads_main'):
             for i, e in enumerate(self.SEARCH_RESULTS[key]):
-                try:
-                    url = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url).group(1)
-                    assert self._REGEX_VALID_URL.match(url).group()
-                    self.SEARCH_RESULTS[key][i] = \
-                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
-                                    link_snippet=e.link_snippet)
-                except Exception as err:
-                    # In the case the above regex can't extract the url from the referrer, just use the original parse url
-                    self.SEARCH_RESULTS[key][i] = \
-                        self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(e.link_url),
-                                    link_snippet=e.link_snippet)
-                    logger.debug("URL={} found to be invalid.".format(e))
+                # First try to extract the url from the strange relative /url?sa= format
+                matcher = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url)
+                if matcher:
+                    url = matcher.group(1)
+                else:
+                    url = e.link_url
+
+                self.SEARCH_RESULTS[key][i] = \
+                    self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
+                                link_snippet=e.link_snippet, link_position=e.link_position)
 
     def _parse_num_results(self):
         # try to get the number of results for our search query
@@ -676,7 +798,8 @@ class Google_SERP_Parser():
             self.SEARCH_RESULTS['num_results_for_kw'] = \
                 self.dom.xpath(self._xp('div#resultStats'))[0].text_content()
         except Exception as e:
-            logger.critical(e.msg)
+            logger.critical(e)
+            print(sys.exc_info())
 
     def _parse_normal_search(self, dom):
         """Specifies the CSS selectors to extract links/snippets for a normal search.
@@ -728,7 +851,12 @@ class Google_SERP_Parser():
         """
         css_selectors = {
             # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'], ),
+            # The first CSS selector is the wrapper element where the search results are situated
+            # the second CSS selector selects the link and the title. If there are 4 elements in the list, then
+            # the second and the third element are for the link and the title.
+            # the 4th selector is for the snippet.
+            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'],
+                        ['li.g', 'h3.r > a:first-child', 'div.s span.st']),
             # to parse the centered ads
             'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
                          ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
@@ -737,7 +865,7 @@ class Google_SERP_Parser():
         }
         self._parse(dom, css_selectors)
 
-    def _parse(self,dom, css_selectors):
+    def _parse(self, dom, css_selectors):
         """Generic parse method"""
         for key, slist in css_selectors.items():
             for selectors in slist:
@@ -747,9 +875,12 @@ class Google_SERP_Parser():
     def _parse_links(self, dom, container_selector, link_selector, snippet_selector):
         links = []
         # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
+        # The parsing should be as robust as possible. Sometimes we can't extract all data, but as much as humanly
+        # possible.
         try:
             li_g_results = dom.xpath(self._xp(container_selector))
-            for e in li_g_results:
+            for i, e in enumerate(li_g_results):
+                snippet = link = title = ''
                 try:
                     link_element = e.xpath(self._xp(link_selector))
                     link = link_element[0].get('href')
@@ -757,7 +888,6 @@ class Google_SERP_Parser():
                 except IndexError as err:
                     logger.debug(
                         'Error while parsing link/title element with selector={}: {}'.format(link_selector, err))
-                    continue
                 try:
                     snippet_element = e.xpath(self._xp(snippet_selector))
                     snippet = snippet_element[0].text_content()
@@ -768,13 +898,11 @@ class Google_SERP_Parser():
                         previous_element = None
                     logger.debug('Error in parsing snippet with selector={}. Previous element: {}.Error: {}'.format(
                         snippet_selector, previous_element, repr(e), err))
-                    continue
 
-                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet))
+                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet, link_position=i))
         # Catch further errors besides parsing errors that take shape as IndexErrors
         except Exception as err:
             logger.error('Error in parsing result links with selector={}: {}'.format(container_selector, err))
-            logger.info(li_g_results)
 
         return links or []
 
@@ -834,18 +962,64 @@ def deep_scrape(query):
 
     # For each proxy, run the scrapes
 
+def grouper(iterable, n, fillvalue=None):
+    "Collect data into fixed-length chunks or blocks"
+    # grouper('ABCDEFG', 3, 'x') --> ABC DEF Gxx"
+    args = [iter(iterable)] * n
+    groups = itertools.zip_longest(*args, fillvalue=fillvalue)
+    return [list(filter(None.__ne__, list(group))) for group in groups]
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(prog='GoogleScraper', description='Scrapes the Google search engine',
-                                     epilog='This program might infringe Google TOS, so use at your own risk')
-    parser.add_argument('-q', '--query', metavar='search_string', type=str, action='store', dest='query', required=True,
-                        help='The search query.')
+def maybe_create_db():
+    """Creates a little sqlite database to include at least the columns:
+        - query
+       - rank (1-10)
+       - title
+       - snippet
+       - url
+       - domain
+    """
+    if os.path.exists(DB) and os.path.getsize(DB) > 0:
+        conn = sqlite3.connect(DB, check_same_thread=False)
+        cursor = conn.cursor()
+        return (conn, cursor)
+    else:
+        # set that bitch up the first time
+        conn = sqlite3.connect(DB, check_same_thread=False)
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE serp_page
+        (id INTEGER PRIMARY KEY AUTOINCREMENT, requested_at TEXT NOT NULL,
+           num_results INTEGER NOT NULL, search_query TEXT NOT NULL, requested_by TEXT)''')
+        cursor.execute('''CREATE TABLE results
+        (id INTEGER PRIMARY KEY AUTOINCREMENT, link_title TEXT,
+           link_snippet TEXT, link_url TEXT, link_domain TEXT, link_rank INTEGER NOT NULL,
+           serp_id INTEGER NOT NULL, FOREIGN KEY(serp_id) REFERENCES serp_page(id))''')
+
+        conn.commit()
+        return (conn, cursor)
+
+
+def get_command_line():
+    """Parses command line arguments for scraping with selenium browser instances"""
+    parser = argparse.ArgumentParser(prog='GoogleScraper',
+                                     description='Scrapes the Google search engine by forging http requests that imitate '
+                                                 'browser searches or by using real browsers (with selenium)',
+                                     epilog='This program might infringe Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014')
+
+    parser.add_argument('scrapemethod', type=str,
+                        help='The scraping type. There are currently two types: "http" and "sel".',
+                        choices=('http', 'sel'), default='http')
+    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', help='The search keywords to scrape for.')
+    parser.add_argument('--keywords-file', type=str, action='store', dest='kwfile',
+                        help='Keywords to search for. One keyword per line. Empty lines are ignored.')
     parser.add_argument('-n', '--num_results_per_page', metavar='number_of_results_per_page', type=int,
                         dest='num_results_per_page', action='store', default=50,
                         help='The number of results per page. Most be >= 100')
     parser.add_argument('-p', '--num_pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1,
                         help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
+    parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
+                        action='store',
+                        default='stdout', choices=('database', 'stdout'), help='Where/how to put/show the results.')
     parser.add_argument('-t', '--search_type', metavar='search_type', type=str, dest='searchtype', action='store',
                         default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
@@ -864,12 +1038,36 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
     parser.add_argument('--debug', action='store_true', default=False, help='Whether to set logging to level DEBUG.')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def handle_commandline(args):
+    """Handles the command line arguments as given by get_command_line()"""
 
     if args.debug:
         setup_logger(logging.DEBUG)
     else:
         setup_logger(logging.INFO)
+
+    if args.keywords and args.kwfile:
+        raise ValueError(
+            'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty whore')
+
+    # Split keywords by whitespaces
+    if args.keywords:
+        args.keywords = re.split('\s', args.keywords)
+        del args.kwfile
+    elif args.kwfile:
+        if not os.path.exists(args.kwfile):
+            raise ValueError('The keyword file {} does not exist.'.format(args.kwfile))
+        else:
+            args.keywords = [line.replace('\n', '') for line in open(args.kwfile, 'r').readlines()]
+
+    if int(args.num_results_per_page) > 100:
+        raise ValueError('Not more that 100 results per page.')
+
+    if int(args.num_pages) > 20:
+        raise ValueError('Not more that 20 pages.')
 
     if args.proxy_file:
         raise NotImplementedError('Coming soon.')
@@ -892,32 +1090,62 @@ if __name__ == '__main__':
     if args.searchtype not in valid_search_types:
         ValueError('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
 
-    if args.deep_scrape:
-        results = deep_scrape(args.query)
+    # Let the games begin
+    if args.scrapemethod == 'sel':
+        conn, cursor = maybe_create_db()
+
+        rlock = threading.RLock()
+        kwgroups = grouper(args.keywords, len(args.keywords)//MAX_SEL_BROWSERS, fillvalue=None)
+        browsers = [SelScraper(kws, rlock, cursor) for kws in kwgroups]
+
+        def signal_handler(signal, frame):
+            print('Ctrl-c was pressed, shall I commit all changes to db?')
+            if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
+                conn.commit()
+            conn.close()
+            sys.exit(0)
+
+        signal.signal(signal.SIGINT, signal_handler)
+
+        for t in browsers:
+            t.start()
+
+        for t in browsers:
+            t.join()
+
+        conn.commit()
+        conn.close()
     else:
-        results = scrape(args.query, args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
 
-    for result in results:
-        logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
-            len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-        if args.view:
-            import webbrowser
+        if args.deep_scrape:
+            results = deep_scrape(args.query)
+        else:
+            results = scrape(args.keywords[0], args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
 
-            webbrowser.open(result['cache_file'])
-        import textwrap
+        for result in results:
+            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+            if args.view:
+                import webbrowser
+                webbrowser.open(result['cache_file'])
+            import textwrap
 
-        for result_set in ('results', 'ads_main', 'ads_aside'):
-            if result_set in result.keys():
-                print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
-                for link_title, link_snippet, link_url in result[result_set]:
-                    try:
-                        print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-                    except AttributeError as ae:
-                        print(ae)
-                    if args.verbosity > 1:
-                        print('  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
-                        print(
-                            '  Description: \n{}\n'.format(
-                                textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
-                        print('*' * 70)
-                        print()
+            for result_set in ('results', 'ads_main', 'ads_aside'):
+                if result_set in result.keys():
+                    print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
+                    for link_title, link_snippet, link_url, link_position in result[result_set]:
+                        try:
+                            print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                        except AttributeError as ae:
+                            print(ae)
+                        if args.verbosity > 1:
+                            print(
+                                '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+                            print(
+                                '  Description: \n{}\n'.format(
+                                    textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+                            print('*' * 70)
+                            print()
+
+if __name__ == '__main__':
+    handle_commandline(get_command_line())

@@ -4,6 +4,9 @@
 # cache for GoogleScraper testings
 .scrapecache/
 
+# scraping keyword files
+kwfiles/
+
 # various virtual environments for testings
 ve32/
 
