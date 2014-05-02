@@ -1,4 +1,32 @@
-## GoogleScraper - Scraping the Google Search Engine
+## GoogleScraper - Scraping the Google Search Engine (Last Update: 03th May 2014)
+
+
+## Important (Last Update: 03th May 2014)
+
+GoogleScrape is in the middle of heavy development. If you want to use it, use it as follows:
+
+```
+python GoogleScraper.py sel --debug --keyword-file path/to/keywordfile
+```
+
+Where sel marks the mode as 'selenium'. This means GoogleScraper scrapes with real browsers. This is pretty powerful, since
+you can scrape long and a lot of sites. The argument of the flag `--keyword-file` must be a file with keywords separated by 
+newlines. So: For every google query one line. Easy, isnt' it?
+
+If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with the following format:
+
+```
+protocol proxyhost:proxyport username:password
+(...)
+```
+Example:
+```
+socks5 127.0.0.1:1080 blabla:12345
+socks4 77.66.55.44:9999 elite:js@fkVA3(Va3)
+```
+
+Have fun. Keep in mind that you need to have install a bunch of third party module. You'll  see what kind of modules if you 
+run the scraper the first time.
 
 ### What does GoogleScraper.py?
 
@@ -22,7 +50,7 @@ Effective: Development for the second approach started around 10.03.2014
 
 GoogleScraper is implemented with the following techniques/software:
 
-+ Written in Python 3.3
++ Written in Python 3.4
 + Uses multithreading/asynchroneous IO. (two approaches, currently only multi-threading is implemented)
 + Supports parallel google scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2]:

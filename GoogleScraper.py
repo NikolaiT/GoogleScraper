@@ -26,14 +26,14 @@ Debug:
 Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
-__VERSION__ = '0.5'
-__UPDATED__ = '10.03.2014'  # day.month.year
+__VERSION__ = '0.6'
+__UPDATED__ = '03.05.2014'  # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
 import sys
 import os
-import socket
+import math
 import types
 import logging
 import pprint
@@ -49,6 +49,7 @@ import urllib.parse
 import sqlite3
 import itertools
 import random
+import zlib
 
 try:
     import requests
@@ -92,88 +93,271 @@ def setup_logger(level=logging.INFO):
         # add logger to the modules namespace
         setattr(sys.modules[__name__], 'logger', logger)
 
-# The database name
-DB = 'results.db'
-# Whether caching shall be enabled
-DO_CACHING = True
-# The directory path for cached google results
-CACHEDIR = '.scrapecache/'
-# The maximal amount of selenium browser windows running in parallel
-MAX_SEL_BROWSERS = 5
 
-if DO_CACHING:
-    if not os.path.exists(CACHEDIR):
-        os.mkdir(CACHEDIR, 0o744)
-
+Config = {
+    # The database name, with a timestamp as fmt
+    'db': 'results_{asctime}.db',
+    # The directory path for cached google results
+    'do_caching': True,
+    # If set, then compress/decompress files with this algorithm
+    'compress_cached_files': True,
+    # Whether caching shall be enabled
+    'cachedir': '.scrapecache/',
+    # After how many hours should the cache be cleaned
+    'clean_cache_after': 72,
+    # The maximal amount of selenium browser windows running in parallel
+    'max_sel_browsers': 12,
+    # Commit changes to db every N requests per GET/POST request
+    'commit_interval': 5,
+    # Whether to scrape with own ip address or just with proxies
+    'use_own_ip': True,
+    # The base Google URL for SelScraper objects
+    'sel_scraper_base_url': 'http://www.google.com/ncr'
+}
 
 class GoogleSearchError(Exception):
-    def __init__(self):
-        pass
-
-    def __str__(self):
-        return 'Exception in GoogleSearch class'
-
+    pass
 
 class InvalidNumberResultsException(GoogleSearchError):
-    def __init__(self, number_of_results):
-        self.nres = number_of_results
+    pass
 
-    def __str__(self):
-        return '{} is not a valid number of results per page'.format(self.nres)
+
+if Config['do_caching']:
+    if not os.path.exists(Config['cachedir']):
+        os.mkdir(Config['cachedir'], 0o744)
 
 
 def maybe_clean_cache():
     """Delete all .cache files in the cache directory that are older than 12 hours."""
-    for fname in os.listdir(CACHEDIR):
-        if time.time() > os.path.getmtime(os.path.join(CACHEDIR, fname)) + (60 * 60 * 12):
-            os.remove(os.path.join(CACHEDIR, fname))
+    for fname in os.listdir(Config['cachedir']):
+        if time.time() > os.path.getmtime(os.path.join(Config['cachedir'], fname)) + (60 * 60 * Config['clean_cache_after']):
+            os.remove(os.path.join(Config['cachedir'], fname))
 
 
-if DO_CACHING:
-    # Clean the CACHEDIR once in a while
+if Config['do_caching']:
+    # Clean the Config['cachedir'] once in a while
     maybe_clean_cache()
 
 
-def cached_file_name(search_params):
+def cached_file_name(kw, url=Config['sel_scraper_base_url'], params={}):
+    """Make a unique file name based on the values of the google search parameters.
+
+        kw -- The search keyword
+        url -- The url for the search (without params)
+        params -- GET params in the URL string
+
+        If search_params is a dict, include both keys/values in the calculation of the
+        file name. If a sequence is provided, just use the elements of the sequence to
+        build the hash.
+
+        Important! The order of the sequence is darn important! If search queries have same
+        words but in a different order, they are individua searches.
+    """
+    assert isinstance(kw, str)
+    assert isinstance(url, str)
+    if params:
+        assert isinstance(params, dict)
+
+    if params:
+        unique = list(itertools.chain([kw], url, params.keys(), params.values()))
+    else:
+        unique = list(itertools.chain([kw], url))
+
     sha = hashlib.sha256()
-    # Make a unique file name based on the values of the google search parameters.
-    sha.update(b''.join(str(search_params.get(s)).encode() for s in sorted(search_params.keys())))
+    sha.update(b''.join(str(s).encode() for s in unique))
     return '{}.{}'.format(sha.hexdigest(), 'cache')
 
 
-def get_cached(search_params):
-    """Loads a cached search results page from scrapecache/fname.cache
+def get_cached(kw, url, params={}, cache_dir=''):
+    """Loads a cached search results page from CACHEDIR/fname.cache
 
     It helps in testing and avoid requesting
     the same resources again and again (such that google may
     recognize us as what we are: Sneaky SEO crawlers!)
-    """
-    fname = cached_file_name(search_params)
 
-    try:
-        if fname in os.listdir(CACHEDIR):
-            # If the cached file is older than 12 hours, return False and thus
-            # make a new fresh request.
-            modtime = os.path.getmtime(os.path.join(CACHEDIR, fname))
-            if (time.time() - modtime) / 60 / 60 > 12:
-                return False
-            with open(os.path.join(CACHEDIR, fname), 'r') as fd:
-                return fd.read()
-    except FileNotFoundError as err:
-        raise Exception('Unexpected file not found: {}'.format(err.msg))
+    --search_params The parameters that identify the resource
+    --decompress What algorithm to use for decompression
+    """
+
+    if Config['do_caching']:
+        fname = cached_file_name(kw, url, params)
+
+        if os.path.exists(cache_dir) and cache_dir:
+            cdir = cache_dir
+        else:
+            cdir = Config['cachedir']
+
+        try:
+            if fname in os.listdir(cdir):
+                # If the cached file is older than 12 hours, return False and thus
+                # make a new fresh request.
+                modtime = os.path.getmtime(os.path.join(cdir, fname))
+                if (time.time() - modtime) / 60 / 60 > Config['clean_cache_after']:
+                    return False
+                path = os.path.join(cdir, fname)
+                return read_cached_file(path)
+        except FileNotFoundError as err:
+            raise Exception('Unexpected file not found: {}'.format(err.msg))
 
     return False
 
 
-def cache_results(search_params, html):
-    """Stores a html resource as a file in scrapecache/fname.cache
+def read_cached_file(path, n=2):
+    """Read a zipped or unzipped cache file."""
+    assert n != 0
 
-    This will always write(overwrite) the cache file.
+    if Config['compress_cached_files']:
+        with open(path, 'rb') as fd:
+            try:
+                data = zlib.decompress(fd.read()).decode()
+                return data
+            except zlib.error:
+                Config['compress_cached_files'] = False
+                return read_cached_file(path, n-1)
+    else:
+        with open(path, 'r') as fd:
+            try:
+                data = fd.read()
+                return data
+            except UnicodeDecodeError as e:
+                # If we get this error, the cache files are probably
+                # compressed but the 'compress_cached_files' flag was
+                # set to false. Try to decompress them, but this may
+                # lead to a infinite recursion. This isn't proper coding,
+                # but convenient for the end user.
+                Config['compress_cached_files'] = True
+                return read_cached_file(path, n-1)
+
+def cache_results(html, kw, url=Config['sel_scraper_base_url'], params={}):
+    """Stores a html resource as a file in Config['cachedir']/fname.cache
+
+    This will always write(overwrite) the cache file. If compress_cached_files is
+    True, the page is written in bytes (obviously).
     """
-    fname = cached_file_name(search_params)
+    if Config['do_caching']:
+        fname = cached_file_name(kw, url=url, params=params)
+        path = os.path.join(Config['cachedir'], fname)
+        if Config['compress_cached_files']:
+            with open(path, 'wb') as fd:
+                fd.write(zlib.compress(html.encode('utf-8'), 5))
+        else:
+            with open(os.path.join(Config['cachedir'], fname), 'w') as fd:
+                fd.write(html)
 
-    with open(os.path.join(CACHEDIR, fname), 'w') as fd:
-        fd.write(html)
+def _get_all_cache_files():
+    """Return all files found in Config['cachedir']."""
+    files = set()
+    for dirpath, dirname, filenames in os.walk(Config['cachedir']):
+        for name in filenames:
+            files.add(os.path.join(dirpath, name))
+    return files
+
+def _caching_is_one_to_one(keywords, url=Config['sel_scraper_base_url']):
+    mappings = {}
+    for kw in keywords:
+        hash = cached_file_name(kw, url)
+        if hash not in mappings:
+            mappings.update({hash: [kw, ]})
+        else:
+            mappings[hash].append(kw)
+
+    duplicates = [v for k, v in mappings.items() if len(v) > 1]
+    if duplicates:
+        print('Not one-to-one. Hash function sucks. {}'.format(duplicates))
+    else:
+        print('one-to-one')
+    sys.exit(0)
+
+def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], try_harder=True):
+    """Walk recursively through the cachedir (as given by the Config) and parse cache files.
+
+    Arguments:
+    keywords -- A sequence of keywords which were used as search query strings.
+
+    Keyword arguments:
+    dtokens -- A list of strings to add to each cached_file_name() call.
+    with the contents of the <title></title> elements if necessary.
+    conn -- A sqlite3 database connection.
+    try_harder -- If there is a cache file that cannot be mapped to a keyword, read it and try it again with the query.
+
+    Return:
+    A list of keywords that couldn't be parsed and which need to be scraped freshly.
+    """
+    r = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
+    files = _get_all_cache_files()
+    mapping = {cached_file_name(kw, url): kw for kw in keywords}
+    diff = set(mapping.keys()).difference({os.path.split(path)[1] for path in files})
+    logger.debug('{} cache files found in {}'.format(len(files), Config['cachedir']))
+    logger.debug('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(len(keywords)-len(diff), len(keywords), len(diff)))
+    for path in files:
+        fname = os.path.split(path)[1]
+        query = mapping.get(fname)
+        data = read_cached_file(path)
+        if not query and try_harder:
+            query = r.search(data).group('kw').strip()
+            if query in mapping.values():
+                logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
+            else:
+                continue
+        _parse_links(data, conn.cursor(), query)
+        mapping.pop(fname)
+    conn.commit()
+
+    # return the remaining keywords to scrape
+    return mapping.values()
+
+def fix_broken_cache_names(url=Config['sel_scraper_base_url']):
+    """Fix the fucking broken cache fuck shit.
+
+    @param url: A list of strings to add to each cached_file_name() call.
+    @return: void you cocksucker
+    """
+    files = _get_all_cache_files()
+    logger.debug('{} cache files found in {}'.format(len(files), Config['cachedir']))
+    r = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
+
+    for i, path in enumerate(files):
+        fname = os.path.split(path)[1].strip()
+        data = read_cached_file(path)
+        infilekws = r.search(data).group('kw')
+        realname = cached_file_name(infilekws, url)
+        if fname != realname:
+            logger.debug('The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(path))
+            src = os.path.abspath(path)
+            dst = os.path.abspath(os.path.join(os.path.split(path)[0], realname))
+            logger.debug('Renamed from {} => {}'.format(src, dst))
+            os.rename(src, dst)
+    logger.debug('Renamed {} files.'.format(i))
+
+def _parse_links(data, conn, kw, ip='127.0.0.1'):
+    """Insert parsed data into the database. High level parsing function.
+
+    Args:
+    conn -- Either a sqlite3 cursor or connection object. If called in threads, make sure
+    to wrap this function in some kind of synchronization functionality.
+    """
+    # Finally parse the files
+    parser = Google_SERP_Parser(data)
+    results = parser.links
+    conn.execute(
+        'INSERT INTO serp_page (requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?)',
+        (time.asctime(), len(results), parser.num_results(),  kw, ip))
+    lastrowid = conn.lastrowid
+    conn.executemany('''INSERT INTO link
+    (search_query,
+     title,
+     url,
+     snippet,
+     rank,
+     domain,
+     serp_id) VALUES(?, ?, ?, ?, ?, ?, ?)''',
+    [(kw,
+      result.link_title,
+      result.link_url.geturl(),
+      result.link_snippet,
+      result.link_position,
+      result.link_url.hostname) +
+     (lastrowid, ) for result in results])
 
 
 def timer_support(Class):
@@ -266,8 +450,7 @@ class GoogleScrape():
         self.searchtype = searchtype
         assert self.searchtype in ('normal', 'image', 'news', 'video')
 
-        if num_results_per_page not in range(0,
-                                             1001):  # The maximum value of this parameter is 1000. See search appliance docs
+        if num_results_per_page not in range(0,  1001):  # The maximum value of this parameter is 1000. See search appliance docs
             logger.error('The parameter -n must be smaller or equal to 1000')
             raise InvalidNumberResultsException(num_results_per_page)
 
@@ -283,6 +466,8 @@ class GoogleScrape():
         # http://www.rankpanel.com/blog/google-search-parameters/
         # typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8
         # All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
+
+        # http://lifehacker.com/5933248/avoid-getting-redirected-to-country-specific-versions-of-google
 
         # All search requests must include the parameters site, client, q, and output. All parameter values
         # must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
@@ -375,7 +560,7 @@ class GoogleScrape():
             'gcs': None,  # Limits results to a certain city, you can also use latitude and longitude
             'gpc': None,  #Limits results to a certain zip code
             'gm': None,  # Limits results to a certain metropolitan region
-            'gl': None,  # as if the search was conducted in a specified location. Can be unreliable.
+            'gl': None,  # as if the search was conducted in a specified location. Can be unreliable. for example: gl=countryUS
             'ie': 'UTF-8',  # Sets the character encoding that is used to interpret the query string.
             'oe': 'UTF-8',  # Sets the character encoding that is used to encode the results.
             'ip': None,
@@ -437,13 +622,31 @@ class GoogleScrape():
             'search_keyword': self.search_query,  # The query keyword
         }
 
+    def _set_proxy(self):
+        pass
+        # if args.proxy:
+        #     def create_connection(address, timeout=None, source_address=None):
+        #         sock = socks.socksocket()
+        #         sock.connect(address)
+        #         return sock
+        #
+        #     proxy_host, proxy_port = args.proxy.split(':')
+        #
+        #     # Patch the socket module
+        #     socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, proxy_host, int(proxy_port),
+        #                           rdns=True)  # rdns is by default on true. Never use rnds=False with TOR, otherwise you are screwed!
+        #     socks.wrap_module(socket)
+        #     socket.create_connection = create_connection
+
+
     def reset_search_params(self):
-        # Reset all search params to None
-        # such that they won't be used in the query
+        """Reset all search params to None.
+            Such that they won't be used in the query
+        """
         for k, v in self._SEARCH_PARAMS.items():
             self._SEARCH_PARAMS[k] = None
 
-    def _build_query(self, searchtype='normal', random=False):
+    def _build_query(self, random=False):
         """Build the headers and params for the GET request for the Google server.
 
         When random is True, several headers (like the UA) are chosen
@@ -540,11 +743,8 @@ class GoogleScrape():
         # After building the query, all parameters are set, so we know what we're requesting.
         logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self._SEARCH_PARAMS)))
 
-        if DO_CACHING:
-            html = get_cached(self._SEARCH_PARAMS)
-            self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
-        else:
-            html = False
+        html = get_cached(self.search_query, self._SEARCH_URL, params=self._SEARCH_PARAMS)
+        self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['cachedir'], cached_file_name(self.search_query, self._SEARCH_URL, self._SEARCH_PARAMS))
 
         if not html:
             try:
@@ -570,9 +770,8 @@ class GoogleScrape():
             html = r.text
 
             # cache fresh results
-            if DO_CACHING:
-                cache_results(self._SEARCH_PARAMS, html)
-                self.SEARCH_RESULTS['cache_file'] = os.path.join(CACHEDIR, cached_file_name(self._SEARCH_PARAMS))
+            cache_results(self._SEARCH_PARAMS, html)
+            self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['cachedir'], cached_file_name(self.search_query, self._SEARCH_URL, self._SEARCH_PARAMS))
 
         self.parser = Google_SERP_Parser(html, searchtype=self.searchtype)
         self.SEARCH_RESULTS.update(self.parser.all_results)
@@ -583,99 +782,103 @@ class GoogleScrape():
 
 
 class SelScraper(threading.Thread):
-    """Instances of this class make use of selenium browser objects to query Google"""
-    # the google search url
-    url = 'https://www.google.com'
+    """Instances of this class make use of selenium browser objects to query Google."""
 
-    def __init__(self, keywords, rlock, cursor):
+    def __init__(self, keywords, rlock, connection, proxy=None, browser_num=0):
         super().__init__()
-        self.cursor = cursor
+        # the google search url
+        logger.info('[++]SelScraper object created with params: keywords={}, proxy={}, browser_num={}'.format(keywords, proxy, browser_num))
+        self.url = Config['sel_scraper_base_url']
+        self.proxy = proxy
+        self.browser_num = browser_num
+        self.connection = connection
+        self.cursor = self.connection.cursor()
         self.rlock = rlock
-        self.html = ''
-        self.keywords = keywords
-        self.searchparams = dict(zip(self.keywords, [0]*len(self.keywords)))
+        self.keywords = set(keywords)
         self.ip = '127.0.0.1'
+        # How long to sleep (ins seconds) after every n-th request
+        self.sleeping_ranges = {
+            1: (1, 5),
+            8: (20, 40),
+            21: (50, 120),
+            127: (60*3, 60*6)
+        }
 
-    def use_proxy(self, proxycfg={}):
-        if not set(proxycfg.keys()).issubset({'ip', 'port', 'password', 'proxytype', 'user'}):
-            raise Exception('Invalid proxyconfig: {}'.format(proxycfg))
-        # add pairs to class as attributes
-        {setattr(self, key, value) for key, value in proxycfg.items()}
-        # try to set the proxy for selenium instance
+    def _largest_sleep_range(self, i):
+        assert i >= 0
+        if i != 0:
+            s = sorted(self.sleeping_ranges.keys(), reverse=True)
+            for n in s:
+                if i % n == 0:
+                    return self.sleeping_ranges[n]
+        return self.sleeping_ranges[1]
+
+    def _maybe_crop(self, html):
+        """Crop Google SERP pages if we find the needle that indicates the beginning of the main content.
+
+        If the needle `<div class="ctr-p" id="viewport"` can't be located, just return the html var.
+
+        Other idea: Just fucking remove the javascript and css. It accumulates to maybe 90% of the whole content. No fucking
+        person needs js/css when caching.
+        """
+        # offset = html.index('<div class="ctr-p" id="viewport"') or None
+        # if offset:
+        #     return html[offset:]
+        # else:
+        #     return html
+        # remove_motherfuckers = re.compile(r'<script\s?.{10,500}>(.*?)</script>'), re.compile(r'<style\s?.{10,500}>(.*?)</style>')
+        # for r in remove_motherfuckers:
+        #     html = r.sub
+        return html
 
     def run(self):
-        self.html = get_cached(self.searchparams)
-        if not self.html:
-            self.webdriver = webdriver.Firefox()
-            self.webdriver.get(self.url)
-            for self.kw in self.keywords:
-                if not self.kw:
-                    break
-                time.sleep(random.randint(10, 50) // 10)
-                try:
-                    self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
-                except Exception as e:
-                    raise Exception(e) # fix that later
-                self.element.clear()
-                self.element.send_keys(self.kw + Keys.ENTER)
-                WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'li.g')))
-                self.html = self.webdriver.page_source
-                # Lock for the sake that two threads write to same file (not probable)
-                self.rlock.acquire()
-                cache_results(self.searchparams, self.html)
-                self.rlock.release()
-                self._parse_links()  # call here one of _parse_links_native or _parse_links_sel
-            self.webdriver.close()
-        else:
-            for self.kw in self.keywords:
-                if not self.kw:
-                    break
-                self._parse_links()
+        # Create the browser and align it according to its number
+        # and in maximally two rows
+        if len(self.keywords) <= 0:
+            return True
 
-    def _parse_links(self):
+        chrome_ops = None
+        if self.proxy:
+            chrome_ops = webdriver.ChromeOptions()
+            chrome_ops.add_argument('--proxy-server={}://{}:{}'.format(self.proxy.proto, self.proxy.host, self.proxy.port))
+        self.webdriver = webdriver.Chrome(chrome_options=chrome_ops)
+        self.webdriver.set_window_size(400, 400)
+        self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(self.browser_num > 4))
+        self.webdriver.get(self.url)
+        for i, kw in enumerate(self.keywords):
+            if not kw:
+                continue
+            # match the largest sleep range
+            r = self._largest_sleep_range(i)
+            j = random.randrange(*r)
+            if self.proxy:
+                logger.info('ScraperThread ({ip}:{port} {} is sleeping for {} seconds...tzzzz'.format(self._ident, j, ip=self.proxy.host, port=self.proxy.port))
+            else:
+                logger.info('ScraperThread ({} is sleeping for {} seconds...tzzzz'.format(self._ident, j))
+            time.sleep(j)
+            try:
+                self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
+            except Exception as e:
+                raise Exception(e) # fix that later
+            self.element.clear()
+            self.element.send_keys(kw + Keys.ENTER)
+            WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'li.g')))
+            html = self._maybe_crop(self.webdriver.page_source)
+            # Lock for the sake that two threads write to same file (not probable)
+            self.rlock.acquire()
+            cache_results(html, kw, url=self.url)
+            # commit in intervals specified in the config
+            if i > 0 and i % Config['commit_interval'] == 0:
+                self.connection.commit()
+            self.rlock.release()
+            self._parse_links(kw, html)  # call here one of _parse_links_native or _parse_links_sel
+
+        self.webdriver.close()
+
+    def _parse_links(self, kw, html):
         """Parses links with Google_SERP_Parser"""
-        self.parser = Google_SERP_Parser(self.html)
-        self.results = self.parser.links
         self.rlock.acquire()
-        self.cursor.execute(
-            'INSERT INTO serp_page (requested_at, num_results, search_query, requested_by) VALUES(?, ?, ?, ?)',
-            (time.asctime(), len(self.results), self.kw, self.ip))
-        lastrowid = self.cursor.lastrowid
-        pprint.pprint(self.results)
-        self.cursor.executemany('INSERT INTO results (link_title, link_url, link_snippet, link_rank, serp_id) VALUES(?, ?, ?, ?, ?)',
-                            [(result.link_title, result.link_url.geturl(), result.link_snippet, result.link_position) + (lastrowid, ) for result in self.results])
-        self.rlock.release()
-
-    def _parse_links_sel(self):
-        """Scrapes the google SERP page with selenium methods.
-
-         (is slow, because css selectors are probably fired by javascript)
-        """
-        self.rlock.acquire()
-
-        results = self.webdriver.find_elements_by_css_selector('li.g')
-
-        self.cursor.execute('INSERT INTO serp_page (requested_at, num_results, search_query) VALUES(?, ?, ?)',
-                            (time.ctime(), len(results), self.kw))
-        lastrowid = self.cursor.lastrowid
-        parsed = []
-        for result in results:
-            link = title = snippet = ''
-            try:
-                link_element = result.find_element_by_css_selector('h3.r > a:first-child')
-                link = link_element.get_attribute('href')
-                title = link_element.text
-            except Exception as e:
-                pass
-            try:
-                snippet = result.find_element_by_css_selector('div.s > span.st').text
-            except Exception as e:
-                pass
-            parsed.append((link, title, snippet))
-
-        self.cursor.executemany(
-            'INSERT INTO results (link_title, link_title, link_snippet, serp_id) VALUES(?, ?, ?, ?)',
-            [tuple + (lastrowid, ) for tuple in parsed])
+        _parse_links(html, self.cursor, kw, ip=self.ip)
         self.rlock.release()
 
 
@@ -810,7 +1013,7 @@ class Google_SERP_Parser():
         # There might be several list of different css selectors to handle different SERP formats
         css_selectors = {
             # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'], ),
+            'results': (['li.g', 'h3.r > a:first-child', 'div.s span.st'], ),
             # to parse the centered ads
             'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
                          ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
@@ -855,8 +1058,7 @@ class Google_SERP_Parser():
             # the second CSS selector selects the link and the title. If there are 4 elements in the list, then
             # the second and the third element are for the link and the title.
             # the 4th selector is for the snippet.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'],
-                        ['li.g', 'h3.r > a:first-child', 'div.s span.st']),
+            'results': (['li.g', 'h3.r > a:first-child', 'div.s span.st'], ),
             # to parse the centered ads
             'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
                          ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
@@ -877,6 +1079,7 @@ class Google_SERP_Parser():
         # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
         # The parsing should be as robust as possible. Sometimes we can't extract all data, but as much as humanly
         # possible.
+        rank = 0
         try:
             li_g_results = dom.xpath(self._xp(container_selector))
             for i, e in enumerate(li_g_results):
@@ -885,25 +1088,22 @@ class Google_SERP_Parser():
                     link_element = e.xpath(self._xp(link_selector))
                     link = link_element[0].get('href')
                     title = link_element[0].text_content()
+                    # For every result where we can parse the link and title, increase the rank
+                    rank += 1
                 except IndexError as err:
                     logger.debug(
                         'Error while parsing link/title element with selector={}: {}'.format(link_selector, err))
                 try:
-                    snippet_element = e.xpath(self._xp(snippet_selector))
-                    snippet = snippet_element[0].text_content()
-                except IndexError as err:
-                    try:
-                        previous_element = links[-1]
-                    except IndexError as ie:
-                        previous_element = None
-                    logger.debug('Error in parsing snippet with selector={}. Previous element: {}.Error: {}'.format(
-                        snippet_selector, previous_element, repr(e), err))
+                    for r in e.xpath(self._xp(snippet_selector)):
+                        snippet += r.text_content()
+                except Exception as err:
+                    logger.debug('Error in parsing snippet with selector={}.Error: {}'.format(
+                                            snippet_selector, repr(e), err))
 
-                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet, link_position=i))
+                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet, link_position=rank))
         # Catch further errors besides parsing errors that take shape as IndexErrors
         except Exception as err:
             logger.error('Error in parsing result links with selector={}: {}'.format(container_selector, err))
-
         return links or []
 
 
@@ -978,25 +1178,75 @@ def maybe_create_db():
        - url
        - domain
     """
-    if os.path.exists(DB) and os.path.getsize(DB) > 0:
-        conn = sqlite3.connect(DB, check_same_thread=False)
+    # Save the database to a unique file name (with the timestamp as suffix)
+    Config['db'] = Config['db'].format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-'))
+
+    if os.path.exists(Config['db']) and os.path.getsize(Config['db']) > 0:
+        conn = sqlite3.connect(Config['db'], check_same_thread=False)
         cursor = conn.cursor()
-        return (conn, cursor)
+        return conn
     else:
         # set that bitch up the first time
-        conn = sqlite3.connect(DB, check_same_thread=False)
+        conn = sqlite3.connect(Config['db'], check_same_thread=False)
         cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE serp_page
-        (id INTEGER PRIMARY KEY AUTOINCREMENT, requested_at TEXT NOT NULL,
-           num_results INTEGER NOT NULL, search_query TEXT NOT NULL, requested_by TEXT)''')
-        cursor.execute('''CREATE TABLE results
-        (id INTEGER PRIMARY KEY AUTOINCREMENT, link_title TEXT,
-           link_snippet TEXT, link_url TEXT, link_domain TEXT, link_rank INTEGER NOT NULL,
-           serp_id INTEGER NOT NULL, FOREIGN KEY(serp_id) REFERENCES serp_page(id))''')
+        cursor.execute('''
+        CREATE TABLE serp_page
+        (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             requested_at TEXT NOT NULL,
+             num_results INTEGER NOT NULL,
+             num_results_for_kw_google TEXT,
+             search_query TEXT NOT NULL,
+             requested_by TEXT
+         )''')
+        cursor.execute('''
+        CREATE TABLE link
+        (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            search_query TEXT NOT NULL,
+            title TEXT,
+            snippet TEXT,
+            url TEXT,
+            domain TEXT,
+            rank INTEGER NOT NULL,
+            serp_id INTEGER NOT NULL,
+            FOREIGN KEY(serp_id) REFERENCES serp_page(id)
+        )''')
 
         conn.commit()
-        return (conn, cursor)
+        return conn
 
+def parse_proxy_file(fname):
+    """Parses a proxy file
+        The format should be like the following:
+
+        socks5 23.212.45.13:1080 username:password
+        socks4 23.212.45.13:80 username:password
+        http 23.212.45.13:80
+
+        If username and password aren't provided, GoogleScraper assumes
+        that the proxy doesn't need auth credentials.
+    """
+    proxies = []
+    Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
+    path = os.path.join(os.getcwd(), fname)
+    if os.path.exists(path):
+        with open(path, 'r') as pf:
+            for line in pf.readlines():
+                tokens = line.replace('\n', '').split(' ')
+                try:
+                    proto = tokens[0]
+                    host, port = tokens[1].split(':')
+                except:
+                    raise Exception('Invalid proxy file. Should have the following format: {}'.format(parse_proxy_file.__doc__))
+                if len(tokens) == 3:
+                    username, password = tokens[2].split(':')
+                    proxies.append(Proxy(proto=proto, host=host, port=port, username=username, password=password))
+                else:
+                    proxies.append(Proxy(proto=proto, host=host, port=port, username='', password=''))
+        return proxies
+    else:
+        raise ValueError('No such file')
 
 def get_command_line():
     """Parses command line arguments for scraping with selenium browser instances"""
@@ -1006,10 +1256,10 @@ def get_command_line():
                                      epilog='This program might infringe Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014')
 
     parser.add_argument('scrapemethod', type=str,
-                        help='The scraping type. There are currently two types: "http" and "sel".',
-                        choices=('http', 'sel'), default='http')
-    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', help='The search keywords to scrape for.')
-    parser.add_argument('--keywords-file', type=str, action='store', dest='kwfile',
+                        help='The scraping type. There are currently two types: "http" and "sel". Http scrapes with raw http requests whereas "sel" uses selenium remote browser programming',
+                        choices=('http', 'sel'), default='sel')
+    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', help='The search keywords to scrape for. Seperated by white spaces.')
+    parser.add_argument('--keyword-file', type=str, action='store', dest='kwfile',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
     parser.add_argument('-n', '--num_results_per_page', metavar='number_of_results_per_page', type=int,
                         dest='num_results_per_page', action='store', default=50,
@@ -1023,18 +1273,19 @@ def get_command_line():
     parser.add_argument('-t', '--search_type', metavar='search_type', type=str, dest='searchtype', action='store',
                         default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
-    parser.add_argument('--proxy', metavar='proxycredentials', type=str, dest='proxy', action='store',
-                        required=False,  #default=('127.0.0.1', 9050)
-                        help='A string such as "127.0.0.1:9050" specifying a single proxy server')
-    parser.add_argument('--proxy_file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
+    parser.add_argument('--proxy-file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
                         required=False,  #default='.proxies'
-                        help='A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/4a/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"')
+                        help='''A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"
+                        Example file: socks4 127.0.0.1:99\nsocks5 33.23.193.22:1080\n''')
+    parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set to True, the scrape job and its rough length will be printed.''')
     parser.add_argument('-x', '--deep-scrape', action='store_true', default=False,
                         help='Launches a wide range of parallel searches by modifying the search ' \
                              'query string with synonyms and by scraping with different Google search parameter combinations that might yield more unique ' \
                              'results. The algorithm is optimized for maximum of results for a specific keyword whilst trying avoid detection. This is the heart of GoogleScraper.')
     parser.add_argument('--view', action='store_true', default=False, help="View the response in a default browser tab."
                                                                            " Mainly for debug purposes. Works only when caching is enabled.")
+    parser.add_argument('--fix-cache-names', action='store_true', default=False, help="For internal use only. Renames the cache files after a hash constructed after the keywords located in the <title> tag.")
+    parser.add_argument('--check-oto', action='store_true', default=False, help="For internal use only. Checks whether all the keywords are cached in different files.")
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
     parser.add_argument('--debug', action='store_true', default=False, help='Whether to set logging to level DEBUG.')
@@ -1053,6 +1304,10 @@ def handle_commandline(args):
         raise ValueError(
             'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty whore')
 
+    if args.fix_cache_names:
+        fix_broken_cache_names()
+        sys.exit('renaming done. restart for normal use.')
+
     # Split keywords by whitespaces
     if args.keywords:
         args.keywords = re.split('\s', args.keywords)
@@ -1061,7 +1316,10 @@ def handle_commandline(args):
         if not os.path.exists(args.kwfile):
             raise ValueError('The keyword file {} does not exist.'.format(args.kwfile))
         else:
-            args.keywords = [line.replace('\n', '') for line in open(args.kwfile, 'r').readlines()]
+            args.keywords = {line.strip() for line in open(args.kwfile, 'r').read().split('\n')}
+
+    if args.check_oto:
+        _caching_is_one_to_one(args.keywords)
 
     if int(args.num_results_per_page) > 100:
         raise ValueError('Not more that 100 results per page.')
@@ -1070,21 +1328,9 @@ def handle_commandline(args):
         raise ValueError('Not more that 20 pages.')
 
     if args.proxy_file:
-        raise NotImplementedError('Coming soon.')
-
-    if args.proxy:
-        def create_connection(address, timeout=None, source_address=None):
-            sock = socks.socksocket()
-            sock.connect(address)
-            return sock
-
-        proxy_host, proxy_port = args.proxy.split(':')
-
-        # Patch the socket module
-        socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, proxy_host, int(proxy_port),
-                              rdns=True)  # rdns is by default on true. Never use rnds=False with TOR, otherwise you are screwed!
-        socks.wrap_module(socket)
-        socket.create_connection = create_connection
+        proxies = parse_proxy_file(args.proxy_file)
+    else:
+        proxies = []
 
     valid_search_types = ('normal', 'video', 'news', 'image')
     if args.searchtype not in valid_search_types:
@@ -1092,12 +1338,8 @@ def handle_commandline(args):
 
     # Let the games begin
     if args.scrapemethod == 'sel':
-        conn, cursor = maybe_create_db()
-
-        rlock = threading.RLock()
-        kwgroups = grouper(args.keywords, len(args.keywords)//MAX_SEL_BROWSERS, fillvalue=None)
-        browsers = [SelScraper(kws, rlock, cursor) for kws in kwgroups]
-
+        conn = maybe_create_db()
+        # Setup a signal handler
         def signal_handler(signal, frame):
             print('Ctrl-c was pressed, shall I commit all changes to db?')
             if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
@@ -1106,6 +1348,30 @@ def handle_commandline(args):
             sys.exit(0)
 
         signal.signal(signal.SIGINT, signal_handler)
+
+        # First of all, lets see hom many keywords remain to scrape after parsing the cache
+        if Config['do_caching']:
+            remaining = parse_all_cached_files(args.keywords, conn)
+        else:
+            remaining = args.keywords
+
+        if args.simulate:
+            sys.exit(0)
+
+        rlock = threading.RLock()
+
+        if len(remaining) > Config['max_sel_browsers']:
+            kwgroups = grouper(remaining, len(remaining)//Config['max_sel_browsers'], fillvalue=None)
+        else:
+            kwgroups = remaining
+
+        # Distribute the proxies evenly on the kws to search
+        browsers = []
+        proxies.append(None) if Config['use_own_ip'] else None
+        chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
+        print('len_kwgroups={}, len_proxies={}, chunks_per_proxy={}'.format(len(kwgroups), len(proxies), chunks_per_proxy))
+        for i, chunk in enumerate(kwgroups):
+            browsers.append(SelScraper(chunk, rlock, conn, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in browsers:
             t.start()
@@ -1116,8 +1382,8 @@ def handle_commandline(args):
         conn.commit()
         conn.close()
     else:
-
         if args.deep_scrape:
+            raise NotImplementedError('Sorry. Currently not implemented.')
             results = deep_scrape(args.query)
         else:
             results = scrape(args.keywords[0], args.num_results_per_page, args.num_pages, searchtype=args.searchtype)

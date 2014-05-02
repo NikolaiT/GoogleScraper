@@ -1,8 +1,14 @@
 # PyCharm editor
 .idea/
 
+# ignore tests
+tests/
+
 # cache for GoogleScraper testings
 .scrapecache/
+
+# backup files
+.bak/
 
 # scraping keyword files
 kwfiles/
