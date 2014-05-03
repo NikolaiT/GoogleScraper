@@ -1,0 +1,5 @@
+lxml
+selenium
+bs4
+cssselect
+requests

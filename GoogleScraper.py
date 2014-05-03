@@ -11,6 +11,7 @@ queries. It gives straightforward access to all relevant data of Google such as
 - The title of the links
 - The caption/description below each link
 - The number of results for this keyword
+- The rank for the specific reslts
 
 GoogleScraper's architecture outlined:
 - Proxy support (Socks5, Socks4, HTTP Proxy)
@@ -42,6 +43,7 @@ import threading
 from collections import namedtuple
 import hashlib
 import re
+import queue
 import time
 import signal
 import lxml.html
@@ -56,6 +58,13 @@ try:
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
     import socks  # should be in the same directory
+    from selenium import webdriver
+    from selenium.common.exceptions import TimeoutException
+    from selenium.webdriver.common.keys import Keys
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
+    from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
+    from cssselect import HTMLTranslator, SelectorError
 except ImportError as ie:
     if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
         print('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
@@ -63,17 +72,6 @@ except ImportError as ie:
     print(ie)
     print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
-try:
-    from selenium import webdriver
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
-    from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
-    from cssselect import HTMLTranslator, SelectorError
-    from bs4 import UnicodeDammit
-    import lxml.html
-except ImportError as ie:
-    print('Scrapemethod {} needs the following library to be installed {}'.format(args.scrapemethod, ie))
 
 # module wide global variables and configuration
 
@@ -93,7 +91,6 @@ def setup_logger(level=logging.INFO):
         # add logger to the modules namespace
         setattr(sys.modules[__name__], 'logger', logger)
 
-
 Config = {
     # The database name, with a timestamp as fmt
     'db': 'results_{asctime}.db',
@@ -102,9 +99,9 @@ Config = {
     # If set, then compress/decompress files with this algorithm
     'compress_cached_files': True,
     # Whether caching shall be enabled
-    'cachedir': '.scrapecache/',
+    'cachedir': '.scrapecache2/',
     # After how many hours should the cache be cleaned
-    'clean_cache_after': 72,
+    'clean_cache_after': 272,
     # The maximal amount of selenium browser windows running in parallel
     'max_sel_browsers': 12,
     # Commit changes to db every N requests per GET/POST request
@@ -112,7 +109,10 @@ Config = {
     # Whether to scrape with own ip address or just with proxies
     'use_own_ip': True,
     # The base Google URL for SelScraper objects
-    'sel_scraper_base_url': 'http://www.google.com/ncr'
+    'sel_scraper_base_url': 'http://www.google.com/ncr',
+    # unique identiefier that is sent to signal that a queue has
+    # processed all inputs
+    'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr'
 }
 
 class GoogleSearchError(Exception):
@@ -237,12 +237,19 @@ def cache_results(html, kw, url=Config['sel_scraper_base_url'], params={}):
     if Config['do_caching']:
         fname = cached_file_name(kw, url=url, params=params)
         path = os.path.join(Config['cachedir'], fname)
+
         if Config['compress_cached_files']:
             with open(path, 'wb') as fd:
-                fd.write(zlib.compress(html.encode('utf-8'), 5))
+                if isinstance(html, bytes):
+                    fd.write(zlib.compress(html, 5))
+                else:
+                    fd.write(zlib.compress(html.encode('utf-8'), 5))
         else:
             with open(os.path.join(Config['cachedir'], fname), 'w') as fd:
-                fd.write(html)
+                if isinstance(html, bytes):
+                    fd.write(html.decode())
+                else:
+                    fd.write(html)
 
 def _get_all_cache_files():
     """Return all files found in Config['cachedir']."""
@@ -336,13 +343,13 @@ def _parse_links(data, conn, kw, ip='127.0.0.1'):
     conn -- Either a sqlite3 cursor or connection object. If called in threads, make sure
     to wrap this function in some kind of synchronization functionality.
     """
-    # Finally parse the files
     parser = Google_SERP_Parser(data)
     results = parser.links
     conn.execute(
         'INSERT INTO serp_page (requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?)',
-        (time.asctime(), len(results), parser.num_results(),  kw, ip))
+        (time.asctime(), len(results), parser.num_results() or '',  kw, ip))
     lastrowid = conn.lastrowid
+    #logger.debug('Inserting in link: search_query={}, title={}, url={}'.format(kw, ))
     conn.executemany('''INSERT INTO link
     (search_query,
      title,
@@ -359,6 +366,33 @@ def _parse_links(data, conn, kw, ip='127.0.0.1'):
       result.link_url.hostname) +
      (lastrowid, ) for result in results])
 
+def _get_parse_links(data, kw, ip='127.0.0.1'):
+    """Act the same as _parse_links, but just return the db data instead of inserting data into a connection or
+    or building actual queries.
+
+    [[lastrowid]] needs to be replaced with the last rowid from the database when inserting.
+
+    Not secure against sql injections from google ~_~
+    """
+    parser = Google_SERP_Parser(data)
+    results = parser.links
+    first = (time.asctime(),
+        len(results),
+        parser.num_results() or '',
+        kw,
+        ip)
+
+    second = []
+    for result in results:
+        second.append([kw,
+          result.link_title,
+          result.link_url.geturl(),
+          result.link_snippet,
+          result.link_position,
+          result.link_url.hostname
+        ])
+
+    return (first, second)
 
 def timer_support(Class):
     """In python versions prior to 3.3, threading.Timer
@@ -784,23 +818,22 @@ class GoogleScrape():
 class SelScraper(threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google."""
 
-    def __init__(self, keywords, rlock, connection, proxy=None, browser_num=0):
+    def __init__(self, keywords, rlock, queue, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
         logger.info('[++]SelScraper object created with params: keywords={}, proxy={}, browser_num={}'.format(keywords, proxy, browser_num))
         self.url = Config['sel_scraper_base_url']
         self.proxy = proxy
         self.browser_num = browser_num
-        self.connection = connection
-        self.cursor = self.connection.cursor()
+        self.queue = queue
         self.rlock = rlock
         self.keywords = set(keywords)
         self.ip = '127.0.0.1'
         # How long to sleep (ins seconds) after every n-th request
         self.sleeping_ranges = {
             1: (1, 5),
-            8: (20, 40),
-            21: (50, 120),
+            11: (20, 40),
+            37: (50, 120),
             127: (60*3, 60*6)
         }
 
@@ -816,20 +849,19 @@ class SelScraper(threading.Thread):
     def _maybe_crop(self, html):
         """Crop Google SERP pages if we find the needle that indicates the beginning of the main content.
 
-        If the needle `<div class="ctr-p" id="viewport"` can't be located, just return the html var.
+        Use lxml.html (fast) to crop the selections.
 
-        Other idea: Just fucking remove the javascript and css. It accumulates to maybe 90% of the whole content. No fucking
-        person needs js/css when caching.
+        Args:
+        html -- The html to crop.
+
+        Returns:
+        The cropped html.
         """
-        # offset = html.index('<div class="ctr-p" id="viewport"') or None
-        # if offset:
-        #     return html[offset:]
-        # else:
-        #     return html
-        # remove_motherfuckers = re.compile(r'<script\s?.{10,500}>(.*?)</script>'), re.compile(r'<style\s?.{10,500}>(.*?)</style>')
-        # for r in remove_motherfuckers:
-        #     html = r.sub
-        return html
+        parsed = lxml.html.fromstring(html)
+        for bad in parsed.xpath('//script|//style'):
+            bad.getparent().remove(bad)
+
+        return lxml.html.tostring(parsed)
 
     def run(self):
         # Create the browser and align it according to its number
@@ -862,25 +894,20 @@ class SelScraper(threading.Thread):
                 raise Exception(e) # fix that later
             self.element.clear()
             self.element.send_keys(kw + Keys.ENTER)
-            WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'li.g')))
+            try:
+                WebDriverWait(self.webdriver, 5).until(EC.title_contains(kw))
+            except TimeoutException as e:
+                print('Keyword not found in title: {}'.format(e))
+                continue
             html = self._maybe_crop(self.webdriver.page_source)
             # Lock for the sake that two threads write to same file (not probable)
             self.rlock.acquire()
             cache_results(html, kw, url=self.url)
-            # commit in intervals specified in the config
-            if i > 0 and i % Config['commit_interval'] == 0:
-                self.connection.commit()
             self.rlock.release()
-            self._parse_links(kw, html)  # call here one of _parse_links_native or _parse_links_sel
+            # commit in intervals specified in the config
+            self.queue.put(_get_parse_links(html, kw, ip=self.ip))
 
         self.webdriver.close()
-
-    def _parse_links(self, kw, html):
-        """Parses links with Google_SERP_Parser"""
-        self.rlock.acquire()
-        _parse_links(html, self.cursor, kw, ip=self.ip)
-        self.rlock.release()
-
 
 class Google_SERP_Parser():
     """Parses data from Google SERPs."""
@@ -957,7 +984,7 @@ class Google_SERP_Parser():
 
     def __iter__(self):
         """Simple magic method to iterate quickly over found non ad results"""
-        for link_title, link_snippet, link_url in result['results']:
+        for link_title, link_snippet, link_url in self.result['results']:
             yield (link_title, link_snippet, link_url)
 
     def num_results(self):
@@ -1107,6 +1134,56 @@ class Google_SERP_Parser():
         return links or []
 
 
+class ResultsHandler(threading.Thread):
+    """Consume data that the SelScraper/GoogleScrape threads put in the queue.
+
+    Opens a database connection and puts data in it. Intended to run be run in the main thread.
+
+    Implements the multi-producer pattern.
+
+    The ResultHandler cannot necessarily know when he should stop waiting. Thats why we
+    have a special DONE element in the Config that signals that all threads have finished and
+    all data was processed.
+    """
+    def __init__(self, queue, conn):
+        super().__init__()
+        self.queue = queue
+        self.conn = conn
+        self.cursor = self.conn.cursor()
+
+    def _insert_in_db(self, e):
+        assert isinstance(e, tuple) and len(e) == 2
+        first, second = e
+        self.cursor.execute(
+            'INSERT INTO serp_page (requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?)', first)
+        lastrowid = self.cursor.lastrowid
+        #logger.debug('Inserting in link: search_query={}, title={}, url={}'.format(kw, ))
+        self.cursor.executemany('''INSERT INTO link
+        (search_query,
+         title,
+         url,
+         snippet,
+         rank,
+         domain,
+         serp_id) VALUES(?, ?, ?, ?, ?, ?, ?)''', [tuple(t)+ (lastrowid, ) for t in second])
+
+    def run(self):
+        i = 0
+        while True:
+            #  If optional args block is true and timeout is None (the default), block if necessary until an item is available.
+            item = self.queue.get(block=True)
+            if item == Config['all_processed_sig']:
+                print('turning done. All results processed.')
+                break
+            self._insert_in_db(item)
+            self.queue.task_done()
+            # Store the
+            if i > 0 and (i % Config['commit_interval']) == 0:
+                # commit in intervals specified in the config
+                self.conn.commit()
+            i += 1
+
+
 def scrape(query, num_results_per_page=100, num_pages=1, offset=0, searchtype='normal'):
     """Public API function to search for terms and return a list of results.
 
@@ -1177,6 +1254,8 @@ def maybe_create_db():
        - snippet
        - url
        - domain
+
+       Test sql query: SELECT L.title, L.snippet, SP.search_query FROM link AS L LEFT JOIN serp_page AS SP ON L.serp_id = SP.id
     """
     # Save the database to a unique file name (with the timestamp as suffix)
     Config['db'] = Config['db'].format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-'))
@@ -1316,6 +1395,7 @@ def handle_commandline(args):
         if not os.path.exists(args.kwfile):
             raise ValueError('The keyword file {} does not exist.'.format(args.kwfile))
         else:
+            # Clean the keywords right in the beginning of all
             args.keywords = {line.strip() for line in open(args.kwfile, 'r').read().split('\n')}
 
     if args.check_oto:
@@ -1339,15 +1419,15 @@ def handle_commandline(args):
     # Let the games begin
     if args.scrapemethod == 'sel':
         conn = maybe_create_db()
-        # Setup a signal handler
-        def signal_handler(signal, frame):
-            print('Ctrl-c was pressed, shall I commit all changes to db?')
-            if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
-                conn.commit()
-            conn.close()
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, signal_handler)
+        # # Setup a signal handler
+        # def signal_handler(signal, frame):
+        #     print('Ctrl-c was pressed, shall I commit all changes to db?')
+        #     if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
+        #         conn.commit()
+        #     conn.close()
+        #     sys.exit(0)
+        #
+        # signal.signal(signal.SIGINT, signal_handler)
 
         # First of all, lets see hom many keywords remain to scrape after parsing the cache
         if Config['do_caching']:
@@ -1367,17 +1447,28 @@ def handle_commandline(args):
 
         # Distribute the proxies evenly on the kws to search
         browsers = []
+        Q = queue.Queue()
         proxies.append(None) if Config['use_own_ip'] else None
+        if not proxies:
+            logger.info("No ip's available for scanning.")
+
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
-        print('len_kwgroups={}, len_proxies={}, chunks_per_proxy={}'.format(len(kwgroups), len(proxies), chunks_per_proxy))
+        #print('len_kwgroups={}, len_proxies={}, chunks_per_proxy={}'.format(len(kwgroups), len(proxies), chunks_per_proxy))
         for i, chunk in enumerate(kwgroups):
-            browsers.append(SelScraper(chunk, rlock, conn, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+            browsers.append(SelScraper(chunk, rlock, Q, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in browsers:
             t.start()
 
+        handler = ResultsHandler(Q, conn)
+        handler.start()
+
         for t in browsers:
             t.join()
+
+        # All scrape jobs done, signal the db handler to stop
+        Q.put(Config['all_processed_sig'])
+        handler.join()
 
         conn.commit()
         conn.close()
