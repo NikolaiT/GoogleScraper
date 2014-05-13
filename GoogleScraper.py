@@ -11,7 +11,7 @@ queries. It gives straightforward access to all relevant data of Google such as
 - The title of the links
 - The caption/description below each link
 - The number of results for this keyword
-- The rank for the specific reslts
+- The rank for the specific results
 
 GoogleScraper's architecture outlined:
 - Proxy support (Socks5, Socks4, HTTP Proxy)
@@ -27,8 +27,8 @@ Debug:
 Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
-__VERSION__ = '0.6'
-__UPDATED__ = '03.05.2014'  # day.month.year
+__VERSION__ = '0.7'
+__UPDATED__ = '13.05.2014'  # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -101,7 +101,7 @@ Config = {
     # Whether caching shall be enabled
     'cachedir': '.scrapecache/',
     # After how many hours should the cache be cleaned
-    'clean_cache_after': 272,
+    'clean_cache_after': 24,
     # The maximal amount of selenium browser windows running in parallel
     'max_sel_browsers': 12,
     # Commit changes to db every N requests per GET/POST request
@@ -117,11 +117,9 @@ Config = {
     'sel_browser': 'Chrome'
 }
 
-class GoogleSearchError(Exception):
-    pass
+class GoogleSearchError(Exception): pass
 
-class InvalidNumberResultsException(GoogleSearchError):
-    pass
+class InvalidNumberResultsException(GoogleSearchError): pass
 
 
 if Config['do_caching']:
@@ -132,9 +130,13 @@ if Config['do_caching']:
 def maybe_clean_cache():
     """Delete all .cache files in the cache directory that are older than 12 hours."""
     for fname in os.listdir(Config['cachedir']):
-        if time.time() > os.path.getmtime(os.path.join(Config['cachedir'], fname)) + (60 * 60 * Config['clean_cache_after']):
-            os.remove(os.path.join(Config['cachedir'], fname))
-
+        path = os.path.join(Config['cachedir'], fname)
+        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['clean_cache_after']):
+            if os.path.isdir(path):
+                import shutil
+                shutil.rmtree(path)
+            else:
+                os.remove(os.path.join(Config['cachedir'], fname))
 
 if Config['do_caching']:
     # Clean the Config['cachedir'] once in a while
@@ -840,7 +842,10 @@ class SelScraper(threading.Thread):
         self._parse_config(config)
 
     def _parse_config(self, config):
-        """Parse the config parameter given in the constructor"""
+        """Parse the config parameter given in the constructor.
+
+        Firsty apply some default values. The config parameter overwrites them, if given.
+        """
         assert isinstance(config, dict)
 
         self.config = {}
@@ -858,7 +863,6 @@ class SelScraper(threading.Thread):
         for key, value in config.items():
             self.config.update(key, value)
 
-
     def _largest_sleep_range(self, i):
         assert i >= 0
         if i != 0:
@@ -866,7 +870,7 @@ class SelScraper(threading.Thread):
             for n in s:
                 if i % n == 0:
                     return self.config['sleeping_ranges'][n]
-        # sleep zero seconds
+        # sleep one second
         return (1, 2)
 
     def _maybe_crop(self, html):
@@ -989,7 +993,7 @@ class SelScraper(threading.Thread):
             # Waiting until the keyword appears in the title may
             # not be enough. The content may still be off the old page.
             try:
-                WebDriverWait(self.webdriver, 15).until(EC.title_contains(kw))
+                WebDriverWait(self.webdriver, 30).until(EC.title_contains(kw))
             except TimeoutException as e:
                 print('Keyword not found in title: {}'.format(e))
                 continue
@@ -1272,7 +1276,7 @@ class ResultsHandler(threading.Thread):
             #  If optional args block is true and timeout is None (the default), block if necessary until an item is available.
             item = self.queue.get(block=True)
             if item == Config['all_processed_sig']:
-                print('turning done. All results processed.')
+                print('turning down. All results processed.')
                 break
             self._insert_in_db(item)
             self.queue.task_done()
@@ -1299,7 +1303,7 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0, searchtype='n
 
     """
     threads = [GoogleScrape(query, num_results_per_page, i, searchtype=searchtype, interval=i)
-               for i in range(offset, num_pages + offset, 1)]
+                   for i in range(offset, num_pages + offset, 1)]
 
     for t in threads:
         t.start()
@@ -1354,7 +1358,7 @@ def maybe_create_db():
        - url
        - domain
 
-       Test sql query: SELECT L.title, L.snippet, SP.search_query FROM link AS L LEFT JOIN serp_page AS SP ON L.serp_id = SP.id
+    Test sql query: SELECT L.title, L.snippet, SP.search_query FROM link AS L LEFT JOIN serp_page AS SP ON L.serp_id = SP.id
     """
     # Save the database to a unique file name (with the timestamp as suffix)
     Config['db'] = Config['db'].format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-'))
@@ -1426,12 +1430,40 @@ def parse_proxy_file(fname):
     else:
         raise ValueError('No such file')
 
+def print_scrape_results_http(results, verbosity=1, view=False):
+    """Print the results obtained by "http" method."""
+    for t in results:
+        for result in t:
+            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+            if view:
+                import webbrowser
+                webbrowser.open(result['cache_file'])
+            import textwrap
+
+            for result_set in ('results', 'ads_main', 'ads_aside'):
+                if result_set in result.keys():
+                    print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
+                    for link_title, link_snippet, link_url, link_position in result[result_set]:
+                        try:
+                            print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                        except AttributeError as ae:
+                            print(ae)
+                        if verbosity > 1:
+                            print(
+                                '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+                            print(
+                                '  Description: \n{}\n'.format(
+                                    textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+                            print('*' * 70)
+                            print()
+
 def get_command_line():
     """Parses command line arguments for scraping with selenium browser instances"""
     parser = argparse.ArgumentParser(prog='GoogleScraper',
                                      description='Scrapes the Google search engine by forging http requests that imitate '
-                                                 'browser searches or by using real browsers (with selenium)',
-                                     epilog='This program might infringe Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014')
+                                                 'browser searches or by using real browsers controlled with selenium.',
+                                     epilog='This program might infringe the Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
     parser.add_argument('scrapemethod', type=str,
                         help='The scraping type. There are currently two types: "http" and "sel". Http scrapes with raw http requests whereas "sel" uses selenium remote browser programming',
@@ -1456,6 +1488,7 @@ def get_command_line():
                         help='''A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"
                         Example file: socks4 127.0.0.1:99\nsocks5 33.23.193.22:1080\n''')
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set to True, the scrape job and its rough length will be printed.''')
+    parser.add_argument('--print', action='store_true', default=True, required=False, help='''If set, print all scraped output GoogleScraper finds. Don't use it when scraping a lot, results are stored in a sqlite3 database anyway.''')
     parser.add_argument('-x', '--deep-scrape', action='store_true', default=False,
                         help='Launches a wide range of parallel searches by modifying the search ' \
                              'query string with synonyms and by scraping with different Google search parameter combinations that might yield more unique ' \
@@ -1530,13 +1563,15 @@ def handle_commandline(args):
         #
         # signal.signal(signal.SIGINT, signal_handler)
 
-        # First of all, lets see hom many keywords remain to scrape after parsing the cache
+        # First of all, lets see how many keywords remain to scrape after parsing the cache
         if Config['do_caching']:
             remaining = parse_all_cached_files(args.keywords, conn, simulate=args.simulate)
         else:
             remaining = args.keywords
 
         if args.simulate:
+            # TODO: implement simulating infos
+            raise NotImplementedError('simulating is not implemented yet!')
             sys.exit(0)
 
         rlock = threading.RLock()
@@ -1548,7 +1583,7 @@ def handle_commandline(args):
             kwgroups = [[kw, ] for kw in remaining]
 
         # Distribute the proxies evenly on the kws to search
-        browsers = []
+        scrapejobs = []
         Q = queue.Queue()
         proxies.append(None) if Config['use_own_ip'] else None
         if not proxies:
@@ -1556,15 +1591,16 @@ def handle_commandline(args):
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, chunk in enumerate(kwgroups):
-            browsers.append(SelScraper(chunk, rlock, Q, browser_num=i, config={}, proxy=proxies[i//chunks_per_proxy]))
+            if args.scrapemethod == 'sel':
+                scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, config={}, proxy=proxies[i//chunks_per_proxy]))
 
-        for t in browsers:
+        for t in scrapejobs:
             t.start()
 
         handler = ResultsHandler(Q, conn)
         handler.start()
 
-        for t in browsers:
+        for t in scrapejobs:
             t.join()
 
         # All scrape jobs done, signal the db handler to stop
@@ -1573,42 +1609,20 @@ def handle_commandline(args):
 
         conn.commit()
         conn.close()
-    else:
+    elif args.scrapemethod == 'http':
         if args.deep_scrape:
-            results = deep_scrape(args.query)
-            raise NotImplementedError('Sorry. Currently not implemented.')
+            # TODO: implement deep scrape
+            raise NotImplementedError('Sorry. Currently deep_scrape is not implemented.')
 
         else:
             results = []
             for kw in args.keywords:
                 r = scrape(kw, args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
                 results.append(r)
-
-        for t in results:
-            for result in t:
-                logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
-                    len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-                if args.view:
-                    import webbrowser
-                    webbrowser.open(result['cache_file'])
-                import textwrap
-
-                for result_set in ('results', 'ads_main', 'ads_aside'):
-                    if result_set in result.keys():
-                        print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
-                        for link_title, link_snippet, link_url, link_position in result[result_set]:
-                            try:
-                                print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-                            except AttributeError as ae:
-                                print(ae)
-                            if args.verbosity > 1:
-                                print(
-                                    '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
-                                print(
-                                    '  Description: \n{}\n'.format(
-                                        textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
-                                print('*' * 70)
-                                print()
+        if args.print:
+            print_scrape_results_http(results, args.verbosity, view=args.view)
+    else:
+        raise ValueError('No such scrapemethod. Use "http" or "sel"')
 
 if __name__ == '__main__':
     handle_commandline(get_command_line())
