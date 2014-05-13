@@ -831,7 +831,7 @@ class SelScraper(threading.Thread):
     def __init__(self, keywords, rlock, queue, config={}, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
-        logger.info('[++]SelScraper object created with params: number of keywords={}, proxy={}, browser_num={}'.format(len(keywords), proxy, browser_num))
+        logger.info('[++]SelScraper object created. Number of keywords to scrape={}, proxy used={}, browser_num={}'.format(len(keywords), proxy, browser_num))
         self.url = Config['sel_scraper_base_url']
         self.proxy = proxy
         self.browser_num = browser_num

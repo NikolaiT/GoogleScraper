@@ -1,33 +1,44 @@
 ## GoogleScraper - Scraping the Google Search Engine
 
+### Table of Contents
 
-### Important (Last Update: 13th May 2014)
+[Installation](#install)
+[About](#about)
+[Usage](#usage)
+[Command line usage](#cli-usage)
+[Contact](#contact)
 
-GoogleScrape is in the middle of heavy development. If you want to use it, use it as follows:
+
+<a name="install" \>
+### Installation
+
+GoogleScraper is written in Python 3. Therefore install at least python 3.3
+
+You need to install the following third part modules:
 
 ```
-python GoogleScraper.py sel --debug --keyword-file path/to/keywordfile
+lxml
+selenium
+bs4
+cssselect
+requests
 ```
 
-Where sel marks the mode as 'selenium'. This means GoogleScraper scrapes with real browsers. This is pretty powerful, since
-you can scrape long and a lot of sites. The argument of the flag `--keyword-file` must be a file with keywords separated by 
-newlines. So: For every google query one line. Easy, isnt' it?
+You can do so with:
 
-If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with the following format:
+`pip3 install module1, module2, ..`
 
-```
-protocol proxyhost:proxyport username:password
-(...)
-```
-Example:
-```
-socks5 127.0.0.1:1080 blabla:12345
-socks4 77.66.55.44:9999 elite:js@fkVA3(Va3)
+If you want to install GoogleScraper locally, do as follows (Run all commands in the GoogleScraper.py directory):
+
+```bash
+virtualenv --no-site-packages .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# Now test it
+python GoogleScraper.py
 ```
 
-Have fun. Keep in mind that you need to have install a bunch of third party module. You'll  see what kind of modules if you 
-run the scraper the first time.
-
+<a name="about" />
 ### What does GoogleScraper.py?
 
 GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
@@ -42,7 +53,7 @@ There are unlimited *usage scenarios*:
 + Many more use cases...
 
 First of all you need to understand that GoogleScraper uses **two completely different scraping approaches**:
-+ Scrape with low level networking libraries such as `urllib.request` or `requests` modules and thus emulate a browser
++ Scraping with low level networking libraries such as `urllib.request` or `requests` modules. This simulates the http packets sent by real browsers.
 + Scrape by controlling a real browser with Python
 
 Whereas the first approach was implemented first, the second approach looks much more promising in comparison.
@@ -51,9 +62,9 @@ Effective: Development for the second approach started around 10.03.2014
 GoogleScraper is implemented with the following techniques/software:
 
 + Written in Python 3.4
-+ Uses multithreading/asynchroneous IO. (two approaches, currently only multi-threading is implemented)
++ Uses multithreading/asynchroneous IO. (two possible approaches, currently only multi-threading is implemented)
 + Supports parallel google scraping with multiple IP addresses.
-+ Provides proxy support using [socksipy][2]:
++ Provides proxy support using [socksipy][2] and built in browser proxies:
   * Socks5
   * Socks4
   * HttpProxy
@@ -91,7 +102,12 @@ Some interesting technologies/software to do so:
 + [Selenium](https://pypi.python.org/pypi/selenium)
 + [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
 
+
+<a name="usage" \>
 ### Example Usage
+
+Keep in mind that the bottom example source uses the not very powerful *http* scrape method. Look [here](#cli-usage) if you
+need to unleash the full power of GoogleScraper.
 
 ```python
 import GoogleScraper
@@ -283,38 +299,60 @@ http://www.whitespark.ca/
 About 14,100,000 results
 ```
 
+<a name="cli-usage" \>
 ### Direct command line usage
 
-In case you want to use GoogleScraper.py as a CLI tool, use it somehow like this:
-
+Probably the best way to use GoogleScrape is to use it from the command line and fire a command such as
+the following:
 ```
-python GoogleScraper.py http -p 1 -n 25 -q 'inurl:".php?id=555"'
-```
-
-But be aware that google might recognize you pretty fast as a abuser if you use such google dorks as given above.
-
-Maybe try a socks proxy then (But don't bet on TOR) [This is just a example, this socks will probably not work anymore when *you are here*]
-
-```
-python GoogleScraper.py http -p 1 -n 25 -q 'i hate google' --proxy="221.132.35.5:2214"
+python GoogleScraper.py sel --keyword-file path/to/keywordfile
 ```
 
+Whereas *sel* marks the mode as 'selenium'. This means GoogleScraper scrapes with real browsers. This is pretty powerful, since
+you can scrape long and a lot of sites (Google has a hard time blocking real browsers). The argument of the flag `--keyword-file` must be a file with keywords separated by
+newlines. So: For every google query one line. Easy, isnt' it?
+
+Example keyword-file:
+```
+keyword number one
+how to become a good rapper
+inurl:"index.php?sl=43"
+filetype:.cfg
+allintext:"You have a Mysql Error in your"
+intitle:"admin config"
+Best brothels in atlanta
+```
+
+After the scraping you'll automatically have a new sqlite3 database in the project directory (with a date time string as file name). You can open the database with any sqlite3 command
+line tool or other software.
+
+It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**, if you are really crazy, set the maximal browsers in the config a little
+bit higher (in the top of the script file).
+
+If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with proxies in it and with the following format:
+
+```
+protocol proxyhost:proxyport username:password
+(...)
+```
+Example:
+```
+socks5 127.0.0.1:1080 blabla:12345
+socks4 77.66.55.44:9999 elite:js@fkVA3(Va3)
+```
+
+That's basically all for the *sel* modeHave fun.
+
+In case you want to use GoogleScraper.py in *http* mode (which means that raw http headers are sent), use it as follows:
+
+```
+python GoogleScraper.py http -p 1 -n 25 -q "keywords separated by whitespaces"
+```
+
+<a name="contact" \>
 ### Contact
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
-
-### To-do list (As of 25.12.2013, updated at 16th february 2014)
-+ Figure out whether to use threads or asynchronous I/O for multiple connections. [x]
-+ Determine if is is possible to use one google search session with multiple connections that are independent of each other (They have different IP's)
-+ Implement the proxy manager that intelligently uses proxies to maximize the extracted information per IP.
-
-### Stable version
-I will experiment with a threading approach and asynchronous IO. There will always be a stable version that supports threading. It is simply
-called `GoogleScraper.py`. The asynchronous version will be called `GoogleScraperAsync.py`.
-
-**Last major update:** 10th march 2014
-
-This is a development repository. But you can always find a [working GoogleScraper.py script here][4].
 
 [1]: http://www.webvivant.com/google-hacking.html "Google Dorks"
 [2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
