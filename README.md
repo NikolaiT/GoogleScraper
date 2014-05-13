@@ -2,11 +2,11 @@
 
 ### Table of Contents
 
-[Installation](#install)
-[About](#about)
-[Usage](#usage)
-[Command line usage](#cli-usage)
-[Contact](#contact)
+1. [Installation](#install)
+2. [About](#about)
+3. [Usage](#usage)
+4. [Command line usage (read this!)](#cli-usage)
+5. [Contact](#contact)
 
 
 <a name="install" \>
