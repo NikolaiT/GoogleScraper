@@ -97,11 +97,14 @@ Some interesting technologies/software to do so:
 import GoogleScraper
 import urllib.parse
 
+GoogleScraper.setup_logger()
+
 if __name__ == '__main__':
 
     results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0, searchtype='normal')
+
     for page in results:
-        for link_title, link_snippet, link_url in page['results']:
+        for link_title, link_snippet, link_url, *rest in page['results']:
             # You can access all parts of the search results like that
             # link_url.scheme => URL scheme specifier (Ex: 'http')
             # link_url.netloc => Network location part (Ex: 'www.python.org')
@@ -285,7 +288,7 @@ About 14,100,000 results
 In case you want to use GoogleScraper.py as a CLI tool, use it somehow like this:
 
 ```
-python GoogleScraper.py -p 1 -n 25 -q 'inurl:".php?id=555"'
+python GoogleScraper.py http -p 1 -n 25 -q 'inurl:".php?id=555"'
 ```
 
 But be aware that google might recognize you pretty fast as a abuser if you use such google dorks as given above.
@@ -293,7 +296,7 @@ But be aware that google might recognize you pretty fast as a abuser if you use 
 Maybe try a socks proxy then (But don't bet on TOR) [This is just a example, this socks will probably not work anymore when *you are here*]
 
 ```
-python GoogleScraper.py -p 1 -n 25 -q 'i hate google' --proxy="221.132.35.5:2214"
+python GoogleScraper.py http -p 1 -n 25 -q 'i hate google' --proxy="221.132.35.5:2214"
 ```
 
 ### Contact
