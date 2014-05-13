@@ -1,7 +1,7 @@
-## GoogleScraper - Scraping the Google Search Engine (Last Update: 03th May 2014)
+## GoogleScraper - Scraping the Google Search Engine
 
 
-## Important (Last Update: 03th May 2014)
+### Important (Last Update: 13th May 2014)
 
 GoogleScrape is in the middle of heavy development. If you want to use it, use it as follows:
 

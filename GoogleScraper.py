@@ -305,9 +305,13 @@ def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], t
         query = mapping.get(fname)
         data = read_cached_file(path)
         if not query and try_harder:
-            query = r.search(data).group('kw').strip()
-            if query in mapping.values():
-                logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
+            m = r.search(data)
+            if m:
+                query = m.group('kw').strip()
+                if query in mapping.values():
+                    logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
+                else:
+                    continue
             else:
                 continue
         _parse_links(data, conn.cursor(), query)
@@ -839,6 +843,7 @@ class SelScraper(threading.Thread):
         """Parse the config parameter given in the constructor"""
         assert isinstance(config, dict)
 
+        self.config = {}
         # Set some defaults
         # How long to sleep (ins seconds) after every n-th request
         self.config['sleeping_ranges'] = {
@@ -857,10 +862,10 @@ class SelScraper(threading.Thread):
     def _largest_sleep_range(self, i):
         assert i >= 0
         if i != 0:
-            s = sorted(self.sleeping_ranges.keys(), reverse=True)
+            s = sorted(self.config['sleeping_ranges'].keys(), reverse=True)
             for n in s:
                 if i % n == 0:
-                    return self.sleeping_ranges[n]
+                    return self.config['sleeping_ranges'][n]
         # sleep zero seconds
         return (1, 2)
 
@@ -1550,9 +1555,8 @@ def handle_commandline(args):
             logger.info("No ip's available for scanning.")
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
-        #print('len_kwgroups={}, len_proxies={}, chunks_per_proxy={}'.format(len(kwgroups), len(proxies), chunks_per_proxy))
         for i, chunk in enumerate(kwgroups):
-            browsers.append(SelScraper(chunk, rlock, Q, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+            browsers.append(SelScraper(chunk, rlock, Q, browser_num=i, config={}, proxy=proxies[i//chunks_per_proxy]))
 
         for t in browsers:
             t.start()
