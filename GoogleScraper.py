@@ -57,9 +57,9 @@ try:
     import requests
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
-    import socks  # should be in the same directory
+    #import socks  # should be in the same directory
     from selenium import webdriver
-    from selenium.common.exceptions import TimeoutException
+    from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.webdriver.common.keys import Keys
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
@@ -99,20 +99,22 @@ Config = {
     # If set, then compress/decompress files with this algorithm
     'compress_cached_files': True,
     # Whether caching shall be enabled
-    'cachedir': '.scrapecache2/',
+    'cachedir': '.scrapecache/',
     # After how many hours should the cache be cleaned
     'clean_cache_after': 272,
     # The maximal amount of selenium browser windows running in parallel
     'max_sel_browsers': 12,
     # Commit changes to db every N requests per GET/POST request
-    'commit_interval': 5,
+    'commit_interval': 10,
     # Whether to scrape with own ip address or just with proxies
     'use_own_ip': True,
     # The base Google URL for SelScraper objects
     'sel_scraper_base_url': 'http://www.google.com/ncr',
-    # unique identiefier that is sent to signal that a queue has
+    # unique identifier that is sent to signal that a queue has
     # processed all inputs
-    'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr'
+    'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr',
+    # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
+    'sel_browser': 'Chrome'
 }
 
 class GoogleSearchError(Exception):
@@ -153,8 +155,8 @@ def cached_file_name(kw, url=Config['sel_scraper_base_url'], params={}):
         Important! The order of the sequence is darn important! If search queries have same
         words but in a different order, they are individua searches.
     """
-    assert isinstance(kw, str)
-    assert isinstance(url, str)
+    assert isinstance(kw, str), kw
+    assert isinstance(url, str), url
     if params:
         assert isinstance(params, dict)
 
@@ -168,7 +170,7 @@ def cached_file_name(kw, url=Config['sel_scraper_base_url'], params={}):
     return '{}.{}'.format(sha.hexdigest(), 'cache')
 
 
-def get_cached(kw, url, params={}, cache_dir=''):
+def get_cached(kw, url=Config['sel_scraper_base_url'], params={}, cache_dir=''):
     """Loads a cached search results page from CACHEDIR/fname.cache
 
     It helps in testing and avoid requesting
@@ -275,7 +277,7 @@ def _caching_is_one_to_one(keywords, url=Config['sel_scraper_base_url']):
         print('one-to-one')
     sys.exit(0)
 
-def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], try_harder=True):
+def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], try_harder=True, simulate=False):
     """Walk recursively through the cachedir (as given by the Config) and parse cache files.
 
     Arguments:
@@ -294,8 +296,10 @@ def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], t
     files = _get_all_cache_files()
     mapping = {cached_file_name(kw, url): kw for kw in keywords}
     diff = set(mapping.keys()).difference({os.path.split(path)[1] for path in files})
-    logger.debug('{} cache files found in {}'.format(len(files), Config['cachedir']))
-    logger.debug('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(len(keywords)-len(diff), len(keywords), len(diff)))
+    logger.info('{} cache files found in {}'.format(len(files), Config['cachedir']))
+    logger.info('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(len(keywords)-len(diff), len(keywords), len(diff)))
+    if simulate:
+        sys.exit(0)
     for path in files:
         fname = os.path.split(path)[1]
         query = mapping.get(fname)
@@ -680,7 +684,7 @@ class GoogleScrape():
         for k, v in self._SEARCH_PARAMS.items():
             self._SEARCH_PARAMS[k] = None
 
-    def _build_query(self, random=False):
+    def _build_query(self, rand=False):
         """Build the headers and params for the GET request for the Google server.
 
         When random is True, several headers (like the UA) are chosen
@@ -751,7 +755,7 @@ class GoogleScrape():
                     'sa': 'X'
                 })
 
-        if random:
+        if rand:
             self._HEADERS['User-Agent'] = random.choice(self._UAS)
 
     def _search(self, searchtype='normal'):
@@ -804,7 +808,7 @@ class GoogleScrape():
             html = r.text
 
             # cache fresh results
-            cache_results(self._SEARCH_PARAMS, html)
+            cache_results(html, self.search_query, url=self._SEARCH_URL, params=self._SEARCH_PARAMS)
             self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['cachedir'], cached_file_name(self.search_query, self._SEARCH_URL, self._SEARCH_PARAMS))
 
         self.parser = Google_SERP_Parser(html, searchtype=self.searchtype)
@@ -818,10 +822,10 @@ class GoogleScrape():
 class SelScraper(threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google."""
 
-    def __init__(self, keywords, rlock, queue, proxy=None, browser_num=0):
+    def __init__(self, keywords, rlock, queue, config={}, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
-        logger.info('[++]SelScraper object created with params: keywords={}, proxy={}, browser_num={}'.format(keywords, proxy, browser_num))
+        logger.info('[++]SelScraper object created with params: number of keywords={}, proxy={}, browser_num={}'.format(len(keywords), proxy, browser_num))
         self.url = Config['sel_scraper_base_url']
         self.proxy = proxy
         self.browser_num = browser_num
@@ -829,13 +833,26 @@ class SelScraper(threading.Thread):
         self.rlock = rlock
         self.keywords = set(keywords)
         self.ip = '127.0.0.1'
+        self._parse_config(config)
+
+    def _parse_config(self, config):
+        """Parse the config parameter given in the constructor"""
+        assert isinstance(config, dict)
+
+        # Set some defaults
         # How long to sleep (ins seconds) after every n-th request
-        self.sleeping_ranges = {
-            1: (1, 5),
-            11: (20, 40),
-            37: (50, 120),
-            127: (60*3, 60*6)
+        self.config['sleeping_ranges'] = {
+            7: (1, 5),
+            # 19: (20, 40),
+            57: (50, 120),
+            # 127: (60*3, 60*6)
         }
+        self.config['num_results'] = 10
+        self.config['num_pages'] = 1
+        # and overwrite with options given with the constructors parameter
+        for key, value in config.items():
+            self.config.update(key, value)
+
 
     def _largest_sleep_range(self, i):
         assert i >= 0
@@ -844,7 +861,8 @@ class SelScraper(threading.Thread):
             for n in s:
                 if i % n == 0:
                     return self.sleeping_ranges[n]
-        return self.sleeping_ranges[1]
+        # sleep zero seconds
+        return (1, 2)
 
     def _maybe_crop(self, html):
         """Crop Google SERP pages if we find the needle that indicates the beginning of the main content.
@@ -863,20 +881,88 @@ class SelScraper(threading.Thread):
 
         return lxml.html.tostring(parsed)
 
+    def _get_webdriver(self):
+        """Return a webdriver instance and set it up with the according profile/ proxies.
+
+        May either return a Firefox or Chrome instance, according to availabilit. Chrome has
+        precedence, because it's more lightweight.
+        """
+        if Config['sel_browser'].lower() == 'chrome':
+            self._get_Chrome()
+            return True
+        elif Config['sel_browser'].lower() == 'firefox':
+            self._get_Firefox()
+            return True
+
+        # if the config remains silent, try to get Chrome, else Firefox
+        if not self._get_Chrome():
+            self._get_Firefox()
+
+        return True
+
+    def _get_Chrome(self):
+        try:
+            if self.proxy:
+                chrome_ops = webdriver.ChromeOptions()
+                chrome_ops.add_argument('--proxy-server={}://{}:{}'.format(self.proxy.proto, self.proxy.host, self.proxy.port))
+                self.webdriver = webdriver.Chrome(chrome_options=chrome_ops)
+            else:
+                self.webdriver = webdriver.Chrome()
+            return True
+        except WebDriverException as e:
+            logger.info(e)
+            # we dont have a chrome executable or a chrome webdriver installed
+        return False
+
+    def _get_Firefox(self):
+        try:
+            if self.proxy:
+                profile = webdriver.FirefoxProfile()
+                profile.set_preference("network.proxy.type", 1) # this means that the proxy is user set, regardless of the type
+                if self.proxy.proto.startswith('socks'):
+                    profile.set_preference("network.proxy.socks", self.proxy.host)
+                    profile.set_preference("network.proxy.socks_port", self.proxy.ip)
+                    profile.set_preference("network.proxy.socks_version", 5 if self.proxy.proto[-1] == '5' else 4)
+                    profile.update_preferences()
+                elif self.proxy.proto == 'http':
+                    profile.set_preference("network.proxy.http", self.proxy.host)
+                    profile.set_preference("network.proxy.http_port", self.proxy.port)
+                else:
+                    raise ValueError('Invalid protocol given in proxyfile.')
+                profile.update_preferences()
+                self.webdriver = webdriver.Firefox(firefox_profile=profile)
+            else:
+                self.webdriver = webdriver.Firefox()
+            return True
+        except WebDriverException as e:
+            logger.info(e)
+            # reaching here is bad, since we have no available webdriver instance.
+        return False
+
     def run(self):
         # Create the browser and align it according to its number
         # and in maximally two rows
         if len(self.keywords) <= 0:
             return True
 
-        chrome_ops = None
-        if self.proxy:
-            chrome_ops = webdriver.ChromeOptions()
-            chrome_ops.add_argument('--proxy-server={}://{}:{}'.format(self.proxy.proto, self.proxy.host, self.proxy.port))
-        self.webdriver = webdriver.Chrome(chrome_options=chrome_ops)
+        self._get_webdriver()
         self.webdriver.set_window_size(400, 400)
         self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(self.browser_num > 4))
         self.webdriver.get(self.url)
+
+        try:
+            if self.config['num_results'] != 10:
+                self.webdriver.get('http://www.google.com/preferences?hl=en&fg=1')
+                WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="num"]')))
+                # now set the input to the num we want
+
+            else:
+                self.webdriver.get(self.url)
+                self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
+        except WebDriverException as e:
+            print(e)
+        #setup the search configuration manually
+
         for i, kw in enumerate(self.keywords):
             if not kw:
                 continue
@@ -884,21 +970,29 @@ class SelScraper(threading.Thread):
             r = self._largest_sleep_range(i)
             j = random.randrange(*r)
             if self.proxy:
-                logger.info('ScraperThread ({ip}:{port} {} is sleeping for {} seconds...tzzzz'.format(self._ident, j, ip=self.proxy.host, port=self.proxy.port))
+                logger.info('ScraperThread ({ip}:{port} {} is sleeping for {} seconds...Next keyword: [{kw}]'.format(self._ident, j, ip=self.proxy.host, port=self.proxy.port, kw=kw))
             else:
-                logger.info('ScraperThread ({} is sleeping for {} seconds...tzzzz'.format(self._ident, j))
+                logger.info('ScraperThread ({} is sleeping for {} seconds...Next keyword: [{}]'.format(self._ident, j, kw))
             time.sleep(j)
             try:
                 self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
             except Exception as e:
                 raise Exception(e) # fix that later
             self.element.clear()
+            time.sleep(.25)
             self.element.send_keys(kw + Keys.ENTER)
+            # Waiting until the keyword appears in the title may
+            # not be enough. The content may still be off the old page.
             try:
-                WebDriverWait(self.webdriver, 5).until(EC.title_contains(kw))
+                WebDriverWait(self.webdriver, 15).until(EC.title_contains(kw))
             except TimeoutException as e:
                 print('Keyword not found in title: {}'.format(e))
                 continue
+            # That's because we sleep explicitly one second, so the site and
+            # whatever js loads all shit dynamically has time to update the
+            # DOM accordingly.
+            time.sleep(2.5)
+
             html = self._maybe_crop(self.webdriver.page_source)
             # Lock for the sake that two threads write to same file (not probable)
             self.rlock.acquire()
@@ -943,7 +1037,7 @@ class Google_SERP_Parser():
             self.dom = lxml.html.document_fromstring(self.html, parser=parser)
             self.dom.resolve_base_href()
         except Exception as e:
-            print('Some error occurred while lxml tried to parse: {}'.format(e.msg))
+            print('Some error occurred while lxml tried to parse: {}'.format(e))
 
         # Very redundant by now, but might change in the soon future
         if self.searchtype == 'normal':
@@ -1382,6 +1476,8 @@ def handle_commandline(args):
     if args.keywords and args.kwfile:
         raise ValueError(
             'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty whore')
+    elif not args.keywords and not args.kwfile:
+        raise ValueError('You must specify a keyword file (separated by newlines, each keyword on a line) with the flag `--keyword-file {filepath}~')
 
     if args.fix_cache_names:
         fix_broken_cache_names()
@@ -1389,7 +1485,7 @@ def handle_commandline(args):
 
     # Split keywords by whitespaces
     if args.keywords:
-        args.keywords = re.split('\s', args.keywords)
+        args.keywords = set(re.split('\s', args.keywords))
         del args.kwfile
     elif args.kwfile:
         if not os.path.exists(args.kwfile):
@@ -1431,7 +1527,7 @@ def handle_commandline(args):
 
         # First of all, lets see hom many keywords remain to scrape after parsing the cache
         if Config['do_caching']:
-            remaining = parse_all_cached_files(args.keywords, conn)
+            remaining = parse_all_cached_files(args.keywords, conn, simulate=args.simulate)
         else:
             remaining = args.keywords
 
@@ -1443,7 +1539,8 @@ def handle_commandline(args):
         if len(remaining) > Config['max_sel_browsers']:
             kwgroups = grouper(remaining, len(remaining)//Config['max_sel_browsers'], fillvalue=None)
         else:
-            kwgroups = remaining
+            # thats a little special there :)
+            kwgroups = [[kw, ] for kw in remaining]
 
         # Distribute the proxies evenly on the kws to search
         browsers = []
@@ -1474,35 +1571,40 @@ def handle_commandline(args):
         conn.close()
     else:
         if args.deep_scrape:
-            raise NotImplementedError('Sorry. Currently not implemented.')
             results = deep_scrape(args.query)
+            raise NotImplementedError('Sorry. Currently not implemented.')
+
         else:
-            results = scrape(args.keywords[0], args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
+            results = []
+            for kw in args.keywords:
+                r = scrape(kw, args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
+                results.append(r)
 
-        for result in results:
-            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
-                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-            if args.view:
-                import webbrowser
-                webbrowser.open(result['cache_file'])
-            import textwrap
+        for t in results:
+            for result in t:
+                logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+                    len(result['results']), result['search_keyword'], result['num_results_for_kw']))
+                if args.view:
+                    import webbrowser
+                    webbrowser.open(result['cache_file'])
+                import textwrap
 
-            for result_set in ('results', 'ads_main', 'ads_aside'):
-                if result_set in result.keys():
-                    print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
-                    for link_title, link_snippet, link_url, link_position in result[result_set]:
-                        try:
-                            print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
-                        except AttributeError as ae:
-                            print(ae)
-                        if args.verbosity > 1:
-                            print(
-                                '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
-                            print(
-                                '  Description: \n{}\n'.format(
-                                    textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
-                            print('*' * 70)
-                            print()
+                for result_set in ('results', 'ads_main', 'ads_aside'):
+                    if result_set in result.keys():
+                        print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
+                        for link_title, link_snippet, link_url, link_position in result[result_set]:
+                            try:
+                                print('  Link: {}'.format(urllib.parse.unquote(link_url.geturl())))
+                            except AttributeError as ae:
+                                print(ae)
+                            if args.verbosity > 1:
+                                print(
+                                    '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
+                                print(
+                                    '  Description: \n{}\n'.format(
+                                        textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
+                                print('*' * 70)
+                                print()
 
 if __name__ == '__main__':
     handle_commandline(get_command_line())
