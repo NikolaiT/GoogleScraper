@@ -13,8 +13,9 @@
 ### Installation
 
 GoogleScraper is written in Python 3. Therefore install at least python 3.3
+Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium (I didn't have to).
 
-You need to install the following third part modules:
+Proceed to install the following third part modules:
 
 ```
 lxml
