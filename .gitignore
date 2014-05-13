@@ -9,6 +9,8 @@ instructions
 # ignore tests
 tests/
 
+results*
+
 # cache for GoogleScraper testings
 .scrapecache/
 
