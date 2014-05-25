@@ -4,7 +4,7 @@
 
 1. [Installation](#install)
 2. [About](#about)
-3. [Usage](#usage)
+3. [Usage with Python](#usage)
 4. [Command line usage (read this!)](#cli-usage)
 5. [Contact](#contact)
 
@@ -106,6 +106,7 @@ Some interesting technologies/software to do so:
 
 <a name="usage" \>
 ### Example Usage
+Here you can learn how to use GoogleScrape from within your own Python scripts.
 
 Keep in mind that the bottom example source uses the not very powerful *http* scrape method. Look [here](#cli-usage) if you
 need to unleash the full power of GoogleScraper.
@@ -309,7 +310,7 @@ the following:
 python GoogleScraper.py sel --keyword-file path/to/keywordfile
 ```
 
-Whereas *sel* marks the mode as 'selenium'. This means GoogleScraper scrapes with real browsers. This is pretty powerful, since
+Here *sel* marks the scraping mode as 'selenium'. This means GoogleScraper.py scrapes with real browsers. This is pretty powerful, since
 you can scrape long and a lot of sites (Google has a hard time blocking real browsers). The argument of the flag `--keyword-file` must be a file with keywords separated by
 newlines. So: For every google query one line. Easy, isnt' it?
 
@@ -323,6 +324,17 @@ allintext:"You have a Mysql Error in your"
 intitle:"admin config"
 Best brothels in atlanta
 ```
+
+By default, *sel* mode only requests the first 10 results for each keyword. But you can specify on how many Google result pages
+you want to scrape every keyword. Just use the **-p** parameter as shown below:
+
+```
+# searches all keywords in the keywordfile on 10 result pages
+python GoogleScraper.py sel --keyword-file path/to/keywordfile -p 10
+```
+
+By now, you have 10 results per page by default (google returns up to 100 results per page), but this will also be configurable in the near future. *http* mode
+supports up to 100 results per page.
 
 After the scraping you'll automatically have a new sqlite3 database in the project directory (with a date time string as file name). You can open the database with any sqlite3 command
 line tool or other software.

@@ -3,6 +3,8 @@ instructions
 # all dirs that start with a point
 .*/
 
+.ipynb_checkpoints
+
 # PyCharm editor
 .idea/
 
