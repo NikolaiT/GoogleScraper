@@ -844,7 +844,7 @@ class SelScraper(threading.Thread):
     def _parse_config(self, config):
         """Parse the config parameter given in the constructor.
 
-        Firsty apply some default values. The config parameter overwrites them, if given.
+        First apply some default values. The config parameter overwrites them, if given.
         """
         assert isinstance(config, dict)
 
@@ -861,7 +861,7 @@ class SelScraper(threading.Thread):
         self.config['num_pages'] = 1
         # and overwrite with options given with the constructors parameter
         for key, value in config.items():
-            self.config.update(key, value)
+            self.config.update({key: value})
 
     def _largest_sleep_range(self, i):
         assert i >= 0
@@ -957,58 +957,59 @@ class SelScraper(threading.Thread):
         self._get_webdriver()
         self.webdriver.set_window_size(400, 400)
         self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(self.browser_num > 4))
-        self.webdriver.get(self.url)
 
-        try:
-            if self.config['num_results'] != 10:
-                self.webdriver.get('http://www.google.com/preferences?hl=en&fg=1')
-                WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="num"]')))
-                # now set the input to the num we want
-
-            else:
-                self.webdriver.get(self.url)
-                self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
-        except WebDriverException as e:
-            print(e)
-        #setup the search configuration manually
-
+        next_url = ''
+        write_kw = True
         for i, kw in enumerate(self.keywords):
             if not kw:
                 continue
-            # match the largest sleep range
-            r = self._largest_sleep_range(i)
-            j = random.randrange(*r)
-            if self.proxy:
-                logger.info('ScraperThread ({ip}:{port} {} is sleeping for {} seconds...Next keyword: [{kw}]'.format(self._ident, j, ip=self.proxy.host, port=self.proxy.port, kw=kw))
-            else:
-                logger.info('ScraperThread ({} is sleeping for {} seconds...Next keyword: [{}]'.format(self._ident, j, kw))
-            time.sleep(j)
-            try:
-                self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
-            except Exception as e:
-                raise Exception(e) # fix that later
-            self.element.clear()
-            time.sleep(.25)
-            self.element.send_keys(kw + Keys.ENTER)
-            # Waiting until the keyword appears in the title may
-            # not be enough. The content may still be off the old page.
-            try:
-                WebDriverWait(self.webdriver, 30).until(EC.title_contains(kw))
-            except TimeoutException as e:
-                print('Keyword not found in title: {}'.format(e))
-                continue
-            # That's because we sleep explicitly one second, so the site and
-            # whatever js loads all shit dynamically has time to update the
-            # DOM accordingly.
-            time.sleep(2.5)
+            for page_num in range(self.config.get('num_pages')):
+                if not next_url:
+                    next_url = self.url
+                self.webdriver.get(next_url)
+                # match the largest sleep range
+                r = self._largest_sleep_range(i)
+                j = random.randrange(*r)
+                if self.proxy:
+                    logger.info('ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: [{kw}]'.format(self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
+                else:
+                    logger.info('ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: [{}]'.format(self._ident, j, kw, url=next_url))
+                time.sleep(j)
+                try:
+                    self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
+                except Exception as e:
+                    raise Exception(e) # fix that later
+                if write_kw:
+                    self.element.clear()
+                    time.sleep(.25)
+                    self.element.send_keys(kw + Keys.ENTER)
+                    write_kw = False
+                # Waiting until the keyword appears in the title may
+                # not be enough. The content may still be off the old page.
+                try:
+                    WebDriverWait(self.webdriver, 30).until(EC.title_contains(kw))
+                except TimeoutException as e:
+                    print('Keyword not found in title: {}'.format(e))
+                    continue
 
-            html = self._maybe_crop(self.webdriver.page_source)
-            # Lock for the sake that two threads write to same file (not probable)
-            self.rlock.acquire()
-            cache_results(html, kw, url=self.url)
-            self.rlock.release()
-            # commit in intervals specified in the config
-            self.queue.put(_get_parse_links(html, kw, ip=self.ip))
+                try:
+                    next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
+                except WebDriverException as e:
+                    # leave if no next results page is available
+                    break
+
+                # That's because we sleep explicitly one second, so the site and
+                # whatever js loads all shit dynamically has time to update the
+                # DOM accordingly.
+                time.sleep(2.5)
+
+                html = self._maybe_crop(self.webdriver.page_source)
+                # Lock for the sake that two threads write to same file (not probable)
+                self.rlock.acquire()
+                cache_results(html, kw, url=self.url)
+                self.rlock.release()
+                # commit in intervals specified in the config
+                self.queue.put(_get_parse_links(html, kw, ip=self.ip))
 
         self.webdriver.close()
 
@@ -1471,10 +1472,10 @@ def get_command_line():
     parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', help='The search keywords to scrape for. Seperated by white spaces.')
     parser.add_argument('--keyword-file', type=str, action='store', dest='kwfile',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
-    parser.add_argument('-n', '--num_results_per_page', metavar='number_of_results_per_page', type=int,
-                        dest='num_results_per_page', action='store', default=50,
+    parser.add_argument('-n', '--num-results-per-page', metavar='number_of_results_per_page', type=int,
+                         action='store', default=50,
                         help='The number of results per page. Most be >= 100')
-    parser.add_argument('-p', '--num_pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
+    parser.add_argument('-p', '--num-pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1,
                         help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
@@ -1589,10 +1590,14 @@ def handle_commandline(args):
         if not proxies:
             logger.info("No ip's available for scanning.")
 
+        config = {
+            'num_results': args.num_results_per_page,
+            'num_pages': args.num_pages
+        }
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, chunk in enumerate(kwgroups):
             if args.scrapemethod == 'sel':
-                scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, config={}, proxy=proxies[i//chunks_per_proxy]))
+                scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, config=config, proxy=proxies[i//chunks_per_proxy]))
 
         for t in scrapejobs:
             t.start()
