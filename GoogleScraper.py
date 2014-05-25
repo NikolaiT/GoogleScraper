@@ -27,8 +27,8 @@ Debug:
 Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
-__VERSION__ = '0.7'
-__UPDATED__ = '13.05.2014'  # day.month.year
+__VERSION__ = '0.8'
+__UPDATED__ = '23.05.2014'  # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -831,7 +831,7 @@ class SelScraper(threading.Thread):
     def __init__(self, keywords, rlock, queue, config={}, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
-        logger.info('[++]SelScraper object created. Number of keywords to scrape={}, proxy used={}, browser_num={}'.format(len(keywords), proxy, browser_num))
+        logger.info('[+] SelScraper object created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(len(keywords), proxy, config.get('num_pages', '1'), browser_num))
         self.url = Config['sel_scraper_base_url']
         self.proxy = proxy
         self.browser_num = browser_num
@@ -963,7 +963,7 @@ class SelScraper(threading.Thread):
         for i, kw in enumerate(self.keywords):
             if not kw:
                 continue
-            for page_num in range(self.config.get('num_pages')):
+            for page_num in range(0, int(self.config.get('num_pages'))):
                 if not next_url:
                     next_url = self.url
                 self.webdriver.get(next_url)
@@ -971,9 +971,9 @@ class SelScraper(threading.Thread):
                 r = self._largest_sleep_range(i)
                 j = random.randrange(*r)
                 if self.proxy:
-                    logger.info('ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: [{kw}]'.format(self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
+                    logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
                 else:
-                    logger.info('ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: [{}]'.format(self._ident, j, kw, url=next_url))
+                    logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, j, kw, url=next_url))
                 time.sleep(j)
                 try:
                     self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
@@ -1469,15 +1469,14 @@ def get_command_line():
     parser.add_argument('scrapemethod', type=str,
                         help='The scraping type. There are currently two types: "http" and "sel". Http scrapes with raw http requests whereas "sel" uses selenium remote browser programming',
                         choices=('http', 'sel'), default='sel')
-    parser.add_argument('-q', '--keywords', metavar='keywords', type=str, action='store', dest='keywords', help='The search keywords to scrape for. Seperated by white spaces.')
+    parser.add_argument('-q', '--keyword', metavar='keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
     parser.add_argument('--keyword-file', type=str, action='store', dest='kwfile',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
     parser.add_argument('-n', '--num-results-per-page', metavar='number_of_results_per_page', type=int,
                          action='store', default=50,
                         help='The number of results per page. Most be >= 100')
     parser.add_argument('-p', '--num-pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
-                        default=1,
-                        help='The number of pages to search in. Each page is requested by a unique connection and if possible by a unique IP.')
+                        default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
                         action='store',
                         default='stdout', choices=('database', 'stdout'), help='Where/how to put/show the results.')
@@ -1505,42 +1504,36 @@ def get_command_line():
 
 
 def handle_commandline(args):
-    """Handles the command line arguments as given by get_command_line()"""
+    """Handles the command line arguments as supplied by get_command_line()"""
 
     if args.debug:
         setup_logger(logging.DEBUG)
     else:
         setup_logger(logging.INFO)
 
-    if args.keywords and args.kwfile:
+    if args.keyword and args.kwfile:
         raise ValueError(
-            'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty whore')
-    elif not args.keywords and not args.kwfile:
+           'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty cocksucker')
+    elif not args.keyword and not args.kwfile:
         raise ValueError('You must specify a keyword file (separated by newlines, each keyword on a line) with the flag `--keyword-file {filepath}~')
 
     if args.fix_cache_names:
         fix_broken_cache_names()
         sys.exit('renaming done. restart for normal use.')
 
-    # Split keywords by whitespaces
-    if args.keywords:
-        args.keywords = set(re.split('\s', args.keywords))
-        del args.kwfile
-    elif args.kwfile:
+    keywords = [args.keyword,]
+    if args.kwfile:
         if not os.path.exists(args.kwfile):
             raise ValueError('The keyword file {} does not exist.'.format(args.kwfile))
         else:
-            # Clean the keywords right in the beginning of all
-            args.keywords = {line.strip() for line in open(args.kwfile, 'r').read().split('\n')}
+            # Clean the keywords of duplicates right in the beginning
+            keywords = set([line.strip() for line in open(args.kwfile, 'r').read().split('\n')])
 
     if args.check_oto:
-        _caching_is_one_to_one(args.keywords)
+        _caching_is_one_to_one(args.keyword)
 
     if int(args.num_results_per_page) > 100:
-        raise ValueError('Not more that 100 results per page.')
-
-    if int(args.num_pages) > 20:
-        raise ValueError('Not more that 20 pages.')
+        raise ValueError('Not more that 100 results per page available for google.com')
 
     if args.proxy_file:
         proxies = parse_proxy_file(args.proxy_file)
@@ -1554,26 +1547,15 @@ def handle_commandline(args):
     # Let the games begin
     if args.scrapemethod == 'sel':
         conn = maybe_create_db()
-        # # Setup a signal handler
-        # def signal_handler(signal, frame):
-        #     print('Ctrl-c was pressed, shall I commit all changes to db?')
-        #     if input('Yes (y) or No (n) ?\n>>> ').lower().strip() == 'y':
-        #         conn.commit()
-        #     conn.close()
-        #     sys.exit(0)
-        #
-        # signal.signal(signal.SIGINT, signal_handler)
-
         # First of all, lets see how many keywords remain to scrape after parsing the cache
         if Config['do_caching']:
-            remaining = parse_all_cached_files(args.keywords, conn, simulate=args.simulate)
+            remaining = parse_all_cached_files(keywords, conn, simulate=args.simulate)
         else:
-            remaining = args.keywords
+            remaining = keywords
 
         if args.simulate:
-            # TODO: implement simulating infos
+            # TODO: implement simulation
             raise NotImplementedError('simulating is not implemented yet!')
-            sys.exit(0)
 
         rlock = threading.RLock()
 
@@ -1621,7 +1603,7 @@ def handle_commandline(args):
 
         else:
             results = []
-            for kw in args.keywords:
+            for kw in keywords:
                 r = scrape(kw, args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
                 results.append(r)
         if args.print:
