@@ -103,7 +103,7 @@ Config = {
     # After how many hours should the cache be cleaned
     'clean_cache_after': 24,
     # The maximal amount of selenium browser windows running in parallel
-    'max_sel_browsers': 12,
+    'max_sel_browsers': 8,
     # Commit changes to db every N requests per GET/POST request
     'commit_interval': 10,
     # Whether to scrape with own ip address or just with proxies
@@ -346,7 +346,7 @@ def fix_broken_cache_names(url=Config['sel_scraper_base_url']):
             os.rename(src, dst)
     logger.debug('Renamed {} files.'.format(i))
 
-def _parse_links(data, conn, kw, ip='127.0.0.1'):
+def _parse_links(data, conn, kw, page_num=1, ip='127.0.0.1'):
     """Insert parsed data into the database. High level parsing function.
 
     Args:
@@ -355,20 +355,23 @@ def _parse_links(data, conn, kw, ip='127.0.0.1'):
     """
     parser = Google_SERP_Parser(data)
     results = parser.links
-    conn.execute(
-        'INSERT INTO serp_page (requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?)',
-        (time.asctime(), len(results), parser.num_results() or '',  kw, ip))
+    conn.execute('''
+        INSERT INTO serp_page
+         (page_number, requested_at,
+         num_results, num_results_for_kw_google,
+         search_query, requested_by)
+         VALUES(?, ?, ?, ?, ?, ?)''',
+           (page_num, time.asctime(), len(results), parser.num_results() or '',  kw, ip))
     lastrowid = conn.lastrowid
     #logger.debug('Inserting in link: search_query={}, title={}, url={}'.format(kw, ))
     conn.executemany('''INSERT INTO link
-    (search_query,
-     title,
+    ( title,
      url,
      snippet,
      rank,
      domain,
-     serp_id) VALUES(?, ?, ?, ?, ?, ?, ?)''',
-    [(kw,
+     serp_id) VALUES(?, ?, ?, ?, ?, ?)''',
+    [(
       result.link_title,
       result.link_url.geturl(),
       result.link_snippet,
@@ -376,7 +379,7 @@ def _parse_links(data, conn, kw, ip='127.0.0.1'):
       result.link_url.hostname) +
      (lastrowid, ) for result in results])
 
-def _get_parse_links(data, kw, ip='127.0.0.1'):
+def _get_parse_links(data, kw, page_num = 1, ip='127.0.0.1'):
     """Act the same as _parse_links, but just return the db data instead of inserting data into a connection or
     or building actual queries.
 
@@ -386,15 +389,16 @@ def _get_parse_links(data, kw, ip='127.0.0.1'):
     """
     parser = Google_SERP_Parser(data)
     results = parser.links
-    first = (time.asctime(),
-        len(results),
-        parser.num_results() or '',
-        kw,
-        ip)
+    first = (page_num,
+             time.asctime(),
+            len(results),
+            parser.num_results() or '',
+            kw,
+            ip)
 
     second = []
     for result in results:
-        second.append([kw,
+        second.append([
           result.link_title,
           result.link_url.geturl(),
           result.link_snippet,
@@ -855,7 +859,7 @@ class SelScraper(threading.Thread):
             7: (1, 5),
             # 19: (20, 40),
             57: (50, 120),
-            # 127: (60*3, 60*6)
+            127: (60*3, 60*6)
         }
         self.config['num_results'] = 10
         self.config['num_pages'] = 1
@@ -958,11 +962,11 @@ class SelScraper(threading.Thread):
         self.webdriver.set_window_size(400, 400)
         self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(self.browser_num > 4))
 
-        next_url = ''
-        write_kw = True
         for i, kw in enumerate(self.keywords):
             if not kw:
                 continue
+            write_kw = True
+            next_url = ''
             for page_num in range(0, int(self.config.get('num_pages'))):
                 if not next_url:
                     next_url = self.url
@@ -978,7 +982,7 @@ class SelScraper(threading.Thread):
                 try:
                     self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
                 except Exception as e:
-                    raise Exception(e) # fix that later
+                    raise Exception('Couldn\'t locate input field {}'.format(e))
                 if write_kw:
                     self.element.clear()
                     time.sleep(.25)
@@ -993,7 +997,11 @@ class SelScraper(threading.Thread):
                     continue
 
                 try:
+                    # wait until the next page link emerges
+                    WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '#pnnext')))
                     next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
+                except TimeoutException as te:
+                    print('Cannot locate next page html id #pnnext')
                 except WebDriverException as e:
                     # leave if no next results page is available
                     break
@@ -1009,7 +1017,7 @@ class SelScraper(threading.Thread):
                 cache_results(html, kw, url=self.url)
                 self.rlock.release()
                 # commit in intervals specified in the config
-                self.queue.put(_get_parse_links(html, kw, ip=self.ip))
+                self.queue.put(_get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
 
         self.webdriver.close()
 
@@ -1259,17 +1267,16 @@ class ResultsHandler(threading.Thread):
         assert isinstance(e, tuple) and len(e) == 2
         first, second = e
         self.cursor.execute(
-            'INSERT INTO serp_page (requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?)', first)
+            'INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?, ?)', first)
         lastrowid = self.cursor.lastrowid
         #logger.debug('Inserting in link: search_query={}, title={}, url={}'.format(kw, ))
         self.cursor.executemany('''INSERT INTO link
-        (search_query,
-         title,
+        ( title,
          url,
          snippet,
          rank,
          domain,
-         serp_id) VALUES(?, ?, ?, ?, ?, ?, ?)''', [tuple(t)+ (lastrowid, ) for t in second])
+         serp_id) VALUES(?, ?, ?, ?, ?, ?)''', [tuple(t)+ (lastrowid, ) for t in second])
 
     def run(self):
         i = 0
@@ -1376,6 +1383,7 @@ def maybe_create_db():
         CREATE TABLE serp_page
         (
              id INTEGER PRIMARY KEY AUTOINCREMENT,
+             page_number INT NOT NULL,
              requested_at TEXT NOT NULL,
              num_results INTEGER NOT NULL,
              num_results_for_kw_google TEXT,
@@ -1386,7 +1394,6 @@ def maybe_create_db():
         CREATE TABLE link
         (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            search_query TEXT NOT NULL,
             title TEXT,
             snippet TEXT,
             url TEXT,
@@ -1474,7 +1481,9 @@ def get_command_line():
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
     parser.add_argument('-n', '--num-results-per-page', metavar='number_of_results_per_page', type=int,
                          action='store', default=50,
-                        help='The number of results per page. Most be >= 100')
+                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for sel mode.')
+    parser.add_argument('-z', '--num-browser-instances', metavar='num_browser_instances', type=int,
+                        action='store',  help='This arguments sets the number of browser instances to use in `sel` mode. In raw mode, this argument is quitely ignored.')
     parser.add_argument('-p', '--num-pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
@@ -1559,8 +1568,9 @@ def handle_commandline(args):
 
         rlock = threading.RLock()
 
-        if len(remaining) > Config['max_sel_browsers']:
-            kwgroups = grouper(remaining, len(remaining)//Config['max_sel_browsers'], fillvalue=None)
+        max_sel_browsers = args.num_browser_instances or Config['max_sel_browsers']
+        if len(remaining) > max_sel_browsers:
+            kwgroups = grouper(remaining, len(remaining)//max_sel_browsers, fillvalue=None)
         else:
             # thats a little special there :)
             kwgroups = [[kw, ] for kw in remaining]
