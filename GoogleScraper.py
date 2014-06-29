@@ -2,9 +2,6 @@
 # -*- coding: utf-8 -*-
 
 """
-Complete rewrite.
-Many thanks go to v3nz3n
-
 This is a little module that uses Google to automate search
 queries. It gives straightforward access to all relevant data of Google such as
 - The links of the result page
@@ -16,19 +13,16 @@ queries. It gives straightforward access to all relevant data of Google such as
 GoogleScraper's architecture outlined:
 - Proxy support (Socks5, Socks4, HTTP Proxy)
 - Threading support
-
-The module implements some countermeasures to circumvent spamming detection
-from the Google Servers:
-- Small time interval between parallel requests
+- three different modes:
+    + requesting with raw http packets
+    + using the selenium web driver framework
+    + scraping with phantomjs (planned)
 
 Note: Scraping compromises the google terms of service (TOS).
-
-Debug:
-Get a jQuery selector in a console: (function() {var e = document.createElement('script'); e.src = '//ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js'; document.getElementsByTagName('head')[0].appendChild(e); jQuery.noConflict(); })();
 """
 
-__VERSION__ = '0.8'
-__UPDATED__ = '23.05.2014'  # day.month.year
+__VERSION__ = '1.0dev'
+__UPDATED__ = '27.06.2014'  # day.month.year
 __AUTHOR__ = 'Nikolai Tschacher'
 __WEBSITE__ = 'incolumitas.com'
 
@@ -42,8 +36,10 @@ import argparse
 import threading
 from collections import namedtuple
 import hashlib
+import configparser
 import re
 import queue
+import socket
 import time
 import signal
 import lxml.html
@@ -54,10 +50,9 @@ import random
 import zlib
 
 try:
-    import requests
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
-    #import socks  # should be in the same directory
+    import socks  # should be in the same directory
     from selenium import webdriver
     from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.webdriver.common.keys import Keys
@@ -68,7 +63,11 @@ try:
 except ImportError as ie:
     if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
         print('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
-        sys.exit(1)
+        sys.exit(-1)
+    if ie.name == 'socks':
+        print('socks is not installed. Try this one: https://github.com/Anorov/PySocks')
+        sys.exit(-1)
+
     print(ie)
     print('You can install missing modules with `pip3 install [modulename]`')
     sys.exit(1)
@@ -92,58 +91,63 @@ def setup_logger(level=logging.INFO):
         setattr(sys.modules[__name__], 'logger', logger)
 
 Config = {
-    # The database name, with a timestamp as fmt
-    'db': 'results_{asctime}.db',
-    # The directory path for cached google results
-    'do_caching': True,
-    # If set, then compress/decompress files with this algorithm
-    'compress_cached_files': True,
-    # Whether caching shall be enabled
-    'cachedir': '.scrapecache/',
-    # After how many hours should the cache be cleaned
-    'clean_cache_after': 24,
-    # The maximal amount of selenium browser windows running in parallel
-    'max_sel_browsers': 8,
-    # Commit changes to db every N requests per GET/POST request
-    'commit_interval': 10,
-    # Whether to scrape with own ip address or just with proxies
-    'use_own_ip': True,
-    # The base Google URL for SelScraper objects
-    'sel_scraper_base_url': 'http://www.google.com/ncr',
-    # unique identifier that is sent to signal that a queue has
-    # processed all inputs
-    'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr',
-    # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
-    'sel_browser': 'Chrome'
+    'SCRAPING': {
+        # Whether to scrape with own ip address or just with proxies
+        'use_own_ip': True,
+    },
+    'GLOBAL': {
+        # The database name, with a timestamp as fmt
+        'db': 'results_{asctime}.db',
+        # The directory path for cached google results
+        'do_caching': True,
+        # If set, then compress/decompress files with this algorithm
+        'compress_cached_files': True,
+        # Whether caching shall be enabled
+        'cachedir': '.scrapecache/',
+        # After how many hours should the cache be cleaned
+        'clean_cache_after': 24,
+        # Commit changes to db every N requests per GET/POST request
+        'commit_interval': 10,
+        # unique identifier that is sent to signal that a queue has
+        # processed all inputs
+        'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr',
+    },
+    'SELENIUM': {
+        # The maximal amount of selenium browser windows running in parallel
+        'num_browser_instances': 8,
+        # The base Google URL for SelScraper objects
+        'sel_scraper_base_url': 'http://www.google.com/ncr',
+        # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
+        'sel_browser': 'Chrome',
+    },
+    'HTTP': {
+
+    },
+    'GOOGLE_SEARCH_PARAMS': {
+
+    }
 }
 
+CONFIG_FILE = os.path.abspath('config.cfg')
+
+Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
+
 class GoogleSearchError(Exception): pass
-
 class InvalidNumberResultsException(GoogleSearchError): pass
-
-
-if Config['do_caching']:
-    if not os.path.exists(Config['cachedir']):
-        os.mkdir(Config['cachedir'], 0o744)
 
 
 def maybe_clean_cache():
     """Delete all .cache files in the cache directory that are older than 12 hours."""
-    for fname in os.listdir(Config['cachedir']):
-        path = os.path.join(Config['cachedir'], fname)
-        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['clean_cache_after']):
+    for fname in os.listdir(Config['GLOBAL'].get('cachedir')):
+        path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
+        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after')):
             if os.path.isdir(path):
                 import shutil
                 shutil.rmtree(path)
             else:
-                os.remove(os.path.join(Config['cachedir'], fname))
+                os.remove(os.path.join(Config['GLOBAL'].get('cachedir'), fname))
 
-if Config['do_caching']:
-    # Clean the Config['cachedir'] once in a while
-    maybe_clean_cache()
-
-
-def cached_file_name(kw, url=Config['sel_scraper_base_url'], params={}):
+def cached_file_name(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}):
     """Make a unique file name based on the values of the google search parameters.
 
         kw -- The search keyword
@@ -172,7 +176,7 @@ def cached_file_name(kw, url=Config['sel_scraper_base_url'], params={}):
     return '{}.{}'.format(sha.hexdigest(), 'cache')
 
 
-def get_cached(kw, url=Config['sel_scraper_base_url'], params={}, cache_dir=''):
+def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, cache_dir=''):
     """Loads a cached search results page from CACHEDIR/fname.cache
 
     It helps in testing and avoid requesting
@@ -183,20 +187,20 @@ def get_cached(kw, url=Config['sel_scraper_base_url'], params={}, cache_dir=''):
     --decompress What algorithm to use for decompression
     """
 
-    if Config['do_caching']:
+    if Config['GLOBAL'].getboolean('do_caching'):
         fname = cached_file_name(kw, url, params)
 
         if os.path.exists(cache_dir) and cache_dir:
             cdir = cache_dir
         else:
-            cdir = Config['cachedir']
+            cdir = Config['GLOBAL'].get('cachedir')
 
         try:
             if fname in os.listdir(cdir):
                 # If the cached file is older than 12 hours, return False and thus
                 # make a new fresh request.
                 modtime = os.path.getmtime(os.path.join(cdir, fname))
-                if (time.time() - modtime) / 60 / 60 > Config['clean_cache_after']:
+                if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after'):
                     return False
                 path = os.path.join(cdir, fname)
                 return read_cached_file(path)
@@ -210,13 +214,13 @@ def read_cached_file(path, n=2):
     """Read a zipped or unzipped cache file."""
     assert n != 0
 
-    if Config['compress_cached_files']:
+    if Config['GLOBAL'].getboolean('compress_cached_files'):
         with open(path, 'rb') as fd:
             try:
                 data = zlib.decompress(fd.read()).decode()
                 return data
             except zlib.error:
-                Config['compress_cached_files'] = False
+                Config.set('GLOBAL', 'compress_cached_files',  False)
                 return read_cached_file(path, n-1)
     else:
         with open(path, 'r') as fd:
@@ -229,41 +233,41 @@ def read_cached_file(path, n=2):
                 # set to false. Try to decompress them, but this may
                 # lead to a infinite recursion. This isn't proper coding,
                 # but convenient for the end user.
-                Config['compress_cached_files'] = True
+                Config.set('GLOBAL', 'compress_cached_files', True)
                 return read_cached_file(path, n-1)
 
-def cache_results(html, kw, url=Config['sel_scraper_base_url'], params={}):
-    """Stores a html resource as a file in Config['cachedir']/fname.cache
+def cache_results(html, kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}):
+    """Stores a html resource as a file in Config['GLOBAL'].get('cachedir')/fname.cache
 
     This will always write(overwrite) the cache file. If compress_cached_files is
     True, the page is written in bytes (obviously).
     """
-    if Config['do_caching']:
+    if Config['GLOBAL'].getboolean('do_caching'):
         fname = cached_file_name(kw, url=url, params=params)
-        path = os.path.join(Config['cachedir'], fname)
+        path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
 
-        if Config['compress_cached_files']:
+        if Config['GLOBAL'].getboolean('compress_cached_files'):
             with open(path, 'wb') as fd:
                 if isinstance(html, bytes):
                     fd.write(zlib.compress(html, 5))
                 else:
                     fd.write(zlib.compress(html.encode('utf-8'), 5))
         else:
-            with open(os.path.join(Config['cachedir'], fname), 'w') as fd:
+            with open(os.path.join(Config['GLOBAL'].get('cachedir'), fname), 'w') as fd:
                 if isinstance(html, bytes):
                     fd.write(html.decode())
                 else:
                     fd.write(html)
 
 def _get_all_cache_files():
-    """Return all files found in Config['cachedir']."""
+    """Return all files found in Config['GLOBAL'].get('cachedir')."""
     files = set()
-    for dirpath, dirname, filenames in os.walk(Config['cachedir']):
+    for dirpath, dirname, filenames in os.walk(Config['GLOBAL'].get('cachedir')):
         for name in filenames:
             files.add(os.path.join(dirpath, name))
     return files
 
-def _caching_is_one_to_one(keywords, url=Config['sel_scraper_base_url']):
+def _caching_is_one_to_one(keywords, url=Config['SELENIUM']['sel_scraper_base_url']):
     mappings = {}
     for kw in keywords:
         hash = cached_file_name(kw, url)
@@ -279,7 +283,7 @@ def _caching_is_one_to_one(keywords, url=Config['sel_scraper_base_url']):
         print('one-to-one')
     sys.exit(0)
 
-def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], try_harder=True, simulate=False):
+def parse_all_cached_files(keywords, conn, url=Config['SELENIUM']['sel_scraper_base_url'], try_harder=True, simulate=False):
     """Walk recursively through the cachedir (as given by the Config) and parse cache files.
 
     Arguments:
@@ -298,7 +302,7 @@ def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], t
     files = _get_all_cache_files()
     mapping = {cached_file_name(kw, url): kw for kw in keywords}
     diff = set(mapping.keys()).difference({os.path.split(path)[1] for path in files})
-    logger.info('{} cache files found in {}'.format(len(files), Config['cachedir']))
+    logger.info('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')))
     logger.info('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(len(keywords)-len(diff), len(keywords), len(diff)))
     if simulate:
         sys.exit(0)
@@ -323,14 +327,14 @@ def parse_all_cached_files(keywords, conn, url=Config['sel_scraper_base_url'], t
     # return the remaining keywords to scrape
     return mapping.values()
 
-def fix_broken_cache_names(url=Config['sel_scraper_base_url']):
+def fix_broken_cache_names(url=Config['SELENIUM']['sel_scraper_base_url']):
     """Fix the fucking broken cache fuck shit.
 
     @param url: A list of strings to add to each cached_file_name() call.
     @return: void you cocksucker
     """
     files = _get_all_cache_files()
-    logger.debug('{} cache files found in {}'.format(len(files), Config['cachedir']))
+    logger.debug('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')))
     r = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
 
     for i, path in enumerate(files):
@@ -480,22 +484,19 @@ class GoogleScrape():
         """To be modified by the timer_support class decorator"""
         pass
 
-    def _init(self, search_query, num_results_per_page=10, num_page=0, searchtype='normal', interval=0.0,
-              search_params={}):
+    def _init(self, search_query, num_results_per_page=10, num_page=0, interval=0.0,
+              search_params={}, proxy=None):
         """Initialises an object responsible for scraping one SERP page.
 
         @param search_query: The query to scrape for.
-        @param num_results_per_page: The number of results per page. Must be smaller than 1000.
         (My tests though have shown that at most 100 results were returned per page)
-        @param num_page: The number/index of the page.
-        @param searchtype: The kind of search issued.
         @param interval: The amount of seconds to wait until executing run()
         @param search_params: A dictionary with additional search params. The default search params is updated with this parameter.
         """
 
         self.parser = None
         self.search_query = search_query
-        self.searchtype = searchtype
+        self.searchtype = Config['SCRAPING'].get('searchtype', 'normal')
         assert self.searchtype in ('normal', 'image', 'news', 'video')
 
         if num_results_per_page not in range(0,  1001):  # The maximum value of this parameter is 1000. See search appliance docs
@@ -509,7 +510,10 @@ class GoogleScrape():
         self.num_results_per_page = num_results_per_page
         self.num_page = num_page
 
-        self._SEARCH_URL = 'http://www.google.com/search'
+        if proxy:
+            self._set_proxy(proxy)
+
+        self.requests = __import__('requests')
 
         # http://www.rankpanel.com/blog/google-search-parameters/
         # typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8
@@ -670,22 +674,21 @@ class GoogleScrape():
             'search_keyword': self.search_query,  # The query keyword
         }
 
-    def _set_proxy(self):
-        pass
-        # if args.proxy:
-        #     def create_connection(address, timeout=None, source_address=None):
-        #         sock = socks.socksocket()
-        #         sock.connect(address)
-        #         return sock
-        #
-        #     proxy_host, proxy_port = args.proxy.split(':')
-        #
-        #     # Patch the socket module
-        #     socks.setdefaultproxy(socks.PROXY_TYPE_SOCKS5, proxy_host, int(proxy_port),
-        #                           rdns=True)  # rdns is by default on true. Never use rnds=False with TOR, otherwise you are screwed!
-        #     socks.wrap_module(socket)
-        #     socket.create_connection = create_connection
+    def _set_proxy(self, proxy):
+        def create_connection(address, timeout=None, source_address=None):
+            sock = socks.socksocket()
+            sock.connect(address)
+            return sock
 
+        pmapping = {
+            'socks4': 1,
+            'socks5': 2,
+            'http': 3
+        }
+        # Patch the socket module  # rdns is by default on true. Never use rnds=False with TOR, otherwise you are screwed!
+        socks.setdefaultproxy(pmapping.get(proxy.proto), proxy.host, int(proxy.port), rdns=True)
+        socks.wrap_module(socket)
+        socket.create_connection = create_connection
 
     def reset_search_params(self):
         """Reset all search params to None.
@@ -791,22 +794,22 @@ class GoogleScrape():
         # After building the query, all parameters are set, so we know what we're requesting.
         logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self._SEARCH_PARAMS)))
 
-        html = get_cached(self.search_query, self._SEARCH_URL, params=self._SEARCH_PARAMS)
-        self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['cachedir'], cached_file_name(self.search_query, self._SEARCH_URL, self._SEARCH_PARAMS))
+        html = get_cached(self.search_query, Config['GLOBAL'].get('base_search_url'), params=self._SEARCH_PARAMS)
+        self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self._SEARCH_PARAMS))
 
         if not html:
             try:
-                r = requests.get(self._SEARCH_URL, headers=self._HEADERS,
+                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self._HEADERS,
                                  params=self._SEARCH_PARAMS, timeout=3.0)
 
                 logger.debug("Scraped with url: {} and User-Agent: {}".format(r.url, self._HEADERS['User-Agent']))
 
-            except requests.ConnectionError as cerr:
-                print('Network problem occurred {}'.format(cerr.msg))
-                return False
-            except requests.Timeout as terr:
-                print('Connection timeout {}'.format(terr.msg))
-                return False
+            except self.requests.ConnectionError as ce:
+                print('Network problem occurred {}'.format(ce))
+                raise ce
+            except self.requests.Timeout as te:
+                print('Connection timeout {}'.format(te))
+                raise te
 
             if not r.ok:
                 print('HTTP Error:', r.status_code)
@@ -818,8 +821,8 @@ class GoogleScrape():
             html = r.text
 
             # cache fresh results
-            cache_results(html, self.search_query, url=self._SEARCH_URL, params=self._SEARCH_PARAMS)
-            self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['cachedir'], cached_file_name(self.search_query, self._SEARCH_URL, self._SEARCH_PARAMS))
+            cache_results(html, self.search_query, url=Config['GLOBAL'].get('base_search_url'), params=self._SEARCH_PARAMS)
+            self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self._SEARCH_PARAMS))
 
         self.parser = Google_SERP_Parser(html, searchtype=self.searchtype)
         self.SEARCH_RESULTS.update(self.parser.all_results)
@@ -832,26 +835,25 @@ class GoogleScrape():
 class SelScraper(threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google."""
 
-    def __init__(self, keywords, rlock, queue, config={}, proxy=None, browser_num=0):
+    def __init__(self, keywords, rlock, queue, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
-        logger.info('[+] SelScraper object created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(len(keywords), proxy, config.get('num_pages', '1'), browser_num))
-        self.url = Config['sel_scraper_base_url']
+        logger.info('[+] SelScraper object created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(len(keywords), proxy, Config['SCRAPING'].getint('num_of_pages', '1'), browser_num))
+        self.url = Config['SELENIUM'].get('sel_scraper_base_url',
+                                    Config['GLOBAL'].get('base_search_url'))
         self.proxy = proxy
         self.browser_num = browser_num
         self.queue = queue
         self.rlock = rlock
         self.keywords = set(keywords)
         self.ip = '127.0.0.1'
-        self._parse_config(config)
+        self._parse_config()
 
-    def _parse_config(self, config):
+    def _parse_config(self):
         """Parse the config parameter given in the constructor.
 
         First apply some default values. The config parameter overwrites them, if given.
         """
-        assert isinstance(config, dict)
-
         self.config = {}
         # Set some defaults
         # How long to sleep (ins seconds) after every n-th request
@@ -864,7 +866,7 @@ class SelScraper(threading.Thread):
         self.config['num_results'] = 10
         self.config['num_pages'] = 1
         # and overwrite with options given with the constructors parameter
-        for key, value in config.items():
+        for key, value in Config['SELENIUM'].items():
             self.config.update({key: value})
 
     def _largest_sleep_range(self, i):
@@ -900,10 +902,10 @@ class SelScraper(threading.Thread):
         May either return a Firefox or Chrome instance, according to availabilit. Chrome has
         precedence, because it's more lightweight.
         """
-        if Config['sel_browser'].lower() == 'chrome':
+        if Config['SELENIUM'].get('sel_browser', '').lower() == 'chrome':
             self._get_Chrome()
             return True
-        elif Config['sel_browser'].lower() == 'firefox':
+        elif Config['SELENIUM'].get('sel_browser', '').lower() == 'firefox':
             self._get_Firefox()
             return True
 
@@ -953,8 +955,7 @@ class SelScraper(threading.Thread):
         return False
 
     def run(self):
-        # Create the browser and align it according to its number
-        # and in maximally two rows
+        # Create the browser and align it according to its position and in maximally two rows
         if len(self.keywords) <= 0:
             return True
 
@@ -1283,19 +1284,18 @@ class ResultsHandler(threading.Thread):
         while True:
             #  If optional args block is true and timeout is None (the default), block if necessary until an item is available.
             item = self.queue.get(block=True)
-            if item == Config['all_processed_sig']:
+            if item == Config['GLOBAL']['all_processed_sig']:
                 print('turning down. All results processed.')
                 break
             self._insert_in_db(item)
             self.queue.task_done()
             # Store the
-            if i > 0 and (i % Config['commit_interval']) == 0:
+            if i > 0 and (i % Config['GLOBAL'].getint('commit_interval')) == 0:
                 # commit in intervals specified in the config
                 self.conn.commit()
             i += 1
 
-
-def scrape(query, num_results_per_page=100, num_pages=1, offset=0, searchtype='normal'):
+def scrape(query, num_results_per_page=100, num_pages=1, offset=0, proxy=None):
     """Public API function to search for terms and return a list of results.
 
     A default scrape does start each thread in intervals of 1 second.
@@ -1310,7 +1310,7 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0, searchtype='n
     offset -- specifies the offset to the page to begin searching.
 
     """
-    threads = [GoogleScrape(query, num_results_per_page, i, searchtype=searchtype, interval=i)
+    threads = [GoogleScrape(query, num_results_per_page, i, interval=i, proxy=proxy)
                    for i in range(offset, num_pages + offset, 1)]
 
     for t in threads:
@@ -1369,15 +1369,15 @@ def maybe_create_db():
     Test sql query: SELECT L.title, L.snippet, SP.search_query FROM link AS L LEFT JOIN serp_page AS SP ON L.serp_id = SP.id
     """
     # Save the database to a unique file name (with the timestamp as suffix)
-    Config['db'] = Config['db'].format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-'))
+    Config.set('GLOBAL', 'db', Config['GLOBAL'].get('db').format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-')))
 
-    if os.path.exists(Config['db']) and os.path.getsize(Config['db']) > 0:
-        conn = sqlite3.connect(Config['db'], check_same_thread=False)
+    if os.path.exists(Config['GLOBAL'].get('db')) and os.path.getsize(Config['GLOBAL'].get('db')) > 0:
+        conn = sqlite3.connect(Config['GLOBAL'].get('db'), check_same_thread=False)
         cursor = conn.cursor()
         return conn
     else:
         # set that bitch up the first time
-        conn = sqlite3.connect(Config['db'], check_same_thread=False)
+        conn = sqlite3.connect(Config['GLOBAL'].get('db'), check_same_thread=False)
         cursor = conn.cursor()
         cursor.execute('''
         CREATE TABLE serp_page
@@ -1418,7 +1418,6 @@ def parse_proxy_file(fname):
         that the proxy doesn't need auth credentials.
     """
     proxies = []
-    Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
     path = os.path.join(os.getcwd(), fname)
     if os.path.exists(path):
         with open(path, 'r') as pf:
@@ -1466,24 +1465,77 @@ def print_scrape_results_http(results, verbosity=1, view=False):
                             print('*' * 70)
                             print()
 
-def get_command_line():
-    """Parses command line arguments for scraping with selenium browser instances"""
+class ConfigDict(dict):
+    """The Config dictionary should allow attribute access.
+    http://stackoverflow.com/questions/4984647/accessing-dict-keys-like-an-attribute-in-python
+    Causes a memory leak in Python < 2.7.3 / Python3 < 3.2.3
+    """
+    def __init__(self, *args, **kwargs):
+        super(ConfigDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+        self.__sections__ = [key for key, value in
+                                self.__dict__ if isinstance(value, dict)]
+
+def parse_config(cmd_args=False):
+    """Parse and normalize the config file and return a dictionary with the arguments.
+
+        There are several places where GoogleScraper can be configured. The configuration is
+        determined (in this order, a key/value pair emerging in further down the list overwrites earlier occurrences)
+        from the following places:
+          - Program internal configuration found in the global variable Config
+          - Configuration parameters given in the config file
+          - Params supplied by command line flags
+    """
+    global Config
+
+    setup_logger(logging.INFO)
+
+    cfg_parser = configparser.ConfigParser()
+    # Add internal configuration
+    cfg_parser.read_dict(Config)
+
+    # Parse the config file
+    try:
+        cfg_parser.read_file(open(CONFIG_FILE, 'r', encoding='utf8'))
+    except Exception as e:
+        logger.error('Exception trying to parse file {}: {}'.format(CONFIG_FILE, e))
+
+    logger.setLevel(cfg_parser['GLOBAL'].getint('debug', 10))
+
+    # add configuration parameters retrieved from command line
+    if isinstance(cmd_args, list):
+        cfg_parser.read_dict(get_command_line(cmd_args))
+    elif cmd_args:
+        cfg_parser.read_dict(get_command_line())
+
+
+    # and overwrite the global Config variable
+    Config = cfg_parser
+
+def get_command_line(static_args=False):
+    """Parse command line arguments for scraping with selenium browser instances.
+
+    @param args A Namespace object that contains config parameters. If given, don't parse from the command line.
+    """
+
     parser = argparse.ArgumentParser(prog='GoogleScraper',
                                      description='Scrapes the Google search engine by forging http requests that imitate '
                                                  'browser searches or by using real browsers controlled with selenium.',
                                      epilog='This program might infringe the Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
     parser.add_argument('scrapemethod', type=str,
-                        help='The scraping type. There are currently two types: "http" and "sel". Http scrapes with raw http requests whereas "sel" uses selenium remote browser programming',
+                        help='The scraping type. There are currently two types: "http" and "sel". "Http" scrapes with raw http requests whereas "sel" uses the selenium framework to remotely control browsers',
                         choices=('http', 'sel'), default='sel')
     parser.add_argument('-q', '--keyword', metavar='keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
-    parser.add_argument('--keyword-file', type=str, action='store', dest='kwfile',
+    parser.add_argument('--keyword-file', type=str, action='store',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
     parser.add_argument('-n', '--num-results-per-page', metavar='number_of_results_per_page', type=int,
                          action='store', default=50,
                         help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for sel mode.')
     parser.add_argument('-z', '--num-browser-instances', metavar='num_browser_instances', type=int,
                         action='store',  help='This arguments sets the number of browser instances to use in `sel` mode. In raw mode, this argument is quitely ignored.')
+    parser.add_argument('--base-search-url', type=str,
+                        action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
     parser.add_argument('-p', '--num-pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
@@ -1493,9 +1545,11 @@ def get_command_line():
                         default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
     parser.add_argument('--proxy-file', metavar='proxyfile', type=str, dest='proxy_file', action='store',
-                        required=False,  #default='.proxies'
-                        help='''A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"
+                        required=False, help='''A filename for a list of proxies (supported are HTTP PROXIES, SOCKS4/5) with the following format: "Proxyprotocol (proxy_ip|proxy_host):Port\\n"
                         Example file: socks4 127.0.0.1:99\nsocks5 33.23.193.22:1080\n''')
+    parser.add_argument('--config-file', metavar='configfile', type=str, dest='config_file', action='store',
+                        help='''The path to the configuration file for GoogleScraper. Normally you won't need this, because GoogleScrape
+                        comes shipped with a thoroughly commented configuration file named `config.cfg`''')
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set to True, the scrape job and its rough length will be printed.''')
     parser.add_argument('--print', action='store_true', default=True, required=False, help='''If set, print all scraped output GoogleScraper finds. Don't use it when scraping a lot, results are stored in a sqlite3 database anyway.''')
     parser.add_argument('-x', '--deep-scrape', action='store_true', default=False,
@@ -1509,66 +1563,86 @@ def get_command_line():
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help="The verbosity of the output reporting for the found search results.")
     parser.add_argument('--debug', action='store_true', default=False, help='Whether to set logging to level DEBUG.')
-    return parser.parse_args()
-
-
-def handle_commandline(args):
-    """Handles the command line arguments as supplied by get_command_line()"""
-
-    if args.debug:
-        setup_logger(logging.DEBUG)
+    if static_args:
+        args = parser.parse_args(static_args)
     else:
-        setup_logger(logging.INFO)
+        args = parser.parse_args()
 
-    if args.keyword and args.kwfile:
+    make_dict = lambda L: dict([(key, value) for key, value
+                                in args.__dict__.items() if (key in L and value is not None)])
+
+    return  {
+        'SCRAPING': make_dict(['scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'deep_scrape']),
+        'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file']),
+        'SELENIUM': make_dict(['num_browser_instances'])
+    }
+
+def run():
+    """Runs the GoogleScraper application as determined by the configuration arguments."""
+
+    if Config['GLOBAL']['do_caching']:
+        d = Config['GLOBAL']['cachedir']
+        if not os.path.exists(d):
+            os.mkdir(d, 0o744)
+
+    if Config['GLOBAL']['do_caching']:
+        # Clean the Config['GLOBAL'].get('cachedir') once in a while
+        maybe_clean_cache()
+
+    kwfile = Config['SCRAPING'].get('keyword_file')
+    keyword = Config['SCRAPING'].get('keyword')
+    keywords = set(Config['SCRAPING'].get('keywords', '').split('\n'))
+    proxy_file = Config['GLOBAL'].get('proxy_file', '')
+
+    if (keyword or keywords) and kwfile:
         raise ValueError(
            'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty cocksucker')
-    elif not args.keyword and not args.kwfile:
+    elif not (keyword or keywords) and not kwfile:
         raise ValueError('You must specify a keyword file (separated by newlines, each keyword on a line) with the flag `--keyword-file {filepath}~')
 
-    if args.fix_cache_names:
+    if Config['GLOBAL'].getboolean('fix_cache_names'):
         fix_broken_cache_names()
         sys.exit('renaming done. restart for normal use.')
 
-    keywords = [args.keyword,]
-    if args.kwfile:
-        if not os.path.exists(args.kwfile):
-            raise ValueError('The keyword file {} does not exist.'.format(args.kwfile))
+    keywords = [keyword,] if keyword else keywords
+    if kwfile:
+        if not os.path.exists(kwfile):
+            raise ValueError('The keyword file {} does not exist.'.format(kwfile))
         else:
             # Clean the keywords of duplicates right in the beginning
-            keywords = set([line.strip() for line in open(args.kwfile, 'r').read().split('\n')])
+            keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
 
-    if args.check_oto:
-        _caching_is_one_to_one(args.keyword)
+    if Config['GLOBAL'].getboolean('check_oto', False):
+        _caching_is_one_to_one(keyword)
 
-    if int(args.num_results_per_page) > 100:
-        raise ValueError('Not more that 100 results per page available for google.com')
+    if Config['SCRAPING'].getint('num_results_per_page') > 100:
+        raise ValueError('Not more that 100 results per page available for google searches')
 
-    if args.proxy_file:
-        proxies = parse_proxy_file(args.proxy_file)
+    if proxy_file:
+        proxies = parse_proxy_file(proxy_file)
     else:
         proxies = []
 
     valid_search_types = ('normal', 'video', 'news', 'image')
-    if args.searchtype not in valid_search_types:
+    if Config['SCRAPING'].get('search_type') not in valid_search_types:
         ValueError('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
 
     # Let the games begin
-    if args.scrapemethod == 'sel':
+    if Config['SCRAPING'].get('scrapemethod', '') == 'sel':
         conn = maybe_create_db()
         # First of all, lets see how many keywords remain to scrape after parsing the cache
-        if Config['do_caching']:
-            remaining = parse_all_cached_files(keywords, conn, simulate=args.simulate)
+        if Config['GLOBAL'].get('do_caching'):
+            remaining = parse_all_cached_files(keywords, conn, simulate=Config['GLOBAL'].getboolean('simulate'))
         else:
             remaining = keywords
 
-        if args.simulate:
+        if Config['GLOBAL'].getboolean('simulate'):
             # TODO: implement simulation
-            raise NotImplementedError('simulating is not implemented yet!')
+            raise NotImplementedError('Simulating is not implemented yet!')
 
         rlock = threading.RLock()
 
-        max_sel_browsers = args.num_browser_instances or Config['max_sel_browsers']
+        max_sel_browsers = Config['SELENIUM'].getint('num_browser_instances')
         if len(remaining) > max_sel_browsers:
             kwgroups = grouper(remaining, len(remaining)//max_sel_browsers, fillvalue=None)
         else:
@@ -1578,18 +1652,13 @@ def handle_commandline(args):
         # Distribute the proxies evenly on the kws to search
         scrapejobs = []
         Q = queue.Queue()
-        proxies.append(None) if Config['use_own_ip'] else None
+        proxies.append(None) if Config['SCRAPING'].getboolean('use_own_ip') else None
         if not proxies:
             logger.info("No ip's available for scanning.")
 
-        config = {
-            'num_results': args.num_results_per_page,
-            'num_pages': args.num_pages
-        }
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, chunk in enumerate(kwgroups):
-            if args.scrapemethod == 'sel':
-                scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, config=config, proxy=proxies[i//chunks_per_proxy]))
+            scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in scrapejobs:
             t.start()
@@ -1601,25 +1670,29 @@ def handle_commandline(args):
             t.join()
 
         # All scrape jobs done, signal the db handler to stop
-        Q.put(Config['all_processed_sig'])
+        Q.put(Config['GLOBAL'].get('all_processed_sig'))
         handler.join()
 
         conn.commit()
         conn.close()
-    elif args.scrapemethod == 'http':
-        if args.deep_scrape:
+    elif Config['SCRAPING'].get('scrapemethod') == 'http':
+        if Config['SCRAPING'].getboolean('deep_scrape', False):
             # TODO: implement deep scrape
             raise NotImplementedError('Sorry. Currently deep_scrape is not implemented.')
 
         else:
             results = []
             for kw in keywords:
-                r = scrape(kw, args.num_results_per_page, args.num_pages, searchtype=args.searchtype)
+                r = scrape(kw, Config['SCRAPING'].getint('num_results_per_page', 10),
+                           Config['SCRAPING'].getint('num_pages', 1))
                 results.append(r)
-        if args.print:
-            print_scrape_results_http(results, args.verbosity, view=args.view)
+        if Config['GLOBAL'].get('print'):
+            print_scrape_results_http(results, Config['GLOBAL'].getint('verbosity', 0), view=Config['HTTP'].get('view', False))
     else:
         raise ValueError('No such scrapemethod. Use "http" or "sel"')
 
 if __name__ == '__main__':
-    handle_commandline(get_command_line())
+    parse_config(True)
+    run()
+else:
+    parse_config(False)
