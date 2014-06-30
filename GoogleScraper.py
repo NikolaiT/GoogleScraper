@@ -383,34 +383,6 @@ def _parse_links(data, conn, kw, page_num=1, ip='127.0.0.1'):
       result.link_url.hostname) +
      (lastrowid, ) for result in results])
 
-def _get_parse_links(data, kw, page_num = 1, ip='127.0.0.1'):
-    """Act the same as _parse_links, but just return the db data instead of inserting data into a connection or
-    or building actual queries.
-
-    [[lastrowid]] needs to be replaced with the last rowid from the database when inserting.
-
-    Not secure against sql injections from google ~_~
-    """
-    parser = Google_SERP_Parser(data)
-    results = parser.links
-    first = (page_num,
-             time.asctime(),
-            len(results),
-            parser.num_results() or '',
-            kw,
-            ip)
-
-    second = []
-    for result in results:
-        second.append([
-          result.link_title,
-          result.link_url.geturl(),
-          result.link_snippet,
-          result.link_position,
-          result.link_url.hostname
-        ])
-
-    return (first, second)
 
 def timer_support(Class):
     """In python versions prior to 3.3, threading.Timer
@@ -833,9 +805,15 @@ class GoogleScrape():
 
 
 class SelScraper(threading.Thread):
-    """Instances of this class make use of selenium browser objects to query Google."""
+    """Instances of this class make use of selenium browser objects to query Google.
 
-    def __init__(self, keywords, rlock, queue, proxy=None, browser_num=0):
+    KeywordArguments:
+    -- rlock To synchronize multiple SelScraper objects. If no threading.Rlock is given
+             it is assumed that no synchronization is needed.
+    -- queue A queue to push scraped results to be consumed by a worker thread.
+    """
+
+    def __init__(self, keywords, rlock=None, queue=None, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
         logger.info('[+] SelScraper object created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(len(keywords), proxy, Config['SCRAPING'].getint('num_of_pages', '1'), browser_num))
@@ -847,7 +825,9 @@ class SelScraper(threading.Thread):
         self.rlock = rlock
         self.keywords = set(keywords)
         self.ip = '127.0.0.1'
+        self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self._parse_config()
+        self._results = []
 
     def _parse_config(self):
         """Parse the config parameter given in the constructor.
@@ -899,14 +879,17 @@ class SelScraper(threading.Thread):
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
 
-        May either return a Firefox or Chrome instance, according to availabilit. Chrome has
+        May either return a Firefox or Chrome or phantomjs instance, according to availability. Chrome has
         precedence, because it's more lightweight.
         """
-        if Config['SELENIUM'].get('sel_browser', '').lower() == 'chrome':
+        if self.browser_type == 'chrome':
             self._get_Chrome()
             return True
-        elif Config['SELENIUM'].get('sel_browser', '').lower() == 'firefox':
+        elif self.browser_type == 'firefox':
             self._get_Firefox()
+            return True
+        elif self.browser_type == 'phantomjs':
+            self._get_PhantomJS()
             return True
 
         # if the config remains silent, try to get Chrome, else Firefox
@@ -954,6 +937,40 @@ class SelScraper(threading.Thread):
             # reaching here is bad, since we have no available webdriver instance.
         return False
 
+    def _get_PhantomJS(self):
+        try:
+            service_args = []
+
+            if self.proxy:
+                service_args.extend([
+                    '--proxy={}:{}'.format(self.proxy.host, self.proxy.port),
+                    '--proxy-type={}'.format(self.proxy.proto),
+                ])
+
+                if self.proxy.username and self.proxy.password:
+                    service_args.append(
+                        '--proxy-auth={}:{}'.format(self.proxy.username, self.proxy.password)
+                    )
+
+            self.webdriver = webdriver.PhantomJS(service_args=service_args)
+        except WebDriverException as e:
+            logger.error(e)
+
+    def handle_request_denied(self):
+        """Checks whether Google detected a potentially harmful request and denied its processing"""
+        if '/sorry/' in self.webdriver.current_url \
+                and 'detected unusual traffic' in self.webdriver.page_source:
+            if Config['SELENIUM'].get('manual_captcha_solving', False):
+                import tempfile
+                tf = tempfile.NamedTemporaryFile('wb')
+                tf.write(self.webdriver.get_screenshot_as_png())
+                import webbrowser
+                webbrowser.open('file://{}'.format(tf.name))
+                solution = input('enter the captcha please...')
+                tf.close()
+        else:
+            pass
+
     def run(self):
         # Create the browser and align it according to its position and in maximally two rows
         if len(self.keywords) <= 0:
@@ -983,7 +1000,7 @@ class SelScraper(threading.Thread):
                 try:
                     self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
                 except Exception as e:
-                    raise Exception('Couldn\'t locate input field {}'.format(e))
+                    raise Exception('Couldn\'t locate q search query input field {}'.format(e))
                 if write_kw:
                     self.element.clear()
                     time.sleep(.25)
@@ -994,33 +1011,80 @@ class SelScraper(threading.Thread):
                 try:
                     WebDriverWait(self.webdriver, 30).until(EC.title_contains(kw))
                 except TimeoutException as e:
-                    print('Keyword not found in title: {}'.format(e))
+                    logger.debug('Keyword not found in title: {}'.format(e))
                     continue
+
+                self.handle_request_denied()
 
                 try:
                     # wait until the next page link emerges
                     WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '#pnnext')))
                     next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
                 except TimeoutException as te:
-                    print('Cannot locate next page html id #pnnext')
+                    logger.debug('Cannot locate next page html id #pnnext')
                 except WebDriverException as e:
                     # leave if no next results page is available
                     break
 
+                self.handle_request_denied()
+
                 # That's because we sleep explicitly one second, so the site and
                 # whatever js loads all shit dynamically has time to update the
                 # DOM accordingly.
-                time.sleep(2.5)
+                time.sleep(1.5)
 
                 html = self._maybe_crop(self.webdriver.page_source)
-                # Lock for the sake that two threads write to same file (not probable)
-                self.rlock.acquire()
-                cache_results(html, kw, url=self.url)
-                self.rlock.release()
-                # commit in intervals specified in the config
-                self.queue.put(_get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
+
+
+                if self.rlock or self.queue:
+                    # Lock for the sake that two threads write to same file (not probable)
+                    self.rlock.acquire()
+                    cache_results(html, kw, url=self.url)
+                    self.rlock.release()
+                    # commit in intervals specified in the config
+
+                    self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
+                else:
+                    self._results.extend(self._get_parse_links(html, kw, only_results=True).links)
 
         self.webdriver.close()
+
+    def _get_parse_links(self, data, kw, only_results=False, page_num = 1, ip='127.0.0.1'):
+        """Act the same as _parse_links, but just return the db data instead of inserting data into a connection or
+        or building actual queries.
+
+        [[lastrowid]] needs to be replaced with the last rowid from the database when inserting.
+
+        Not secure against sql injections from google ~_~
+        """
+
+        parser = Google_SERP_Parser(data)
+        if only_results:
+            return parser
+
+        results = parser.links
+        first = (page_num,
+                 time.asctime(),
+                 len(results),
+                 parser.num_results() or '',
+                 kw,
+                 ip)
+
+        second = []
+        for result in results:
+            second.append([
+                result.link_title,
+                result.link_url.geturl(),
+                result.link_snippet,
+                result.link_position,
+                result.link_url.hostname
+            ])
+
+        return (first, second)
+
+    @property
+    def results(self):
+        return self._results
 
 class Google_SERP_Parser():
     """Parses data from Google SERPs."""
@@ -1295,7 +1359,7 @@ class ResultsHandler(threading.Thread):
                 self.conn.commit()
             i += 1
 
-def scrape(query, num_results_per_page=100, num_pages=1, offset=0, proxy=None):
+def scrape(query, scrapemethod='sel', num_results_per_page=10, num_pages=1, offset=0, proxy=None, sel_browser='phantomjs'):
     """Public API function to search for terms and return a list of results.
 
     A default scrape does start each thread in intervals of 1 second.
@@ -1310,15 +1374,18 @@ def scrape(query, num_results_per_page=100, num_pages=1, offset=0, proxy=None):
     offset -- specifies the offset to the page to begin searching.
 
     """
-    threads = [GoogleScrape(query, num_results_per_page, i, interval=i, proxy=proxy)
-                   for i in range(offset, num_pages + offset, 1)]
+    if scrapemethod == 'http':
+        threads = [GoogleScrape(query, num_results_per_page, i, interval=i, proxy=proxy)
+                       for i in range(offset, num_pages + offset, 1)]
+    elif scrapemethod == 'sel':
+        threads = [SelScraper([query], proxy=proxy)]
 
     for t in threads:
         t.start()
 
     # wait for all threads to end running
     for t in threads:
-        t.join(3.0)
+        t.join()
 
     return [t.results for t in threads]
 
@@ -1464,17 +1531,6 @@ def print_scrape_results_http(results, verbosity=1, view=False):
                                     textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
                             print('*' * 70)
                             print()
-
-class ConfigDict(dict):
-    """The Config dictionary should allow attribute access.
-    http://stackoverflow.com/questions/4984647/accessing-dict-keys-like-an-attribute-in-python
-    Causes a memory leak in Python < 2.7.3 / Python3 < 3.2.3
-    """
-    def __init__(self, *args, **kwargs):
-        super(ConfigDict, self).__init__(*args, **kwargs)
-        self.__dict__ = self
-        self.__sections__ = [key for key, value in
-                                self.__dict__ if isinstance(value, dict)]
 
 def parse_config(cmd_args=False):
     """Parse and normalize the config file and return a dictionary with the arguments.

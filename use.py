@@ -13,10 +13,10 @@ if __name__ == '__main__':
     )
 
     # sample proxy
-    proxy = GoogleScraper.Proxy(proto='socks5', host='61.152.200.187', port=8080, username='', password='')
+    proxy = GoogleScraper.Proxy(proto='socks4', host='localhost', port=9050, username='', password='')
 
     try:
-        results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=1, offset=0, proxy=proxy)
+        results = GoogleScraper.scrape('Best SEO tool', scrapemethod='sel', proxy=proxy)
     except Exception as e:
         # e contains the reason why the proxy failed
         print(e)
