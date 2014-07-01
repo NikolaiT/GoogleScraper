@@ -134,6 +134,7 @@ Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
 
 class GoogleSearchError(Exception): pass
 class InvalidNumberResultsException(GoogleSearchError): pass
+class MaliciousRequestDetected(GoogleSearchError): pass
 
 
 def maybe_clean_cache():
@@ -777,14 +778,14 @@ class GoogleScrape():
                 logger.debug("Scraped with url: {} and User-Agent: {}".format(r.url, self._HEADERS['User-Agent']))
 
             except self.requests.ConnectionError as ce:
-                print('Network problem occurred {}'.format(ce))
+                logger.error('Network problem occurred {}'.format(ce))
                 raise ce
             except self.requests.Timeout as te:
-                print('Connection timeout {}'.format(te))
+                logger.error('Connection timeout {}'.format(te))
                 raise te
 
             if not r.ok:
-                print('HTTP Error:', r.status_code)
+                logger.error('HTTP Error: {}'.format(r.status_code))
                 if str(r.status_code)[0] == '5':
                     print('Maybe google recognizes you as sneaky spammer after'
                           ' you requested their services too inexhaustibly :D')
@@ -809,11 +810,12 @@ class SelScraper(threading.Thread):
 
     KeywordArguments:
     -- rlock To synchronize multiple SelScraper objects. If no threading.Rlock is given
-             it is assumed that no synchronization is needed.
+             it is assumed that no synchronization is needed. Mainly used for caching and fs interaction.
     -- queue A queue to push scraped results to be consumed by a worker thread.
+    --  captcha_lock To sync captcha solving (stdin)
     """
 
-    def __init__(self, keywords, rlock=None, queue=None, proxy=None, browser_num=0):
+    def __init__(self, keywords, rlock=None, queue=None, captcha_lock = None, proxy=None, browser_num=0):
         super().__init__()
         # the google search url
         logger.info('[+] SelScraper object created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(len(keywords), proxy, Config['SCRAPING'].getint('num_of_pages', '1'), browser_num))
@@ -823,6 +825,7 @@ class SelScraper(threading.Thread):
         self.browser_num = browser_num
         self.queue = queue
         self.rlock = rlock
+        self.captcha_lock = captcha_lock
         self.keywords = set(keywords)
         self.ip = '127.0.0.1'
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
@@ -957,19 +960,32 @@ class SelScraper(threading.Thread):
             logger.error(e)
 
     def handle_request_denied(self):
-        """Checks whether Google detected a potentially harmful request and denied its processing"""
-        if '/sorry/' in self.webdriver.current_url \
-                and 'detected unusual traffic' in self.webdriver.page_source:
-            if Config['SELENIUM'].get('manual_captcha_solving', False):
-                import tempfile
-                tf = tempfile.NamedTemporaryFile('wb')
-                tf.write(self.webdriver.get_screenshot_as_png())
-                import webbrowser
-                webbrowser.open('file://{}'.format(tf.name))
-                solution = input('enter the captcha please...')
-                tf.close()
+        """Checks whether Google detected a potentially harmful request and denied its processing
+        """
+        if Config['SELENIUM'].getboolean('manual_captcha_solving'):
+            if '/sorry/' in self.webdriver.current_url \
+                    and 'detected unusual traffic' in self.webdriver.page_source:
+                if Config['SELENIUM'].get('manual_captcha_solving', False):
+                    with self.captcha_lock:
+                        import tempfile
+                        tf = tempfile.NamedTemporaryFile('wb')
+                        tf.write(self.webdriver.get_screenshot_as_png())
+                        import webbrowser
+                        webbrowser.open('file://{}'.format(tf.name))
+                        solution = input('enter the captcha please...')
+                        self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
+                        try:
+                            self.element = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.NAME, "q")))
+                        except TimeoutException as e:
+                            raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
+                        tf.close()
+                        return True
+            elif 'is not an HTTP Proxy' in self.webdriver.page_source:
+                raise GoogleSearchError('Inavlid TOR usage. Specify the proxy protocol as socks5')
+            else:
+                return False
         else:
-            pass
+            raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
 
     def run(self):
         # Create the browser and align it according to its position and in maximally two rows
@@ -998,9 +1014,12 @@ class SelScraper(threading.Thread):
                     logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, j, kw, url=next_url))
                 time.sleep(j)
                 try:
-                    self.element = WebDriverWait(self.webdriver, 30).until(EC.presence_of_element_located((By.NAME, "q")))
-                except Exception as e:
-                    raise Exception('Couldn\'t locate q search query input field {}'.format(e))
+                    self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
+                except TimeoutException as e:
+                    if not self.handle_request_denied():
+                        open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
+                        raise GoogleSearchError('`q` search input cannot be found.')
+
                 if write_kw:
                     self.element.clear()
                     time.sleep(.25)
@@ -1009,12 +1028,10 @@ class SelScraper(threading.Thread):
                 # Waiting until the keyword appears in the title may
                 # not be enough. The content may still be off the old page.
                 try:
-                    WebDriverWait(self.webdriver, 30).until(EC.title_contains(kw))
+                    WebDriverWait(self.webdriver, 10).until(EC.title_contains(kw))
                 except TimeoutException as e:
                     logger.debug('Keyword not found in title: {}'.format(e))
                     continue
-
-                self.handle_request_denied()
 
                 try:
                     # wait until the next page link emerges
@@ -1026,15 +1043,12 @@ class SelScraper(threading.Thread):
                     # leave if no next results page is available
                     break
 
-                self.handle_request_denied()
-
                 # That's because we sleep explicitly one second, so the site and
                 # whatever js loads all shit dynamically has time to update the
                 # DOM accordingly.
                 time.sleep(1.5)
 
                 html = self._maybe_crop(self.webdriver.page_source)
-
 
                 if self.rlock or self.queue:
                     # Lock for the sake that two threads write to same file (not probable)
@@ -1044,8 +1058,8 @@ class SelScraper(threading.Thread):
                     # commit in intervals specified in the config
 
                     self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
-                else:
-                    self._results.extend(self._get_parse_links(html, kw, only_results=True).links)
+
+                self._results.append(self._get_parse_links(html, kw, only_results=True).all_results)
 
         self.webdriver.close()
 
@@ -1205,8 +1219,7 @@ class Google_SERP_Parser():
             self.SEARCH_RESULTS['num_results_for_kw'] = \
                 self.dom.xpath(self._xp('div#resultStats'))[0].text_content()
         except Exception as e:
-            logger.critical(e)
-            print(sys.exc_info())
+            logger.critical('Cannot parse number of results for keyword from SERP page: {}'.format(e))
 
     def _parse_normal_search(self, dom):
         """Specifies the CSS selectors to extract links/snippets for a normal search.
@@ -1362,23 +1375,22 @@ class ResultsHandler(threading.Thread):
 def scrape(query, scrapemethod='sel', num_results_per_page=10, num_pages=1, offset=0, proxy=None, sel_browser='phantomjs'):
     """Public API function to search for terms and return a list of results.
 
-    A default scrape does start each thread in intervals of 1 second.
     This (maybe) prevents Google to sort us out because of aggressive behaviour.
 
     arguments:
     query -- the search query. Can be whatever you want to crawl google for.
 
     Keyword arguments:
+    scrapemethod -- the scrapemethod
     num_results_per_page -- the number of results per page. Either 10, 25, 50 or 100.
     num_pages -- The number of pages to search for.
     offset -- specifies the offset to the page to begin searching.
-
     """
     if scrapemethod == 'http':
         threads = [GoogleScrape(query, num_results_per_page, i, interval=i, proxy=proxy)
                        for i in range(offset, num_pages + offset, 1)]
     elif scrapemethod == 'sel':
-        threads = [SelScraper([query], proxy=proxy)]
+        threads = [SelScraper([query], proxy=proxy, captcha_lock=threading.Lock)]
 
     for t in threads:
         t.start()
@@ -1387,8 +1399,10 @@ def scrape(query, scrapemethod='sel', num_results_per_page=10, num_pages=1, offs
     for t in threads:
         t.join()
 
-    return [t.results for t in threads]
-
+    if scrapemethod == 'http':
+        return [t.results for t in threads]
+    else:
+        return threads[0].results
 
 def deep_scrape(query):
     """Launches many different Google searches with different parameter combinations to maximize return of results. Depth first.
@@ -1696,7 +1710,11 @@ def run():
             # TODO: implement simulation
             raise NotImplementedError('Simulating is not implemented yet!')
 
+        # Create a lock to sync file access
         rlock = threading.RLock()
+
+        # A lock to prevent multiple threads from solving captcha.
+        lock = threading.Lock()
 
         max_sel_browsers = Config['SELENIUM'].getint('num_browser_instances')
         if len(remaining) > max_sel_browsers:
@@ -1714,7 +1732,7 @@ def run():
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, chunk in enumerate(kwgroups):
-            scrapejobs.append(SelScraper(chunk, rlock, Q, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+            scrapejobs.append(SelScraper(chunk, rlock, Q, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in scrapejobs:
             t.start()
@@ -1752,3 +1770,4 @@ if __name__ == '__main__':
     run()
 else:
     parse_config(False)
+    setup_logger()
