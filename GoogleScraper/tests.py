@@ -2,11 +2,12 @@ import unittest
 import os
 import configparser
 from pprint import pprint
+import importlib
 
 def _reload_GoogleScraper(self):
     if hasattr(self, 'GoogleScraper'):
         del self.GoogleScraper
-    self.GoogleScraper = __import__('GoogleScraper')
+    self.GoogleScraper = importlib.import_module('GoogleScraper.Scraper')
 
 class ConfigTest(unittest.TestCase):
     """Test the three different levels of the configuration

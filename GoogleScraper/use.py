@@ -1,4 +1,4 @@
-import GoogleScraper
+from GoogleScraper import Scraper as GoogleScraper
 import urllib.parse
 
 if __name__ == '__main__':
