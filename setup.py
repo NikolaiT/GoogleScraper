@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from setuptools import find_packages
 
 setup(name='GoogleScraper',
       version='0.0.1',
@@ -8,5 +9,12 @@ setup(name='GoogleScraper',
       author='Nikolai Tschacher',
       author_email='admin@incolumitas.com',
       url='http://incolumitas.com',
-      py_modules=['GoogleScraper', 'use']
+      keywords=[
+            'Google Scrape',
+            ],
+      classifiers=[
+            'Development Status :: 3 - Alpha',
+            'Programming Language :: Python :: 3.4',
+      ],
+      packages=find_packages(),
      )
