@@ -15,12 +15,22 @@
 GoogleScraper is written in Python 3. Therefore install at least python 3.3
 Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium (I didn't have to).
 
-Proceed to install the following third part modules:
+From now on (august 2014), you can just install with pip:
+
+```
+pip install GoogleScraper
+```
+
+#### Alternatively install from Github:
+
+First clone and change in project tree.
+
+Begin with installing the following third party modules:
 
 ```
 lxml
 selenium
-bs4
+bs4 [try beautifulsoup4]
 cssselect
 requests
 ```
@@ -29,6 +39,7 @@ You can do so with:
 
 `pip3 install module1, module2, ..`
 
+
 If you want to install GoogleScraper locally, do as follows (Run all commands in the GoogleScraper.py directory):
 
 ```bash
@@ -36,7 +47,7 @@ virtualenv --no-site-packages .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # Now test it
-python GoogleScraper.py
+python run.py
 ```
 
 <a name="about" />
