@@ -9,7 +9,7 @@ instructions
 .idea/
 
 # ignore tests
-tests/
+nonpub_tests/
 
 results*
 

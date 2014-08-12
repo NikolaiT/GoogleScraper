@@ -1,24 +1,22 @@
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
+
 import GoogleScraper
+from GoogleScraper import Proxy, core
 import urllib.parse
 
 if __name__ == '__main__':
-    # See for the config.cfg file for possible values
-    GoogleScraper.Config.update({
-        'SCRAPING': {
-            'use_own_ip': 'False',
-            'keyword': 'HelloWorld'
-        },
-        'SELENIUM': {
-            'sel_browser': 'chrome', # change to 'phantomjs' if you want so
-            'manual_captcha_solving': 'True'
-        }
-    })
+    # See in the config.cfg file for possible values
+    GoogleScraper.Config['SCRAPING']['use_own_ip'] = 'False'
+    GoogleScraper.Config['SCRAPING']['keyword'] = 'Hello World'
+    GoogleScraper.Config['SELENIUM']['sel_browser'] = 'chrome' # change this to 'phantomjs' for awesomeness
+    GoogleScraper.Config['SELENIUM']['manual_captcha_solving'] = 'True'
 
     # sample proxy
-    proxy = GoogleScraper.Proxy(proto='socks5', host='localhost', port=9050, username='', password='')
+    proxy = Proxy(proto='socks5', host='localhost', port=9050, username='', password='')
 
     try:
-        results = GoogleScraper.scrape('Best SEO tool', scrapemethod='sel')#, proxy=proxy)
+        results = core.scrape('Best SEO tool', scrapemethod='sel')#, proxy=proxy)
         for page in results:
             for link_title, link_snippet, link_url, *rest in page['results']:
                 # You can access all parts of the search results like that

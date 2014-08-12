@@ -1,12 +1,22 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-from distutils.core import setup
+import re
+from setuptools import setup
+
+version = re.search(
+    "^__version__\s*=\s*'(.*)'",
+    open('GoogleScraper/__init__.py').read(),
+    re.M).group(1)
 
 setup(name='GoogleScraper',
-      version='0.0.1',
+      version=version,
       description='A module to scrape and extract links, titles and descriptions of Google search results',
+      long_description=open('README.md').read(),
       author='Nikolai Tschacher',
       author_email='admin@incolumitas.com',
       url='http://incolumitas.com',
-      py_modules=['GoogleScraper', 'use']
-     )
+      py_modules=['use'],
+      packages=['GoogleScraper'],
+      entry_points={'console_scripts': ['GoogleScraper = GoogleScraper.core:main']},
+)

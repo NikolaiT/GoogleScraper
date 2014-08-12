@@ -1,23 +1,27 @@
-import unittest
-import os
-import configparser
-from pprint import pprint
+#!/usr/bin/python
 
-def _reload_GoogleScraper(self):
-    if hasattr(self, 'GoogleScraper'):
-        del self.GoogleScraper
-    self.GoogleScraper = __import__('GoogleScraper')
+"""
+Unittests
+http://stackoverflow.com/questions/4904096/whats-the-difference-between-unit-functional-acceptance-and-integration-test
+"""
+
+import unittest
+import importlib
+import os
+import GoogleScraper
+import configparser
 
 class ConfigTest(unittest.TestCase):
     """Test the three different levels of the configuration
-    possibility"""
+    possibility for GoogleScraper"""
     def setUp(self):
-        _reload_GoogleScraper(self)
+        importlib.reload(GoogleScraper)
         # set some values in the config file
         cfg = configparser.ConfigParser()
-        cfg.read_file(open(self.GoogleScraper.CONFIG_FILE, 'r', encoding='utf8'))
+        self.f = open(GoogleScraper.CONFIG_FILE, 'r', encoding='utf8')
+        cfg.read_file(self.f)
 
-        self.GoogleScraper.Config.update({
+        GoogleScraper.Config.update({
             'GLOBAL': {
                 'do_caching': True,
                 'clean_cache_after': 13,
@@ -26,7 +30,7 @@ class ConfigTest(unittest.TestCase):
                     'num_browser_instances': 8
             }})
 
-        cfg.update(
+        cfg.read_dict(
         {'GLOBAL': {
             'do_caching': False,
             'clean_cache_after': 14,
@@ -35,35 +39,24 @@ class ConfigTest(unittest.TestCase):
             'num_browser_instances': 9
          }
         })
+        self.tempfile = open('tempconfig.cfg', 'w', encoding='utf8')
 
-        cfg.write(open('tempconfig.cfg', 'w', encoding='utf8'))
-        self.GoogleScraper.CONFIG_FILE = 'tempconfig.cfg'
-
+        cfg.write(self.tempfile)
+        GoogleScraper.CONFIG_FILE = 'tempconfig.cfg'
         self.cmdargs = 'sel --num-browser-instances 10'.split()
 
-
     def test_config(self):
-        self.GoogleScraper.parse_config(self.cmdargs)
+        GoogleScraper.parse_config(self.cmdargs)
 
-        cfg = self.GoogleScraper.Config
+        cfg = GoogleScraper.Config
         self.assertEqual(cfg['SELENIUM'].getint('num_browser_instances'), 10, 'num_browser_instances should be 10')
         self.assertFalse(cfg['GLOBAL'].getboolean('do_caching'), 'do_caching should be false')
         self.assertEqual(cfg['GLOBAL'].getint('clean_cache_after'), 14, 'clean_cache_after is expected to be 14')
 
     def tearDown(self):
+        self.tempfile.close()
         os.unlink('tempconfig.cfg')
-
-
-class SeleniumModeTest(unittest.TestCase):
-    def setUp(self):
-        _reload_GoogleScraper(self)
-        self.GoogleScraper.parse_config('sel --keyword scraping'.split())
-        self.GoogleScrape.run()
-    def testResults(self):
-        pass
-    def tearDown(self):
-        os.system('rm results_*.db')
-
+        self.f.close()
 
 if __name__ == '__main__':
     unittest.main()
