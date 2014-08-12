@@ -1,0 +1,8 @@
+- edit caching with decorator pattern
+- add all google search params to config
+- write functional tests
+- add sqlalchemy support for results
+- add better proxy handling
+- extend parsing funcionality
+- update readme
+- prevent parsing config two times

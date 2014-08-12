@@ -4,7 +4,7 @@ import threading
 import types
 import random
 import logging
-from pprint import pprint
+import pprint
 import sys
 import lxml.html
 import time
@@ -458,7 +458,7 @@ class GoogleScrape():
             cache_results(html, self.search_query, url=Config['GLOBAL'].get('base_search_url'), params=self._SEARCH_PARAMS)
             self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self._SEARCH_PARAMS))
 
-        self.parser = GoogleScrape(html, searchtype=self.searchtype)
+        self.parser = GoogleParser(html, searchtype=self.searchtype)
         self.SEARCH_RESULTS.update(self.parser.all_results)
 
     @property

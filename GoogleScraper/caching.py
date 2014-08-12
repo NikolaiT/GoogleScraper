@@ -91,29 +91,30 @@ def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, ca
 
 def read_cached_file(path, n=2):
     """Read a zipped or unzipped cache file."""
-    assert n != 0
+    if Config['GLOBAL'].getboolean('do_caching'):
+        assert n != 0
 
-    if Config['GLOBAL'].getboolean('compress_cached_files'):
-        with open(path, 'rb') as fd:
-            try:
-                data = zlib.decompress(fd.read()).decode()
-                return data
-            except zlib.error:
-                Config.set('GLOBAL', 'compress_cached_files',  False)
-                return read_cached_file(path, n-1)
-    else:
-        with open(path, 'r') as fd:
-            try:
-                data = fd.read()
-                return data
-            except UnicodeDecodeError as e:
-                # If we get this error, the cache files are probably
-                # compressed but the 'compress_cached_files' flag was
-                # set to false. Try to decompress them, but this may
-                # lead to a infinite recursion. This isn't proper coding,
-                # but convenient for the end user.
-                Config.set('GLOBAL', 'compress_cached_files', True)
-                return read_cached_file(path, n-1)
+        if Config['GLOBAL'].getboolean('compress_cached_files'):
+            with open(path, 'rb') as fd:
+                try:
+                    data = zlib.decompress(fd.read()).decode()
+                    return data
+                except zlib.error:
+                    Config.set('GLOBAL', 'compress_cached_files',  False)
+                    return read_cached_file(path, n-1)
+        else:
+            with open(path, 'r') as fd:
+                try:
+                    data = fd.read()
+                    return data
+                except UnicodeDecodeError as e:
+                    # If we get this error, the cache files are probably
+                    # compressed but the 'compress_cached_files' flag was
+                    # set to false. Try to decompress them, but this may
+                    # lead to a infinite recursion. This isn't proper coding,
+                    # but convenient for the end user.
+                    Config.set('GLOBAL', 'compress_cached_files', True)
+                    return read_cached_file(path, n-1)
 
 def cache_results(html, kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}):
     """Stores a html resource as a file in Config['GLOBAL'].get('cachedir')/fname.cache

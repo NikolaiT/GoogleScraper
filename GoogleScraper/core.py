@@ -194,6 +194,13 @@ def main():
     global Config
     Config = get_config(True, True)
 
+    print(Config['GLOBAL'].get('config_file'))
+
+    if Config['GLOBAL'].getboolean('view_config'):
+        from GoogleScraper.config import CONFIG_FILE
+        print(open(CONFIG_FILE).read())
+        sys.exit(0)
+
     if Config['GLOBAL'].getboolean('do_caching'):
         d = Config['GLOBAL'].get('cachedir')
         if not os.path.exists(d):
@@ -299,8 +306,8 @@ def main():
         else:
             results = []
             for kw in keywords:
-                r = scrape(kw, Config['SCRAPING'].getint('num_results_per_page', 10),
-                           Config['SCRAPING'].getint('num_pages', 1))
+                r = scrape(kw, num_results_per_page=Config['SCRAPING'].getint('num_results_per_page', 10),
+                           num_pages=Config['SCRAPING'].getint('num_pages', 1), scrapemethod='http')
                 results.append(r)
         if Config['GLOBAL'].get('print'):
             print_scrape_results_http(results, Config['GLOBAL'].getint('verbosity', 0), view=Config['HTTP'].get('view', False))

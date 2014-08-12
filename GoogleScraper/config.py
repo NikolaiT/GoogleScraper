@@ -8,7 +8,9 @@ from GoogleScraper.commandline import get_command_line
 
 __author__ = 'nikolai'
 
-CONFIG_FILE = os.path.abspath('config.cfg')
+# a level up
+# CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config/config.cfg')
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -60,11 +62,24 @@ def parse_config(cmd_args=False):
       - Configuration parameters given in the config file
       - Params supplied by command line arguments
     """
-    global Config
+    global Config, CONFIG_FILE
+    cargs = False
 
     cfg_parser = configparser.ConfigParser()
     # Add internal configuration
     cfg_parser.read_dict(Config)
+
+    # if necessary, get command line configuration
+    if isinstance(cmd_args, list):
+        cargs = get_command_line(cmd_args)
+    elif cmd_args:
+        cargs = get_command_line()
+
+    if cmd_args:
+        cfg_file_cargs = cargs['GLOBAL'].get('config_file')
+        if cfg_file_cargs and os.path.exists(cfg_file_cargs):
+            CONFIG_FILE = cfg_file_cargs
+
     # Parse the config file
     try:
         with open(CONFIG_FILE, 'r', encoding='utf8') as cfg_file:
@@ -74,10 +89,8 @@ def parse_config(cmd_args=False):
 
     logger.setLevel(cfg_parser['GLOBAL'].getint('debug', 10))
     # add configuration parameters retrieved from command line
-    if isinstance(cmd_args, list):
-        cfg_parser.read_dict(get_command_line(cmd_args))
-    elif cmd_args:
-        cfg_parser.read_dict(get_command_line())
+    if cargs:
+        cfg_parser.read_dict(cargs)
 
     # and replace the global Config variable with the real thing
     Config = cfg_parser
