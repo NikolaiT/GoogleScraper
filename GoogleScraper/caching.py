@@ -11,7 +11,7 @@ import re
 import logging
 import functools
 from GoogleScraper.config import get_config
-from GoogleScraper.results import parse_links
+from GoogleScraper.res import parse_links
 
 logger = logging.getLogger('GoogleScraper')
 Config = get_config()

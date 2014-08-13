@@ -27,7 +27,7 @@ import urllib.parse
 
 from GoogleScraper.utils import grouper
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
-from GoogleScraper.results import maybe_create_db
+from GoogleScraper.res import maybe_create_db
 from GoogleScraper.scraping import SelScraper, GoogleScrape
 from GoogleScraper.caching import *
 from GoogleScraper.config import get_config, already_parsed
