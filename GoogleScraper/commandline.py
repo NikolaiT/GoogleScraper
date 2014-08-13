@@ -58,6 +58,8 @@ def get_command_line(static_args=False):
 
     parser.add_argument('--view-config', action='store_true', default=False,
                         help="Print the current configuration to stdout. You may use it to create and tweak your own config file from it.")
+    parser.add_argument('--mysql-proxy-db', action='store',
+                        help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
 
     if static_args:
         args = parser.parse_args(static_args)
@@ -69,6 +71,6 @@ def get_command_line(static_args=False):
 
     return {
         'SCRAPING': make_dict(['scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'deep_scrape']),
-        'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file', 'view_config', 'config_file']),
+        'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db']),
         'SELENIUM': make_dict(['num_browser_instances'])
     }

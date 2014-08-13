@@ -9,11 +9,20 @@ import zlib
 import sys
 import re
 import logging
+import functools
 from GoogleScraper.config import get_config
 from GoogleScraper.results import parse_links
 
 logger = logging.getLogger('GoogleScraper')
 Config = get_config()
+
+
+def if_caching(f):
+    @functools.wraps(f)
+    def wraps(*args, **kwargs):
+        if Config['GLOBAL'].getboolean('do_caching'):
+            return f(*args, **kwargs)
+    return wraps
 
 def maybe_clean_cache():
     """Delete all .cache files in the cache directory that are older than 12 hours."""
@@ -55,6 +64,7 @@ def cached_file_name(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params=
     sha.update(b''.join(str(s).encode() for s in unique))
     return '{}.{}'.format(sha.hexdigest(), 'cache')
 
+@if_caching
 def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, cache_dir=''):
     """Loads a cached search results page from CACHEDIR/fname.cache
 
@@ -65,79 +75,78 @@ def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, ca
     --search_params The parameters that identify the resource
     --decompress What algorithm to use for decompression
     """
+    fname = cached_file_name(kw, url, params)
 
-    if Config['GLOBAL'].getboolean('do_caching'):
-        fname = cached_file_name(kw, url, params)
+    if os.path.exists(cache_dir) and cache_dir:
+        cdir = cache_dir
+    else:
+        cdir = Config['GLOBAL'].get('cachedir')
 
-        if os.path.exists(cache_dir) and cache_dir:
-            cdir = cache_dir
-        else:
-            cdir = Config['GLOBAL'].get('cachedir')
-
-        try:
-            if fname in os.listdir(cdir):
-                # If the cached file is older than 12 hours, return False and thus
-                # make a new fresh request.
-                modtime = os.path.getmtime(os.path.join(cdir, fname))
-                if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after'):
-                    return False
-                path = os.path.join(cdir, fname)
-                return read_cached_file(path)
-        except FileNotFoundError as err:
-            raise Exception('Unexpected file not found: {}'.format(err.msg))
+    try:
+        if fname in os.listdir(cdir):
+            # If the cached file is older than 12 hours, return False and thus
+            # make a new fresh request.
+            modtime = os.path.getmtime(os.path.join(cdir, fname))
+            if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after'):
+                return False
+            path = os.path.join(cdir, fname)
+            return read_cached_file(path)
+    except FileNotFoundError as err:
+        raise Exception('Unexpected file not found: {}'.format(err.msg))
 
     return False
 
 
+@if_caching
 def read_cached_file(path, n=2):
     """Read a zipped or unzipped cache file."""
-    if Config['GLOBAL'].getboolean('do_caching'):
-        assert n != 0
+    assert n != 0
 
-        if Config['GLOBAL'].getboolean('compress_cached_files'):
-            with open(path, 'rb') as fd:
-                try:
-                    data = zlib.decompress(fd.read()).decode()
-                    return data
-                except zlib.error:
-                    Config.set('GLOBAL', 'compress_cached_files',  False)
-                    return read_cached_file(path, n-1)
-        else:
-            with open(path, 'r') as fd:
-                try:
-                    data = fd.read()
-                    return data
-                except UnicodeDecodeError as e:
-                    # If we get this error, the cache files are probably
-                    # compressed but the 'compress_cached_files' flag was
-                    # set to false. Try to decompress them, but this may
-                    # lead to a infinite recursion. This isn't proper coding,
-                    # but convenient for the end user.
-                    Config.set('GLOBAL', 'compress_cached_files', True)
-                    return read_cached_file(path, n-1)
+    if Config['GLOBAL'].getboolean('compress_cached_files'):
+        with open(path, 'rb') as fd:
+            try:
+                data = zlib.decompress(fd.read()).decode()
+                return data
+            except zlib.error:
+                Config.set('GLOBAL', 'compress_cached_files',  False)
+                return read_cached_file(path, n-1)
+    else:
+        with open(path, 'r') as fd:
+            try:
+                data = fd.read()
+                return data
+            except UnicodeDecodeError as e:
+                # If we get this error, the cache files are probably
+                # compressed but the 'compress_cached_files' flag was
+                # set to false. Try to decompress them, but this may
+                # lead to a infinite recursion. This isn't proper coding,
+                # but convenient for the end user.
+                Config.set('GLOBAL', 'compress_cached_files', True)
 
+                return read_cached_file(path, n-1)
+
+@if_caching
 def cache_results(html, kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}):
-    """Stores a html resource as a file in Config['GLOBAL'].get('cachedir')/fname.cache
+    """Stores a html resource as a file in the current cachedirectory.
 
     This will always write(overwrite) the cache file. If compress_cached_files is
     True, the page is written in bytes (obviously).
     """
-    if Config['GLOBAL'].getboolean('do_caching'):
-        fname = cached_file_name(kw, url=url, params=params)
-        path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
+    fname = cached_file_name(kw, url=url, params=params)
+    path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
 
-        if Config['GLOBAL'].getboolean('compress_cached_files'):
-            with open(path, 'wb') as fd:
-                if isinstance(html, bytes):
-                    fd.write(zlib.compress(html, 5))
-                else:
-                    fd.write(zlib.compress(html.encode('utf-8'), 5))
-        else:
-            with open(os.path.join(Config['GLOBAL'].get('cachedir'), fname), 'w') as fd:
-                if isinstance(html, bytes):
-                    fd.write(html.decode())
-                else:
-                    fd.write(html)
+    if Config['GLOBAL'].getboolean('compress_cached_files'):
+        with open(path, 'wb') as fd:
+            if isinstance(html, bytes):
+                fd.write(zlib.compress(html, 5))
+            else:
+                fd.write(zlib.compress(html.encode('utf-8'), 5))
+    else:
+        with open(os.path.join(Config['GLOBAL'].get('cachedir'), fname), 'w') as fd:
+            if isinstance(html, bytes):
+                fd.write(html.decode())
+            else:
+                fd.write(html)
 
 
 def _get_all_cache_files():

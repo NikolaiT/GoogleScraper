@@ -26,11 +26,11 @@ import queue
 import urllib.parse
 
 from GoogleScraper.utils import grouper
-from GoogleScraper.proxies import parse_proxy_file
+from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.results import maybe_create_db
 from GoogleScraper.scraping import SelScraper, GoogleScrape
 from GoogleScraper.caching import *
-from GoogleScraper.config import get_config
+from GoogleScraper.config import get_config, already_parsed
 
 try:
     from cssselect import HTMLTranslator, SelectorError
@@ -194,8 +194,6 @@ def main():
     global Config
     Config = get_config(True, True)
 
-    print(Config['GLOBAL'].get('config_file'))
-
     if Config['GLOBAL'].getboolean('view_config'):
         from GoogleScraper.config import CONFIG_FILE
         print(open(CONFIG_FILE).read())
@@ -212,11 +210,9 @@ def main():
     keyword = Config['SCRAPING'].get('keyword')
     keywords = set(Config['SCRAPING'].get('keywords', '').split('\n'))
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
+    proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
 
-    if (keyword or keywords) and kwfile:
-        raise ValueError(
-           'Invalid command line usage. Either set keywords as a string or provide a keyword file, but not both you dirty cocksucker')
-    elif not (keyword or keywords) and not kwfile:
+    if not (keyword or keywords) and not kwfile:
         raise ValueError('You must specify a keyword file (separated by newlines, each keyword on a line) with the flag `--keyword-file {filepath}~')
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):
@@ -237,7 +233,9 @@ def main():
     if Config['SCRAPING'].getint('num_results_per_page') > 100:
         raise ValueError('Not more that 100 results per page available for Google searches.')
 
-    if proxy_file:
+    if proxy_db:
+        proxies = get_proxies_from_mysql_db(proxy_db)
+    elif proxy_file:
         proxies = parse_proxy_file(proxy_file)
     else:
         proxies = []
@@ -250,7 +248,7 @@ def main():
     if Config['SCRAPING'].get('scrapemethod', '') == 'sel':
         conn = maybe_create_db()
         # First of all, lets see how many keywords remain to scrape after parsing the cache
-        if Config['GLOBAL'].get('do_caching'):
+        if Config['GLOBAL'].getboolean('do_caching'):
             remaining = parse_all_cached_files(keywords, conn, simulate=Config['GLOBAL'].getboolean('simulate'))
         else:
             remaining = keywords

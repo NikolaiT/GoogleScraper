@@ -1,5 +1,5 @@
-lxml
-selenium
+elenium
 bs4
 cssselect
 requests
+PyMySQL

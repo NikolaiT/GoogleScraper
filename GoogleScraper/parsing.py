@@ -6,7 +6,6 @@ import lxml.html
 import logging
 import urllib
 from collections import namedtuple
-from GoogleScraper.log import setup_logger
 
 try:
     from cssselect import HTMLTranslator, SelectorError
@@ -44,7 +43,7 @@ class GoogleParser():
         self.searchtype = searchtype
         self.dom = None
 
-        self.SEARCH_RESULTS = {'num_results_for_kw': []}
+        self.search_results = {'num_results_for_kw': []}
 
         # Try to parse the google HTML result using lxml
         try:
@@ -57,23 +56,23 @@ class GoogleParser():
 
         # Very redundant by now, but might change in the soon future
         if self.searchtype == 'normal':
-            self.SEARCH_RESULTS.update({
+            self.search_results.update({
                 'results': [],  # List of Result, list of named tuples
                 'ads_main': [],  # The google ads in the main result set.
                 'ads_aside': [],  # The google ads on the right aside.
             })
         elif self.searchtype == 'video':
-            self.SEARCH_RESULTS.update({
+            self.search_results.update({
                 'results': [],  # Video search results
                 'ads_main': [],  # The google ads in the main result set.
                 'ads_aside': [],  # The google ads on the right aside.
             })
         elif self.searchtype == 'image':
-            self.SEARCH_RESULTS.update({
+            self.search_results.update({
                 'results': [],  # Images links
             })
         elif self.searchtype == 'news':
-            self.SEARCH_RESULTS.update({
+            self.search_results.update({
                 'results': [],  # Links from news search
                 'ads_main': [],  # The google ads in the main result set.
                 'ads_aside': [],  # The google ads on the right aside.
@@ -99,28 +98,28 @@ class GoogleParser():
 
     def num_results(self):
         """Returns the number of pages found by keyword as shown in top of SERP page."""
-        return self.SEARCH_RESULTS['num_results_for_kw']
+        return self.search_results['num_results_for_kw']
 
     @property
     def results(self):
         """Returns all results including sidebar and main result advertisements"""
-        return {k: v for k, v in self.SEARCH_RESULTS.items() if k not in
+        return {k: v for k, v in self.search_results.items() if k not in
                                                                 ('num_results_for_kw', )}
     @property
     def all_results(self):
-        return self.SEARCH_RESULTS
+        return self.search_results
 
     @property
     def links(self):
         """Only returns non ad results"""
-        return self.SEARCH_RESULTS['results']
+        return self.search_results['results']
 
     def _clean_results(self):
         """Cleans/extracts the found href or data-href attributes."""
 
         # Now try to create ParseResult objects from the URL
         for key in ('results', 'ads_aside', 'ads_main'):
-            for i, e in enumerate(self.SEARCH_RESULTS[key]):
+            for i, e in enumerate(self.search_results[key]):
                 # First try to extract the url from the strange relative /url?sa= format
                 matcher = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url)
                 if matcher:
@@ -128,17 +127,17 @@ class GoogleParser():
                 else:
                     url = e.link_url
 
-                self.SEARCH_RESULTS[key][i] = \
+                self.search_results[key][i] = \
                     self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
                                 link_snippet=e.link_snippet, link_position=e.link_position)
 
     def _parse_num_results(self):
         # try to get the number of results for our search query
         try:
-            self.SEARCH_RESULTS['num_results_for_kw'] = \
+            self.search_results['num_results_for_kw'] = \
                 self.dom.xpath(self._xp('div#resultStats'))[0].text_content()
         except Exception as e:
-            logger.critical('Cannot parse number of results for keyword from SERP page: {}'.format(e))
+            logger.debug('Cannot parse number of results for keyword from SERP page: {}'.format(e))
 
     def _parse_normal_search(self, dom):
         """Specifies the CSS selectors to extract links/snippets for a normal search.
@@ -207,7 +206,7 @@ class GoogleParser():
         """Generic parse method"""
         for key, slist in css_selectors.items():
             for selectors in slist:
-                self.SEARCH_RESULTS[key].extend(self._parse_links(dom, *selectors))
+                self.search_results[key].extend(self._parse_links(dom, *selectors))
         self._parse_num_results()
 
     def _parse_links(self, dom, container_selector, link_selector, snippet_selector):

@@ -11,7 +11,7 @@ __author__ = 'nikolai'
 # a level up
 # CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config/config.cfg')
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
-
+already_parsed = False
 logger = logging.getLogger('GoogleScraper')
 
 Config = {
@@ -96,6 +96,8 @@ def parse_config(cmd_args=False):
     Config = cfg_parser
 
 def get_config(cmd_args=False, force_reload=False):
-    if not isinstance(Config, configparser.ConfigParser) or force_reload:
+    global already_parsed
+    if not already_parsed or force_reload:
         parse_config(cmd_args)
+        already_parsed = True
     return Config

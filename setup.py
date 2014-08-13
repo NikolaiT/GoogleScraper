@@ -27,6 +27,7 @@ setup(name='GoogleScraper',
           'selenium',
           'beautifulsoup4',
           'cssselect',
-          'requests'
+          'requests',
+          'PyMySQL'
       ]
 )
