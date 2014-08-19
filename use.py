@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 
 import GoogleScraper
-from GoogleScraper import Proxy, core
+from GoogleScraper.core import scrape
+from GoogleScraper.proxies import Proxy
 import urllib.parse
 
 if __name__ == '__main__':
@@ -16,7 +17,7 @@ if __name__ == '__main__':
     proxy = Proxy(proto='socks5', host='localhost', port=9050, username='', password='')
 
     try:
-        results = core.scrape('Best SEO tool', scrapemethod='sel')#, proxy=proxy)
+        results = scrape('Best SEO tool', scrapemethod='sel')#, proxy=proxy)
         for page in results:
             for link_title, link_snippet, link_url, *rest in page['results']:
                 # You can access all parts of the search results like that

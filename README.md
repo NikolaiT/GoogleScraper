@@ -117,39 +117,50 @@ Some interesting technologies/software to do so:
 
 <a name="usage" \>
 ### Example Usage
-Here you can learn how to use GoogleScrape from within your own Python scripts.
+Here you can learn how to use GoogleScrape from within your own Python scripts. This code is the same with *use.py*.
 
 Keep in mind that the bottom example source uses the not very powerful *http* scrape method. Look [here](#cli-usage) if you
 need to unleash the full power of GoogleScraper.
 
 ```python
 import GoogleScraper
+from GoogleScraper.core import scrape
+from GoogleScraper.proxies import Proxy
 import urllib.parse
 
-GoogleScraper.setup_logger()
-
 if __name__ == '__main__':
+    # See in the config.cfg file for possible values
+    GoogleScraper.Config['SCRAPING']['use_own_ip'] = 'False'
+    GoogleScraper.Config['SCRAPING']['keyword'] = 'Hello World'
+    GoogleScraper.Config['SELENIUM']['sel_browser'] = 'chrome' # change this to 'phantomjs' for awesomeness
+    GoogleScraper.Config['SELENIUM']['manual_captcha_solving'] = 'True'
 
-    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0, searchtype='normal')
+    # sample proxy
+    proxy = Proxy(proto='socks5', host='localhost', port=9050, username='', password='')
 
-    for page in results:
-        for link_title, link_snippet, link_url, *rest in page['results']:
-            # You can access all parts of the search results like that
-            # link_url.scheme => URL scheme specifier (Ex: 'http')
-            # link_url.netloc => Network location part (Ex: 'www.python.org')
-            # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
-            # link_url.params => Parameters for last path element
-            # link_url.query => Query component
-            try:
-                print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
-            except:
-                pass
+    try:
+        results = scrape('Best SEO tool', scrapemethod='sel')#, proxy=proxy)
+        for page in results:
+            for link_title, link_snippet, link_url, *rest in page['results']:
+                # You can access all parts of the search results like that
+                # link_url.scheme => URL scheme specifier (Ex: 'http')
+                # link_url.netloc => Network location part (Ex: 'www.python.org')
+                # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
+                # link_url.params => Parameters for last path element
+                # link_url.query => Query component
+                try:
+                    print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
+                except:
+                    pass
+            # How many urls did we get on all pages?
+            print(sum(len(page['results']) for page in results))
 
-# How many urls did we get on all pages?
-print(sum(len(page['results']) for page in results))
+            # How many hits has google found with our keyword (as shown on the first page)?
+            print(page['num_results_for_kw'])
 
-# How many hits has google found with our keyword (as shown on the first page)?
-print(results[0]['num_results_for_kw'])
+    except GoogleScraper.GoogleSearchError as e:
+        # e contains the reason why the proxy failed
+        print(e)
 ```
 
 ### Example Output
