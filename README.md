@@ -12,10 +12,10 @@
 <a name="install" \>
 ### Installation
 
-GoogleScraper is written in Python 3. Therefore install at least python 3.3
-Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium (I didn't have to).
+GoogleScraper is written in Python 3. You should install at least Python 3.3
+Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode (I didn't have to).
 
-From now on (august 2014), you can just install with pip:
+From now on (August 2014), you can install GoogleScraper comfortably with pip:
 
 ```
 pip install GoogleScraper
@@ -23,7 +23,7 @@ pip install GoogleScraper
 
 #### Alternatively install from Github:
 
-First clone and change in project tree.
+First clone and change into the project tree.
 
 Begin with installing the following third party modules:
 
@@ -33,6 +33,7 @@ selenium
 bs4 [try beautifulsoup4]
 cssselect
 requests
+PyMySQL
 ```
 
 You can do so with:
@@ -40,14 +41,16 @@ You can do so with:
 `pip3 install module1, module2, ..`
 
 
-If you want to install GoogleScraper locally, do as follows (Run all commands in the GoogleScraper.py directory):
+If you don't want to install GoogleScraper system wide, just make a virtual environment (Run all commands in the GoogleScraper.py directory):
 
 ```bash
+git clone https://github.com/NikolaiT/GoogleScraper
+cd GoogleScraper
 virtualenv --no-site-packages .venv
 source .venv/bin/activate
-pip install -r requirements.txt
-# Now test it
-python run.py
+.venv/bin/python setup.py install
+# now you can run GoogleScraper from withing the virtual environment
+./venv/bin/GoogleScraper
 ```
 
 <a name="about" />
@@ -68,8 +71,8 @@ First of all you need to understand that GoogleScraper uses **two completely dif
 + Scraping with low level networking libraries such as `urllib.request` or `requests` modules. This simulates the http packets sent by real browsers.
 + Scrape by controlling a real browser with Python
 
-Whereas the first approach was implemented first, the second approach looks much more promising in comparison.
-Effective: Development for the second approach started around 10.03.2014
+Whereas the later approach was implemented first, the former approach looks much more promising in comparison, because
+Google has no easy way detecting it.
 
 GoogleScraper is implemented with the following techniques/software:
 
@@ -119,37 +122,46 @@ Some interesting technologies/software to do so:
 ### Example Usage
 Here you can learn how to use GoogleScrape from within your own Python scripts.
 
+If you want to play with GoogleScraper programmatically, dig into the ```examples/``` directory in the source tree.
+You will find some examples, including how to enable proxy support.
+
 Keep in mind that the bottom example source uses the not very powerful *http* scrape method. Look [here](#cli-usage) if you
 need to unleash the full power of GoogleScraper.
 
 ```python
-import GoogleScraper
-import urllib.parse
+#!/usr/bin/python3
+# -*- coding: utf-8 -*-
 
-GoogleScraper.setup_logger()
+"""
+Shows how to control GoogleScraper programmatically. Uses selenium mode.
+"""
+
+from GoogleScraper import scrape_with_config, GoogleSearchError
 
 if __name__ == '__main__':
+    # See in the config.cfg file for possible values
+    config = {
+        'SCRAPING': {
+            'use_own_ip': 'True',
+            'keyword': 'Hello World'
+        },
+        'SELENIUM': {
+            'sel_browser': 'chrome',
+            'manual_captcha_solving': 'True'
+        },
+        'GLOBAL': {
+            'do_caching': 'True'
+        }
+    }
 
-    results = GoogleScraper.scrape('Best SEO tool', num_results_per_page=50, num_pages=3, offset=0, searchtype='normal')
+    try:
+        # scrape() and scrape_with_config() will reuturn a handle to a sqlite database with the results
+        db = scrape_with_config(config)
 
-    for page in results:
-        for link_title, link_snippet, link_url, *rest in page['results']:
-            # You can access all parts of the search results like that
-            # link_url.scheme => URL scheme specifier (Ex: 'http')
-            # link_url.netloc => Network location part (Ex: 'www.python.org')
-            # link_url.path => URL scheme specifier (Ex: ''help/Python.html'')
-            # link_url.params => Parameters for last path element
-            # link_url.query => Query component
-            try:
-                print(urllib.parse.unquote(link_url.geturl())) # This reassembles the parts of the url to the whole thing
-            except:
-                pass
+        print(db.execute('SELECT * FROM link').fetchall())
 
-# How many urls did we get on all pages?
-print(sum(len(page['results']) for page in results))
-
-# How many hits has google found with our keyword (as shown on the first page)?
-print(results[0]['num_results_for_kw'])
+    except GoogleSearchError as e:
+        print(e)
 ```
 
 ### Example Output
@@ -315,7 +327,7 @@ About 14,100,000 results
 <a name="cli-usage" \>
 ### Direct command line usage
 
-Probably the best way to use GoogleScrape is to use it from the command line and fire a command such as
+Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
 the following:
 ```
 python GoogleScraper.py sel --keyword-file path/to/keywordfile
@@ -347,10 +359,10 @@ python GoogleScraper.py sel --keyword-file path/to/keywordfile -p 10
 By now, you have 10 results per page by default (google returns up to 100 results per page), but this will also be configurable in the near future. *http* mode
 supports up to 100 results per page.
 
-After the scraping you'll automatically have a new sqlite3 database in the project directory (with a date time string as file name). You can open the database with any sqlite3 command
+After the scraping you'll automatically have a new sqlite3 database in the ```google_scraper_results``` directory (with a date time string as file name). You can open the database with any sqlite3 command
 line tool or other software.
 
-It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**, if you are really crazy, set the maximal browsers in the config a little
+It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
 bit higher (in the top of the script file).
 
 If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with proxies in it and with the following format:
