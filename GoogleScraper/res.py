@@ -6,6 +6,11 @@ import sqlite3
 from GoogleScraper.config import get_config
 from GoogleScraper.parsing import GoogleParser
 
+RESULTS_PATH = 'google_scraper_results'
+
+if not os.path.exists(RESULTS_PATH):
+    os.mkdir(RESULTS_PATH)
+
 Config = get_config()
 
 def maybe_create_db():
@@ -20,11 +25,11 @@ def maybe_create_db():
     Test sql query: SELECT L.title, L.snippet, SP.search_query FROM link AS L LEFT JOIN serp_page AS SP ON L.serp_id = SP.id
     """
     # Save the database to a unique file name (with the timestamp as suffix)
-    Config.set('GLOBAL', 'db', Config['GLOBAL'].get('db').format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-')))
+    new_path = os.path.join(RESULTS_PATH, Config['GLOBAL'].get('db').format(asctime=str(time.asctime()).replace(' ', '_').replace(':', '-')))
+    Config.set('GLOBAL', 'db', new_path)
 
     if os.path.exists(Config['GLOBAL'].get('db')) and os.path.getsize(Config['GLOBAL'].get('db')) > 0:
         conn = sqlite3.connect(Config['GLOBAL'].get('db'), check_same_thread=False)
-        cursor = conn.cursor()
         return conn
     else:
         # set that bitch up the first time

@@ -16,6 +16,12 @@ from GoogleScraper.res import parse_links
 logger = logging.getLogger('GoogleScraper')
 Config = get_config()
 
+# always create the cachedir relative to the calling code.
+
+if Config['GLOBAL'].getboolean('do_caching'):
+    cd = Config['GLOBAL'].get('cachedir')
+    if not os.path.exists(cd):
+        os.mkdir(cd)
 
 def if_caching(f):
     @functools.wraps(f)
@@ -95,7 +101,6 @@ def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, ca
         raise Exception('Unexpected file not found: {}'.format(err.msg))
 
     return False
-
 
 @if_caching
 def read_cached_file(path, n=2):

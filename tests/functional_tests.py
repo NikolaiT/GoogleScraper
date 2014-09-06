@@ -103,7 +103,7 @@ def test_scrape_proxy_support(sel_browser, num_words=15, num_pages=2):
     test_all_selenium_modes()
 
 if __name__ == '__main__':
-    get_proxies()
-    # test_all_selenium_modes()
+    # get_proxies()
+    test_all_selenium_modes()
     # test_raw_mode()
 

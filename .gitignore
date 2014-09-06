@@ -1,4 +1,6 @@
-instructions
+instructions/
+google_scraper_results/
+
 
 # all dirs that start with a point
 .*/

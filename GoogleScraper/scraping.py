@@ -33,7 +33,9 @@ import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name
 from GoogleScraper.config import get_config
 from GoogleScraper.parsing import GoogleParser
-from GoogleScraper.google_search_params import search_params
+import GoogleScraper.google_search_params
+import webbrowser
+import tempfile
 
 logger = logging.getLogger('GoogleScraper')
 Config = get_config()
@@ -130,6 +132,7 @@ class GoogleScrape():
         self.parser = None
         self.search_query = search_query
         self.searchtype = Config['SCRAPING'].get('searchtype', 'normal')
+        self.search_params = GoogleScraper.google_search_params.search_params
         assert self.searchtype in ('normal', 'image', 'news', 'video')
 
         if num_results_per_page not in range(0,  1001):  # The maximum value of this parameter is 1000. See search appliance docs
@@ -152,7 +155,7 @@ class GoogleScrape():
         if search_params is not None and isinstance(search_params, dict):
             self.search_params.update(search_params)
 
-        self.SEARCH_RESULTS = {
+        self.search_results = {
             'cache_file': None,  # A path to a file that caches the results.
             'search_keyword': self.search_query,  # The query keyword
         }
@@ -254,6 +257,11 @@ class GoogleScrape():
         if rand:
             self._HEADERS['User-Agent'] = random.choice(self._UAS)
 
+    def browserview(self, html):
+        tf = tempfile.NamedTemporaryFile(delete=False)
+        tf.write(html.encode())
+        webbrowser.open(tf.name)
+
     def _search(self, searchtype='normal'):
         """The actual search and parsing of the results.
 
@@ -278,7 +286,7 @@ class GoogleScrape():
         logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self.search_params)))
 
         html = get_cached(self.search_query, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-        self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
+        self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
         if not html:
             try:
@@ -303,16 +311,19 @@ class GoogleScrape():
 
             html = r.text
 
+            if Config['HTTP'].getboolean('view', False):
+                self.browserview(html)
+
             # cache fresh results
             cache_results(html, self.search_query, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-            self.SEARCH_RESULTS['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
+            self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
         self.parser = GoogleParser(html, searchtype=self.searchtype)
-        self.SEARCH_RESULTS.update(self.parser.all_results)
+        self.search_results.update(self.parser.all_results)
 
     @property
     def results(self):
-        return self.SEARCH_RESULTS
+        return self.search_results
 
 
 class SelScraper(threading.Thread):
@@ -559,9 +570,7 @@ class SelScraper(threading.Thread):
                     cache_results(html, kw, url=self.url)
                     self.rlock.release()
                     # commit in intervals specified in the config
-
                     self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
-
 
                 self._results.append(self._get_parse_links(html, kw, only_results=True).all_results)
 

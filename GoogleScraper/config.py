@@ -52,6 +52,9 @@ Config = {
     }
 }
 
+class InvalidConfigurationException(Exception):
+    pass
+
 def parse_config(cmd_args=False):
     """Parse and normalize the config file and return a dictionary with the arguments.
 
@@ -87,7 +90,7 @@ def parse_config(cmd_args=False):
     except Exception as e:
         logger.error('Exception trying to parse file {}: {}'.format(CONFIG_FILE, e))
 
-    logger.setLevel(cfg_parser['GLOBAL'].getint('debug', 10))
+    logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
     # add configuration parameters retrieved from command line
     if cargs:
         cfg_parser.read_dict(cargs)
@@ -96,8 +99,31 @@ def parse_config(cmd_args=False):
     Config = cfg_parser
 
 def get_config(cmd_args=False, force_reload=False):
+    """Returns the GoogleScrape configuration.
+
+    Keywords arguments:
+    cmd_args -- The command line arguments that should be passed to the cmd line argument parser.
+    force_reload -- If true, ignores the flag already_parsed
+    """
     global already_parsed
     if not already_parsed or force_reload:
-        parse_config(cmd_args)
         already_parsed = True
+        parse_config(cmd_args)
     return Config
+
+def update_config(d):
+    """Updates the config with a dictionary. In comparision to the native dictionary update()
+    method, update_config() will only extend or overwrite options in sections. It won't forget
+    options that are not explicitly specified in d.
+
+    Will overwrite existing options.
+    """
+    global Config
+
+    for section, mapping in d.items():
+        if not Config.has_section(section):
+            Config.add_section(section)
+
+        for option, value in mapping.items():
+            Config.set(section, option, value)
+

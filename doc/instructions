@@ -1,0 +1,38 @@
+# as wished the instructions to do the scraping on your own
+
+0. Read through all steps. Then take actions.
+
+1.
+First you need to have python 3.4 and pip installed. If you have struggle installing pip, read through this:
+http://stackoverflow.com/questions/17271319/installing-pip-on-mac-os-x
+
+2.
+Then you need to install a wide range of packages. Get yourself a terminal/shell and fire the following commands in it:
+
+sudo pip install lxml
+sudo pip install requests
+sudo pip install cssselect
+sudo pip install beautifulsoup4
+sudo pip install selenium
+
+3. On my linux distro (Arch Linux) the above commands suffice to get GoogleScraper.py running. It is perfectly possible
+that you may experience some minor quirks on your OS. I can't know what, because I sadly don't have a virtual machine running
+here with Mac OS X. But if you have issues, googling them should make you wiser.
+
+4. Install Chrome (its lightweight and fast). You can also try it with firefox, but believe me, your computer will crash. Just use
+Chrome. Firefox needs a lot more memory.
+
+5.
+Now put the 10k keywords in a text file. Every keyword on a line. All separated by new lines.
+
+6.
+Start scraping with the following command:
+
+python GoogleScraper.py sel --keyword-file YOUR_10K_KEYWORDS.txt
+
+But this command will make the script run around 3 hours. So please test the script first with 200 keywords. Then inspect the resulting
+results* database (as always: sqlite3) and look if the results are correct. Then run the scraper with the 10k keywords (you don't need to scrape
+the 200 keywords from before again, GoogleScraper is smart, it has caching enabled by default).
+
+7.
+Make sure you have at least 300 MB free disk space (For caching results).
