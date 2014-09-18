@@ -148,7 +148,7 @@ class GoogleParser():
         # There might be several list of different css selectors to handle different SERP formats
         css_selectors = {
             # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s span.st'], ),
+            'results': (['li.g', 'h3.r > a', 'div.s span.st'], ),
             # to parse the centered ads
             'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
                          ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
