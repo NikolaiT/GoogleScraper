@@ -182,7 +182,7 @@ def print_scrape_results_http(results, verbosity=1):
     """Print the results obtained by "http" method."""
     for t in results:
         for result in t:
-            logger.info('{} links found! The search with the keyword "{}" yielded the result:{}'.format(
+            logger.info('{} links found. The search with the keyword "{}" yielded the result: "{}"'.format(
                 len(result['results']), result['search_keyword'], result['num_results_for_kw']))
             import textwrap
             for result_set in ('results', 'ads_main', 'ads_aside'):

@@ -186,7 +186,7 @@ class GoogleScrape():
     def _build_query(self, rand=False):
         """Build the headers and params for the GET request for the Google server.
 
-        When random is True, several headers (like the UA) are chosen
+        If random is True, several headers (like the UA) are chosen
         randomly.
 
         There are currently four different Google searches supported:
@@ -290,6 +290,15 @@ class GoogleScrape():
 
         if not html:
             try:
+                base_url=Config['GLOBAL'].get('base_search_url')
+
+                if Config['GLOBAL'].getint('verbosity', 0) > 1:
+                    logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
+                        base_url=base_url,
+                        headers=self._HEADERS,
+                        params=self.search_params
+                    ))
+
                 r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self._HEADERS,
                                  params=self.search_params, timeout=3.0)
 

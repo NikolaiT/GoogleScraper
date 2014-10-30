@@ -93,7 +93,7 @@ def parse_config(cmd_args=False):
     logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
     # add configuration parameters retrieved from command line
     if cargs:
-        cfg_parser.read_dict(cargs)
+        cfg_parser = update_config(cargs, cfg_parser)
 
     # and replace the global Config variable with the real thing
     Config = cfg_parser
@@ -111,19 +111,24 @@ def get_config(cmd_args=False, force_reload=False):
         parse_config(cmd_args)
     return Config
 
-def update_config(d):
+def update_config(d, target=None):
     """Updates the config with a dictionary. In comparision to the native dictionary update()
     method, update_config() will only extend or overwrite options in sections. It won't forget
     options that are not explicitly specified in d.
 
     Will overwrite existing options.
     """
-    global Config
+    if not target:
+        global Config
+    else:
+        Config = target
 
     for section, mapping in d.items():
         if not Config.has_section(section):
             Config.add_section(section)
 
         for option, value in mapping.items():
-            Config.set(section, option, value)
+            Config.set(section, option, str(value))
+
+    return Config
 

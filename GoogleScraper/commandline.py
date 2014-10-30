@@ -32,7 +32,7 @@ def get_command_line(static_args=False):
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
                         action='store',
-                        default='stdout', choices=('database', 'stdout'), help='Where/how to put/show the results.')
+                        default='stdout', choices=('database', 'stdout'), help='Where/how to put/show the results. Default is stdout.')
     parser.add_argument('-t', '--search_type', metavar='search_type', type=str, dest='searchtype', action='store',
                         default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
@@ -71,6 +71,6 @@ def get_command_line(static_args=False):
 
     return {
         'SCRAPING': make_dict(['scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'deep_scrape']),
-        'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db']),
+        'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity']),
         'SELENIUM': make_dict(['num_browser_instances'])
     }

@@ -1,5 +1,5 @@
 selenium
-bs4
+beautifulsoup4
 cssselect
 requests
-PyMySQL
+PyMySql
