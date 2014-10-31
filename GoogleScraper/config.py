@@ -9,7 +9,6 @@ from GoogleScraper.commandline import get_command_line
 __author__ = 'nikolai'
 
 # a level up
-# CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config/config.cfg')
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
 already_parsed = False
 logger = logging.getLogger('GoogleScraper')
@@ -59,11 +58,14 @@ def parse_config(cmd_args=False):
     """Parse and normalize the config file and return a dictionary with the arguments.
 
     There are several places where GoogleScraper can be configured. The configuration is
-    determined (in this order, a key/value pair emerging in further down the list overwrites earlier occurrences)
+    determined (in this order, a key/value pair emerging further down the list overwrites earlier occurrences)
     from the following places:
-      - Program internal configuration found in the global variable Config
-      - Configuration parameters given in the config file
+      - Program internal configuration found in the global variable Config in this file
+      - Configuration parameters given in the config file CONFIG_FILE
       - Params supplied by command line arguments
+
+    So for example, program internal params are overwritten by the config file which in turn
+    are shadowed by command line arguments.
     """
     global Config, CONFIG_FILE
     cargs = False
@@ -88,7 +90,7 @@ def parse_config(cmd_args=False):
         with open(CONFIG_FILE, 'r', encoding='utf8') as cfg_file:
             cfg_parser.read_file(cfg_file)
     except Exception as e:
-        logger.error('Exception trying to parse file {}: {}'.format(CONFIG_FILE, e))
+        logger.error('Exception trying to parse config file {}: {}'.format(CONFIG_FILE, e))
 
     logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
     # add configuration parameters retrieved from command line
@@ -97,6 +99,17 @@ def parse_config(cmd_args=False):
 
     # and replace the global Config variable with the real thing
     Config = cfg_parser
+
+
+def parse_cmd_args(cmd_args=None):
+    # if necessary, get command line configuration
+    if isinstance(cmd_args, list):
+        cargs = get_command_line(cmd_args)
+    else:
+        cargs = get_command_line()
+
+    global Config
+    update_config(cargs, Config)
 
 def get_config(cmd_args=False, force_reload=False):
     """Returns the GoogleScrape configuration.
@@ -112,7 +125,7 @@ def get_config(cmd_args=False, force_reload=False):
     return Config
 
 def update_config(d, target=None):
-    """Updates the config with a dictionary. In comparision to the native dictionary update()
+    """Updates the config with a dictionary. In comparison to the native dictionary update()
     method, update_config() will only extend or overwrite options in sections. It won't forget
     options that are not explicitly specified in d.
 

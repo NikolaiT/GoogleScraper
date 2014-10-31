@@ -31,7 +31,7 @@ from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.res import maybe_create_db
 from GoogleScraper.scraping import SelScraper, GoogleScrape
 from GoogleScraper.caching import *
-from GoogleScraper.config import get_config, InvalidConfigurationException
+from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args
 import GoogleScraper.config
 
 try:
@@ -202,14 +202,13 @@ def print_scrape_results_http(results, verbosity=1):
                             print('*' * 70)
                             print()
 
-def main(return_results=True, force_reload=True, proxies=[]):
+def main(return_results=True, force_reload=False, proxies=[]):
     """Runs the GoogleScraper application as determined by the various configuration points.
 
     Keyword arguments:
     return_results -- Whether the GoogleScraper application is run programmatically. Will return all scraped results.
     """
-    global Config
-    Config = get_config(True, force_reload)
+    parse_cmd_args()
 
     if Config['GLOBAL'].getboolean('view_config'):
         from GoogleScraper.config import CONFIG_FILE
