@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 import os
@@ -10,11 +9,10 @@ import sys
 import re
 import logging
 import functools
-from GoogleScraper.config import get_config
+from GoogleScraper.config import Config
 from GoogleScraper.res import parse_links
 
 logger = logging.getLogger('GoogleScraper')
-Config = get_config()
 
 # always create the cachedir relative to the calling code.
 

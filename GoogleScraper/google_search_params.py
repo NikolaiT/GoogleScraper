@@ -1,5 +1,3 @@
-__author__ = 'nikolai'
-
 # http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
 # http://www.rankpanel.com/blog/google-search-parameters/
 # typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8

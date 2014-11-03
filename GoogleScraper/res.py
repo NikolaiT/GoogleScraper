@@ -1,17 +1,13 @@
-#!/usr/bin/python3
-
 import os
 import time
 import sqlite3
-from GoogleScraper.config import get_config
+from GoogleScraper.config import Config
 from GoogleScraper.parsing import GoogleParser
 
 RESULTS_PATH = 'google_scraper_results'
 
 if not os.path.exists(RESULTS_PATH):
     os.mkdir(RESULTS_PATH)
-
-Config = get_config()
 
 def maybe_create_db():
     """Creates a little sqlite database to include at least the columns:

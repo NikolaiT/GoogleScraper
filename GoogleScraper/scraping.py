@@ -31,14 +31,13 @@ except ImportError as ie:
 
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name
-from GoogleScraper.config import get_config
+from GoogleScraper.config import Config
 from GoogleScraper.parsing import GoogleParser
 import GoogleScraper.google_search_params
 import webbrowser
 import tempfile
 
 logger = logging.getLogger('GoogleScraper')
-Config = get_config()
 
 class GoogleSearchError(Exception):
     pass

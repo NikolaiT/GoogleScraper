@@ -6,8 +6,6 @@ import logging
 
 from GoogleScraper.commandline import get_command_line
 
-__author__ = 'nikolai'
-
 # a level up
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
 already_parsed = False
@@ -112,7 +110,7 @@ def parse_cmd_args(cmd_args=None):
     update_config(cargs, Config)
 
 def get_config(cmd_args=False, force_reload=False):
-    """Returns the GoogleScrape configuration.
+    """Returns the GoogleScraper configuration.
 
     Keywords arguments:
     cmd_args -- The command line arguments that should be passed to the cmd line argument parser.
@@ -145,3 +143,5 @@ def update_config(d, target=None):
 
     return Config
 
+
+Config = get_config()

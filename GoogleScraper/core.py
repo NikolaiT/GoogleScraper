@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
 """
@@ -31,7 +30,7 @@ from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.res import maybe_create_db
 from GoogleScraper.scraping import SelScraper, GoogleScrape
 from GoogleScraper.caching import *
-from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args
+from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
 
 try:
@@ -53,7 +52,6 @@ except ImportError as ie:
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
 logger = logging.getLogger('GoogleScraper')
-Config = get_config(False)
 
 def deep_scrape(query):
     """Launches many different Google searches with different parameter combinations to maximize return of results. Depth first.
@@ -115,7 +113,7 @@ def scrape(keyword='', scrapemethod='sel', num_results_per_page=10, num_pages=1,
         return threads[0].results
 
 def scrape_with_config(config, **kwargs):
-    """First updates the global scrape configuration with the provided dictionary.
+    """First updates the global GoogleScraper configuration with the provided dictionary.
 
     Arguments:
     config -- A configuration dictionary that updates the global configuration.

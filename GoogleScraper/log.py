@@ -3,8 +3,6 @@
 import sys
 import logging
 
-__author__ = 'nikolai'
-
 def setup_logger(level=logging.INFO):
         # First obtain a logger
         logger = logging.getLogger('GoogleScraper')

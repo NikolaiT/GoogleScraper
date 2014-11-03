@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 __author__ = 'Nikolai Tschacher'
-__updated__ = '06.09.2014'  # day.month.year
+__updated__ = '01.11.2014'  # day.month.year
 __home__ = 'incolumitas.com'
-__version__ = '0.1.0'
+__version__ = '0.1.1dev'
 
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.config import get_config

@@ -12,8 +12,8 @@ def get_command_line(static_args=False):
 
     parser = argparse.ArgumentParser(prog='GoogleScraper',
                                      description='Scrapes the Google search engine by forging http requests that imitate '
-                                                 'browser searches or by using real browsers controlled by the selenium testing framework.',
-                                     epilog='This program might infringe the Google TOS, so use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
+                                                 'browser searches or by using real browsers controlled by the selenium framework. Multithreading support.',
+                                     epilog='This program might infringe the Google TOS. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
     parser.add_argument('scrapemethod', type=str,
                         help='The scraping type. There are currently two types: "http" and "sel". "Http" scrapes with raw http requests whereas "sel" uses the selenium framework to remotely control browsers',
