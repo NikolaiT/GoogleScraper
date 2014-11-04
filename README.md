@@ -18,7 +18,7 @@ Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver
 From now on (August 2014), you can install GoogleScraper comfortably with pip:
 
 ```
-pip install GoogleScraper
+pip3 install GoogleScraper
 ```
 
 #### Alternatively install from Github:
@@ -28,17 +28,16 @@ First clone and change into the project tree.
 Begin with installing the following third party modules:
 
 ```
-lxml
 selenium
-bs4 [try beautifulsoup4]
+beautifulsoup4
 cssselect
 requests
-PyMySQL
+PyMySql
 ```
 
 You can do so with:
 
-`pip3 install module1, module2, ..`
+`pip3 install module1, module2, ..` or better by `pip install -r requirements.txt`
 
 
 If you don't want to install GoogleScraper system wide, just make a virtual environment (Run all commands in the GoogleScraper.py directory):
@@ -46,7 +45,7 @@ If you don't want to install GoogleScraper system wide, just make a virtual envi
 ```bash
 git clone https://github.com/NikolaiT/GoogleScraper
 cd GoogleScraper
-virtualenv --no-site-packages .venv
+virtualenv --no-site-packages --python=python3 .venv
 source .venv/bin/activate
 .venv/bin/python setup.py install
 # now you can run GoogleScraper from withing the virtual environment

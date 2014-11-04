@@ -6,8 +6,10 @@ from setuptools import setup
 
 version = re.search(
     "^__version__\s*=\s*'(.*)'",
-    open('GoogleScraper/__init__.py').read(),
+    open('GoogleScraper/version.py').read(),
     re.M).group(1)
+
+requirements = [r for r in open('requirements.txt', 'r').read().split('\n') if r]
 
 setup(name='GoogleScraper',
       version=version,
@@ -22,12 +24,5 @@ setup(name='GoogleScraper',
       package_data={
           'GoogleScraper': ['config.cfg'],
       },
-      install_requires=[
-          'lxml',
-          'selenium',
-          'beautifulsoup4',
-          'cssselect',
-          'requests',
-          'PyMySQL'
-      ]
+      install_requires=requirements
 )

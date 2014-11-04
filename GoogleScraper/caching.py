@@ -12,27 +12,42 @@ import functools
 from GoogleScraper.config import Config
 from GoogleScraper.res import parse_links
 
+"""
+GoogleScraper is a complex application and thus searching is error prone. While developing,
+you may need to repeat the same searches several times and you might end being banned by
+Google. This is why all searches are chached by default.
+
+Every SERP page is cached in a separate file. In the future, it might be more straightforward to
+merge several logically adjacent search result HTML code together.
+"""
+
 logger = logging.getLogger('GoogleScraper')
 
-# always create the cachedir relative to the calling code.
 
-if Config['GLOBAL'].getboolean('do_caching'):
-    cd = Config['GLOBAL'].get('cachedir')
-    if not os.path.exists(cd):
-        os.mkdir(cd)
+def maybe_create_cache_dir():
+    if Config['GLOBAL'].getboolean('do_caching'):
+        cd = Config['GLOBAL'].get('cachedir', '.scrapecache')
+        if not os.path.exists(cd):
+            os.mkdirs(cd)
 
 def if_caching(f):
     @functools.wraps(f)
     def wraps(*args, **kwargs):
         if Config['GLOBAL'].getboolean('do_caching'):
+            maybe_create_cache_dir()
             return f(*args, **kwargs)
     return wraps
 
 def maybe_clean_cache():
-    """Delete all .cache files in the cache directory that are older than 12 hours."""
-    for fname in os.listdir(Config['GLOBAL'].get('cachedir')):
+    """Clean the cache.
+
+     Clean all cached searches (the obtained html code) in the cache directory iff
+     the respective files are older than specified in the configuration. Defaults to 12 hours.
+     """
+    for fname in os.listdir(Config['GLOBAL'].get('cachedir', '.scrapecache')):
         path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
-        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after')):
+        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after', 12)):
+            # Remove the whole directory if necessary
             if os.path.isdir(path):
                 import shutil
                 shutil.rmtree(path)
@@ -40,69 +55,72 @@ def maybe_clean_cache():
                 os.remove(os.path.join(Config['GLOBAL'].get('cachedir'), fname))
 
 
-def cached_file_name(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}):
-    """Make a unique file name based on the values of the google search parameters.
+def cached_file_name(kw, url, params):
+    """Make a unique file name from the Google search request.
 
-        kw -- The search keyword
-        url -- The url for the search (without params)
-        params -- GET params in the URL string
+    Important! The order of the sequence is darn important! If search queries have the same
+    words but in a different order, they are unique searches.
 
-        If search_params is a dict, include both keys/values in the calculation of the
-        file name. If a sequence is provided, just use the elements of the sequence to
-        build the hash.
+    Args:
+        kw: The search keyword
+        url: The url for the search (without params)
+        params: The parameters used in the search url without the "q" parameter.
 
-        Important! The order of the sequence is darn important! If search queries have same
-        words but in a different order, they are individua searches.
+    Returns:
+        A unique file name based on the parameters of the search request.
+
     """
     assert isinstance(kw, str), kw
     assert isinstance(url, str), url
-    if params:
-        assert isinstance(params, dict)
+    assert isinstance(params, dict)
 
-    if params:
-        unique = list(itertools.chain([kw], url, params.keys(), params.values()))
-    else:
-        unique = list(itertools.chain([kw], url))
+    unique = list(itertools.chain([kw, ], url, params.keys(), params.values()))
 
     sha = hashlib.sha256()
     sha.update(b''.join(str(s).encode() for s in unique))
-    return '{}.{}'.format(sha.hexdigest(), 'cache')
+    return '{file_name}.{extension}'.format(file_name=sha.hexdigest(), extension='cache')
+
 
 @if_caching
-def get_cached(kw, url=Config['SELENIUM']['sel_scraper_base_url'], params={}, cache_dir=''):
-    """Loads a cached search results page from CACHEDIR/fname.cache
+def get_cached(kw, url, params):
+    """Loads a cached SERP result.
 
-    It helps in testing and avoid requesting
-    the same resources again and again (such that google may
-    recognize us as what we are: Sneaky SEO crawlers!)
+    Args:
+        kw: The keyword used in the search request. Value of "q" parameter.
+        url: The base search url used while requesting.
+        params: The search parameters as a dictionary.
 
-    --search_params The parameters that identify the resource
-    --decompress What algorithm to use for decompression
+    Returns:
+        The contents of the HTML that was shipped while searching. False if there couldn't
+        be found a file based on the above params.
+
     """
     fname = cached_file_name(kw, url, params)
 
-    if os.path.exists(cache_dir) and cache_dir:
-        cdir = cache_dir
-    else:
-        cdir = Config['GLOBAL'].get('cachedir')
+    cdir = Config['GLOBAL'].get('cachedir', '.scrapecache')
 
-    try:
-        if fname in os.listdir(cdir):
-            # If the cached file is older than 12 hours, return False and thus
-            # make a new fresh request.
+    if fname in os.listdir(cdir):
+        # If the cached file is older than 12 hours, return False and thus
+        # make a new fresh request.
+        try:
             modtime = os.path.getmtime(os.path.join(cdir, fname))
-            if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after'):
-                return False
-            path = os.path.join(cdir, fname)
-            return read_cached_file(path)
-    except FileNotFoundError as err:
-        raise Exception('Unexpected file not found: {}'.format(err.msg))
+        except FileNotFoundError as err:
+            return False
 
-    return False
+        if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after', 12):
+            return False
+
+        path = os.path.join(cdir, fname)
+        return read_cached_file(path)
+    else:
+        return False
 
 @if_caching
 def read_cached_file(path, n=2):
-    """Read a zipped or unzipped cache file."""
+    """Read a zipped or unzipped cache file.
+
+
+    """
     assert n != 0
 
     if Config['GLOBAL'].getboolean('compress_cached_files'):

@@ -48,6 +48,9 @@ class InvalidNumberResultsException(GoogleSearchError):
 class MaliciousRequestDetected(GoogleSearchError):
     pass
 
+class SeleniumMisconfigurationError(Exception):
+    pass
+
 def timer_support(Class):
     """In python versions prior to 3.3, threading.Timer
     seems to be a function that returns an instance
@@ -372,7 +375,6 @@ class SelScraper(threading.Thread):
             assert line.count(';') == 1
             key, value = line.split(';')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
-        logger.info(self.sleeping_ranges)
 
     def _largest_sleep_range(self, i):
         assert i >= 0
@@ -408,14 +410,11 @@ class SelScraper(threading.Thread):
         precedence, because it's more lightweight.
         """
         if self.browser_type == 'chrome':
-            self._get_Chrome()
-            return True
+            return self._get_Chrome()
         elif self.browser_type == 'firefox':
-            self._get_Firefox()
-            return True
+            return self._get_Firefox()
         elif self.browser_type == 'phantomjs':
-            self._get_PhantomJS()
-            return True
+            return self._get_PhantomJS()
 
         # if the config remains silent, try to get Chrome, else Firefox
         if not self._get_Chrome():
@@ -433,8 +432,8 @@ class SelScraper(threading.Thread):
                 self.webdriver = webdriver.Chrome()
             return True
         except WebDriverException as e:
-            logger.info(e)
             # we dont have a chrome executable or a chrome webdriver installed
+            logger.error(e)
         return False
 
     def _get_Firefox(self):
@@ -458,8 +457,8 @@ class SelScraper(threading.Thread):
                 self.webdriver = webdriver.Firefox()
             return True
         except WebDriverException as e:
-            logger.info(e)
             # reaching here is bad, since we have no available webdriver instance.
+            logger.error(e)
         return False
 
     def _get_PhantomJS(self):
@@ -514,7 +513,9 @@ class SelScraper(threading.Thread):
         if len(self.keywords) <= 0:
             return True
 
-        self._get_webdriver()
+        if not self._get_webdriver():
+            raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
+
         if self.browser_type != 'browser_type':
             self.webdriver.set_window_size(400, 400)
             self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(self.browser_num > 4))

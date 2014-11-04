@@ -6,7 +6,6 @@ import logging
 
 from GoogleScraper.commandline import get_command_line
 
-# a level up
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
 already_parsed = False
 logger = logging.getLogger('GoogleScraper')
