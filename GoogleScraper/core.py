@@ -279,7 +279,7 @@ def main(return_results=True, force_reload=False, proxies=[]):
     if Config['SCRAPING'].get('scrapemethod', '') == 'sel':
         # First of all, lets see how many keywords remain to scrape after parsing the cache
         if Config['GLOBAL'].getboolean('do_caching'):
-            remaining = parse_all_cached_files(keywords, conn, simulate=Config['GLOBAL'].getboolean('simulate'))
+            remaining = parse_all_cached_files(keywords, conn, url=Config['SELENIUM'].get('sel_scraper_base_url'))
         else:
             remaining = keywords
 

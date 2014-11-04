@@ -20,8 +20,10 @@ Config = {
         'db': 'results_{asctime}.db',
         # The directory path for cached google results
         'do_caching': True,
-        # If set, then compress/decompress files with this algorithm
+        # If set, then compress/decompress files
         'compress_cached_files': True,
+        # If set, use this compressing algorithm, else just use zip
+        'compressing_algorithm': 'zip',
         # Whether caching shall be enabled
         'cachedir': '.scrapecache/',
         # After how many hours should the cache be cleaned

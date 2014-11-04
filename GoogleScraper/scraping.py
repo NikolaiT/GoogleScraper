@@ -576,7 +576,7 @@ class SelScraper(threading.Thread):
                 if self.rlock or self.queue:
                     # Lock for the sake that two threads write to same file (not probable)
                     self.rlock.acquire()
-                    cache_results(html, kw, url=self.url)
+                    cache_results(html, kw, self.url)
                     self.rlock.release()
                     # commit in intervals specified in the config
                     self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
