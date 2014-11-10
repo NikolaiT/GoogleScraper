@@ -399,15 +399,15 @@ class SelScraper(threading.Thread):
         return (1, 2)
 
     def _maybe_crop(self, html):
-        """Crop Google SERP pages if we find the needle that indicates the beginning of the main content.
+        """Crop Google the HTML of  SERP pages.
 
-        Use lxml.html (fast) to crop the selections.
+        If we find the needle that indicates the beginning of the main content, use lxml to crop the selections.
 
         Args:
-        html -- The html to crop.
+            html: The html to crop.
 
         Returns:
-        The cropped html.
+            The cropped html.
         """
         parsed = lxml.html.fromstring(html)
         for bad in parsed.xpath('//script|//style'):
@@ -418,8 +418,11 @@ class SelScraper(threading.Thread):
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
 
-        May either return a Firefox or Chrome or phantomjs instance, according to availability. Chrome has
-        precedence, because it's more lightweight.
+        Chrome is quite fast, but not as stealthy as PhantomJS.
+
+        Returns:
+            The appropriate webdriver mode according to self.browser_type. If no webdriver mode
+            could be found, return False.
         """
         if self.browser_type == 'chrome':
             return self._get_Chrome()
@@ -432,7 +435,7 @@ class SelScraper(threading.Thread):
         if not self._get_Chrome():
             self._get_Firefox()
 
-        return True
+        return False
 
     def _get_Chrome(self):
         try:
@@ -493,7 +496,15 @@ class SelScraper(threading.Thread):
             logger.error(e)
 
     def handle_request_denied(self):
-        """Checks whether Google detected a potentially harmful request and denied its processing by showing up a fucky captcha.
+        """Checks whether Google detected a potentially harmful request.
+
+        Whenever such potential abuse is detected, Google shows an captcha.
+
+        Returns:
+            True If the issue could be resolved.
+
+        Raises:
+            MaliciousRequestDetected when there was not way to stp Google From denying our requests.
         """
         if Config['SELENIUM'].getboolean('manual_captcha_solving'):
             if '/sorry/' in self.webdriver.current_url \
@@ -521,6 +532,8 @@ class SelScraper(threading.Thread):
             raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
 
     def run(self):
+        """The core logic of an GoogleScrape"""
+
         # Create the browser and align it according to its position and in maximally two rows
         if len(self.keywords) <= 0:
             return True
@@ -603,7 +616,15 @@ class SelScraper(threading.Thread):
 
         [[lastrowid]] needs to be replaced with the last rowid from the database when inserting.
 
-        Not secure against sql injections from google ~_~
+        Args:
+            data: The html to parse.
+            kw: The keywords that was used in the scrape.
+            only_results: Whether only the parsed results should be returned.
+            page_num: The Google page number of the parsed reqeust.
+            ip: The ip address the request was issued.
+
+        Returns:
+            The data to insert in the database (serp_page and links table entries respectively)
         """
 
         parser = GoogleParser(data)
