@@ -65,6 +65,9 @@ def parse_config(cmd_args=False):
 
     So for example, program internal params are overwritten by the config file which in turn
     are shadowed by command line arguments.
+
+    Args:
+        cmd_args; An optional namespace object. If given, replaces command line parsing with this dict.
     """
     global Config, CONFIG_FILE
     cargs = False
@@ -101,7 +104,12 @@ def parse_config(cmd_args=False):
 
 
 def parse_cmd_args(cmd_args=None):
-    # if necessary, get command line configuration
+    """Parse the command line
+
+    Args:
+        cmd_args: Optional dictionary, if given, don't parse the command line,
+                  prepopulate the config with this dicionary.
+    """
     if isinstance(cmd_args, list):
         cargs = get_command_line(cmd_args)
     else:
@@ -113,9 +121,11 @@ def parse_cmd_args(cmd_args=None):
 def get_config(cmd_args=False, force_reload=False):
     """Returns the GoogleScraper configuration.
 
-    Keywords arguments:
-    cmd_args -- The command line arguments that should be passed to the cmd line argument parser.
-    force_reload -- If true, ignores the flag already_parsed
+    Args:
+        cmd_args; The command line arguments that should be passed to the cmd line argument parser.
+        force_reload: If true, ignores the flag already_parsed
+    Returns:
+        The configuration after parsing it.
     """
     global already_parsed
     if not already_parsed or force_reload:
@@ -124,11 +134,20 @@ def get_config(cmd_args=False, force_reload=False):
     return Config
 
 def update_config(d, target=None):
-    """Updates the config with a dictionary. In comparison to the native dictionary update()
-    method, update_config() will only extend or overwrite options in sections. It won't forget
+    """Updates the config with a dictionary.
+
+    In comparison to the native dictionary update() method,
+    update_config() will only extend or overwrite options in sections. It won't forget
     options that are not explicitly specified in d.
 
     Will overwrite existing options.
+
+    Args:
+        d: The dictionary to update the configuration with.
+        target; The configuration to be updated.
+
+    Returns:
+        The configuration after possibly updating it.
     """
     if not target:
         global Config

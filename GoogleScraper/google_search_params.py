@@ -1,13 +1,17 @@
-# http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
-# http://www.rankpanel.com/blog/google-search-parameters/
-# typical chrome requests (on linux x64): https://www.google.de/search?q=hotel&oq=hotel&aqs=chrome.0.69i59j69i60l3j69i57j69i61.860j0j9&sourceid=chrome&espv=2&es_sm=106&ie=UTF-8
-# All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
+"""
+Contains all parameters and sources/information on how the Google Search engine works.
 
-# http://lifehacker.com/5933248/avoid-getting-redirected-to-country-specific-versions-of-google
+Some good stuff:
+    http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
+    http://www.rankpanel.com/blog/google-search-parameters/
+    http://lifehacker.com/5933248/avoid-getting-redirected-to-country-specific-versions-of-google
 
-# All search requests must include the parameters site, client, q, and output. All parameter values
-# must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
+Args:
+    search_params: All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
 
+                    All search requests must include the parameters site, client, q, and output. All parameter values
+                    must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
+"""
 search_params = {
     'q': '',  # the search query string
     'oq': None,  # Shows the original query.

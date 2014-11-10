@@ -19,7 +19,16 @@ except ImportError as ie:
 logger = logging.getLogger('GoogleScraper')
 
 class GoogleParser():
-    """Parses data from Google SERP pages."""
+    """Parses Google SERP pages.
+
+    Given a hmtl string, GoogleParser tries to parse the links, snippets and
+    descriptions from serp entries.
+
+    Attributes:
+        results: All results without the num_results_for_kw
+        all_results: All scraped information for this page
+        links: Just return the links of the SERP page.
+    """
 
     # Named tuple type for the search results
     Result = namedtuple('LinkResult', 'link_title link_snippet link_url link_position')
@@ -39,6 +48,14 @@ class GoogleParser():
         'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
 
     def __init__(self, html, searchtype='normal'):
+        """Create new GoogleParse instance and parse all information.
+
+        Args:
+            html: The raw html of the Google search
+            searchtype: The google search type. By default "normal"
+        Raises:
+            An parsing error if there were any exceptions.
+        """
         self.html = html
         self.searchtype = searchtype
         self.dom = None
@@ -46,13 +63,10 @@ class GoogleParser():
         self.search_results = {'num_results_for_kw': []}
 
         # Try to parse the google HTML result using lxml
-        try:
-            doc = UnicodeDammit(self.html, is_html=True)
-            parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
-            self.dom = lxml.html.document_fromstring(self.html, parser=parser)
-            self.dom.resolve_base_href()
-        except Exception as e:
-            print('Some error occurred while lxml tried to parse: {}'.format(e))
+        doc = UnicodeDammit(self.html, is_html=True)
+        parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
+        self.dom = lxml.html.document_fromstring(self.html, parser=parser)
+        self.dom.resolve_base_href()
 
         # Very redundant by now, but might change in the soon future
         if self.searchtype == 'normal':
@@ -92,17 +106,21 @@ class GoogleParser():
         self._clean_results()
 
     def __iter__(self):
-        """Simple magic method to iterate quickly over found non ad results"""
+        """Simple iterator generator to iterate quickly over found non ad results.
+
+        Yields:
+            title, snippet and the url for a SERP link
+        """
         for link_title, link_snippet, link_url in self.result['results']:
             yield (link_title, link_snippet, link_url)
 
     def num_results(self):
-        """Returns the number of pages found by keyword as shown in top of SERP page."""
+        """Return the number of pages found by keyword as shown in top of SERP page."""
         return self.search_results['num_results_for_kw']
 
     @property
     def results(self):
-        """Returns all results including sidebar and main result advertisements"""
+        """Return all results including sidebar and main result advertisements"""
         return {k: v for k, v in self.search_results.items() if k not in
                                                                 ('num_results_for_kw', )}
     @property
@@ -111,11 +129,11 @@ class GoogleParser():
 
     @property
     def links(self):
-        """Only returns non ad results"""
+        """Only return non ad results"""
         return self.search_results['results']
 
     def _clean_results(self):
-        """Cleans/extracts the found href or data-href attributes."""
+        """Clean/extract the found href or data-href attributes from results."""
 
         # Now try to create ParseResult objects from the URL
         for key in ('results', 'ads_aside', 'ads_main'):
@@ -132,17 +150,18 @@ class GoogleParser():
                                 link_snippet=e.link_snippet, link_position=e.link_position)
 
     def _parse_num_results(self):
-        # try to get the number of results for our search query
+        """Try to get the number of results for our search query."""
         try:
             self.search_results['num_results_for_kw'] = \
                 self.dom.xpath(self._xp('div#resultStats'))[0].text_content()
-        except Exception as e:
+        except IndexError as e:
             logger.debug('Cannot parse number of results for keyword from SERP page: {}'.format(e))
 
     def _parse_normal_search(self, dom):
         """Specifies the CSS selectors to extract links/snippets for a normal search.
 
-        @param dom The page source to parse.
+        Args:
+            dom: The page source to parse.
         """
 
         # There might be several list of different css selectors to handle different SERP formats
@@ -158,7 +177,11 @@ class GoogleParser():
         self._parse(dom, css_selectors)
 
     def _parse_image_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a image search."""
+        """Specifies the CSS selectors to extract links/snippets for a image search.
+
+        Args:
+            dom: The page source to parse.
+        """
         css_selectors = {
             'results': (['div.rg_di', 'a:first-child', 'span.rg_ilmn'], )
         }
@@ -169,6 +192,9 @@ class GoogleParser():
 
         Very similar to a normal search. Basically the same. But this is a unique method
         because the parsing logic may change over time.
+
+        Args:
+            dom: The page source to parse.
         """
         css_selectors = {
             # to extract all links of non-ad results, including their snippets(descriptions) and titles.
@@ -186,6 +212,9 @@ class GoogleParser():
 
         Is also similar to a normal search. But must be a separate function since
         https://news.google.com/nwshp? needs own parsing code...
+
+        Args:
+            dom: The page source to parse.
         """
         css_selectors = {
             # to extract all links of non-ad results, including their snippets(descriptions) and titles.
@@ -203,17 +232,37 @@ class GoogleParser():
         self._parse(dom, css_selectors)
 
     def _parse(self, dom, css_selectors):
-        """Generic parse method"""
+        """Generic parse method.
+
+        Args:
+            dom: The dom that was parsed in the constructor.
+            css_selectors: A list of css_selectors to apply on the dom.
+        """
         for key, slist in css_selectors.items():
             for selectors in slist:
                 self.search_results[key].extend(self._parse_links(dom, *selectors))
         self._parse_num_results()
 
     def _parse_links(self, dom, container_selector, link_selector, snippet_selector):
+        """Try to extract all links of non-ad results.
+
+        Including their snippets(descriptions) and titles.
+        The parsing should be as robust as possible. Sometimes we can't extract all data, but as much as humanly
+        possible.
+
+        Args:
+            dom: The dom that was parsed in the constructor.
+            container_selector: The selector that encompasses a whole link.
+            link_selector: Selector for a specific link
+            snippet_selector: CSS selector for te snippet for each link
+
+        Returns:
+            The parsed results
+
+        Raises:
+            A Failure that probably reveals some error about applying the selectors.
+        """
         links = []
-        # Try to extract all links of non-ad results, including their snippets(descriptions) and titles.
-        # The parsing should be as robust as possible. Sometimes we can't extract all data, but as much as humanly
-        # possible.
         rank = 0
         try:
             li_g_results = dom.xpath(self._xp(container_selector))
@@ -239,4 +288,5 @@ class GoogleParser():
         # Catch further errors besides parsing errors that take shape as IndexErrors
         except Exception as err:
             logger.error('Error in parsing result links with selector={}: {}'.format(container_selector, err))
+            raise
         return links or []

@@ -63,8 +63,12 @@ def parse_links(data, conn, kw, page_num=1, ip='127.0.0.1'):
     """Insert parsed data into the database. High level parsing function.
 
     Args:
-    conn -- Either a sqlite3 cursor or connection object. If called in threads, make sure
-    to wrap this function in some kind of synchronization functionality.
+        data: Html to parse with GoogleParser
+        conn: Either a sqlite3 cursor or connection object. If called in threads, make sure
+                to wrap this function in some kind of synchronization functionality.
+        kw: The keyword for which data was scraped.
+        page_num: On which page of the SERP the data was scaped.
+        ip: Which ip scraped the data.
     """
     parser = GoogleParser(data)
     results = parser.links

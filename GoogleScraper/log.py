@@ -4,7 +4,7 @@ import sys
 import logging
 
 def setup_logger(level=logging.INFO):
-        # First obtain a logger
+        """Setup the global configuration logger for GoogleScraper"""
         logger = logging.getLogger('GoogleScraper')
         logger.setLevel(level)
 

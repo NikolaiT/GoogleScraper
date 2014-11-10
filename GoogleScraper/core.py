@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 """
+This file contains the core functionality of GoogleScraper.
+
 This is a little module that uses Google to automate search
 queries. It gives straightforward access to all relevant data of Google such as
 - The links of the result page
@@ -8,16 +10,6 @@ queries. It gives straightforward access to all relevant data of Google such as
 - The caption/description below each link
 - The number of results for this keyword
 - The rank for the specific results
-
-GoogleScraper's architecture outlined:
-- Proxy support (Socks5, Socks4, HTTP Proxy)
-- Threading support
-- three different modes:
-    + requesting with raw http packets
-    + using the selenium web driver framework
-    + scraping with phantomjs (planned)
-
-Note: Scraping compromises the google terms of service (TOS).
 """
 import math
 import threading
@@ -53,46 +45,19 @@ except ImportError as ie:
 
 logger = logging.getLogger('GoogleScraper')
 
-def deep_scrape(query):
-    """Launches many different Google searches with different parameter combinations to maximize return of results. Depth first.
-
-    This is the heart of core.py. The aim of deep_scrape is to maximize the number of links for a given keyword.
-    In order to achieve this goal, we'll heavily combine and rearrange a predefined set of search parameters to force Google to
-    yield unique links:
-    - different date-ranges for the keyword
-    - using synonyms of the keyword
-    - search for by different reading levels
-    - search by different target languages (and translate the query in this language)
-    - diversify results by scraping image search, news search, web search (the normal one) and maybe video search...
-
-    From the google reference:
-    When the Google Search Appliance filters results, the top 1000 most relevant URLs are found before the
-    filters are applied. A URL that is beyond the top 1000 most relevant results is not affected if you change
-    the filter settings.
-
-    This means that altering filters (duplicate snippet filter and duplicate directory filter) wont' bring us further.
-
-    @param query: The query/keyword to search for.
-    @return: All the result sets.
-    """
-
-    # First obtain some synonyms for the search query
-
-    # For each proxy, run the scrapes
-
 def scrape(keyword='', scrapemethod='sel', num_results_per_page=10, num_pages=1, offset=0, proxy=None):
-    """Public API function to search for terms and return a list of results.
+    """Public API function to search for keywords.
 
-    This (maybe) prevents Google to sort us out because of aggressive behaviour.
+    Args:
+        keyword: The search query. Can be whatever you want to crawl Google for.
+        scrapemethod: The method of scraping to use.
+        num_num_results_per_page: How many results should be displayed on a SERP page. Defaults to 10.
+        num_pages: How many pages to scrape.
+        offset: On which page to start scraping.
+        proxy: Optional, If set to appropriate data, will use a proxy.
 
-    arguments:
-    query -- the search query. Can be whatever you want to crawl google for.
-
-    Keyword arguments:
-    scrapemethod -- the scrapemethod
-    num_results_per_page -- the number of results per page. Either 10, 25, 50 or 100.
-    num_pages -- The number of pages to search for.
-    offset -- specifies the offset to the page to begin searching.
+    Returns:
+        The scraping results.
     """
     if scrapemethod == 'http':
         threads = [GoogleScrape(keyword, num_results_per_page, i, interval=i, proxy=proxy)
@@ -113,15 +78,14 @@ def scrape(keyword='', scrapemethod='sel', num_results_per_page=10, num_pages=1,
         return threads[0].results
 
 def scrape_with_config(config, **kwargs):
-    """First updates the global GoogleScraper configuration with the provided dictionary.
+    """Runs GoogleScraper with the dict in config.
 
-    Arguments:
-    config -- A configuration dictionary that updates the global configuration.
-
-    Keyword arguments:
-    kwargs -- Further options that cannot be handled by the configuration.
+    Args:
+        config: A configuration dictionary that updates the global configuration.
+        kwargs: Further options that cannot be handled by the configuration.
+    Returns:
+        The result of the main() function. May be void or a sqlite3 connection.
     """
-
     if not isinstance(config, dict):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
 
@@ -132,11 +96,11 @@ def scrape_with_config(config, **kwargs):
 class ResultsHandler(threading.Thread):
     """Consume data that the SelScraper/GoogleScrape threads put in the queue.
 
-    Opens a database connection and puts data in it. Intended to run be run in the main thread.
+    Opens a database connection and puts data in it. Intended to be run in the main thread.
 
     Implements the multi-producer pattern.
 
-    The ResultHandler cannot necessarily know when he should stop waiting. Thats why we
+    The ResultHandler cannot necessarily know when he should stop waiting. That's why we
     have a special DONE element in the Config that signals that all threads have finished and
     all data was processed.
     """
@@ -147,12 +111,16 @@ class ResultsHandler(threading.Thread):
         self.cursor = self.conn.cursor()
 
     def _insert_in_db(self, e):
+        """Inserts elements obtained from the queue in the database.
+
+        Args:
+            e: A tuple that contains a serp_page and link result.
+        """
         assert isinstance(e, tuple) and len(e) == 2
         first, second = e
         self.cursor.execute(
             'INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?, ?)', first)
         lastrowid = self.cursor.lastrowid
-        #logger.debug('Inserting in link: search_query={}, title={}, url={}'.format(kw, ))
         self.cursor.executemany('''INSERT INTO link
         ( title,
          url,
@@ -162,6 +130,7 @@ class ResultsHandler(threading.Thread):
          serp_id) VALUES(?, ?, ?, ?, ?, ?)''', [tuple(t)+ (lastrowid, ) for t in second])
 
     def run(self):
+        """Waits for elements in the queue until a special token ends the endless loop"""
         i = 0
         while True:
             #  If optional args block is true and timeout is None (the default), block if necessary until an item is available.
@@ -176,8 +145,12 @@ class ResultsHandler(threading.Thread):
                 self.conn.commit()
             i += 1
 
-def print_scrape_results_http(results, verbosity=1):
-    """Print the results obtained by "http" method."""
+def print_scrape_results_http(results):
+    """Print the results obtained by "http" method.
+
+    Args:
+        results: The results to be printed to stdout.
+    """
     for t in results:
         for result in t:
             logger.info('{} links found. The search with the keyword "{}" yielded the result: "{}"'.format(
@@ -191,7 +164,7 @@ def print_scrape_results_http(results, verbosity=1):
                             print('  Link: {}'.format(unquote(link_url.geturl())))
                         except AttributeError as ae:
                             print(ae)
-                        if verbosity > 1:
+                        if Config['GLOBAL'].getint('verbosity') > 1:
                             print(
                                 '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
                             print(
@@ -200,18 +173,25 @@ def print_scrape_results_http(results, verbosity=1):
                             print('*' * 70)
                             print()
 
-def main(return_results=True, force_reload=False, proxies=[]):
+def main(return_results=True):
     """Runs the GoogleScraper application as determined by the various configuration points.
 
-    Keyword arguments:
-    return_results -- Whether the GoogleScraper application is run programmatically. Will return all scraped results.
+    The main() function encompasses the core functionality of GoogleScraper. But it
+    shouldn't be the main() functions job to check the validity of the provided
+    configuration.
+
+    Args:
+        return_results: When GoogleScrape is used from within another program, don't print results to stdout,
+                        store them in a database instead.
+    Returns:
+        A database connection to the results when return_results is True
     """
     parse_cmd_args()
 
     if Config['GLOBAL'].getboolean('view_config'):
         from GoogleScraper.config import CONFIG_FILE
         print(open(CONFIG_FILE).read())
-        sys.exit(0)
+        return
 
     if Config['GLOBAL'].getboolean('do_caching'):
         d = Config['GLOBAL'].get('cachedir')
@@ -231,7 +211,8 @@ def main(return_results=True, force_reload=False, proxies=[]):
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):
         fix_broken_cache_names()
-        sys.exit('renaming done. restart for normal use.')
+        logger.info('renaming done. restart for normal use.')
+        return
 
     keywords = [keyword, ] if keyword else keywords
     if kwfile:
@@ -247,42 +228,37 @@ def main(return_results=True, force_reload=False, proxies=[]):
     if Config['SCRAPING'].getint('num_results_per_page') > 100:
         raise InvalidConfigurationException('Not more that 100 results per page available for Google searches.')
 
-    if not proxies:
-        # look for proxies in mysql database or a proxy file if not given as keyword argument
-        if proxy_db:
-            proxies = get_proxies_from_mysql_db(proxy_db)
-        elif proxy_file:
-            proxies = parse_proxy_file(proxy_file)
+    if proxy_db:
+        proxies = get_proxies_from_mysql_db(proxy_db)
+    elif proxy_file:
+        proxies = parse_proxy_file(proxy_file)
 
     valid_search_types = ('normal', 'video', 'news', 'image')
     if Config['SCRAPING'].get('search_type') not in valid_search_types:
         InvalidConfigurationException('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
 
-    # Create a sqlite database to store the results
+    # Create a sqlite3 database to store the results
     conn = maybe_create_db()
     if Config['GLOBAL'].getboolean('simulate'):
         print('*' * 60 + 'SIMULATION' + '*' * 60)
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have')
         logger.info('Scraped for {} keywords (before caching), with {} results a page, in total {} pages for each keyword'.format(
             len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_of_pages')))
-        logger.info('Used {} distinct proxies in total, with the following ip addresses: {}'.format(
-            len(proxies), '\t\t\n'.join(proxies)
-        ))
+        logger.info('Used {} distinct proxies in total, with the following proxies: {}'.format(len(proxies), '\t\t\n'.join(proxies)))
         if Config['SCRAPING'].get('scrapemethod') == 'sel':
             mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
         else:
             mode = 'http mode'
-        logger.info('By using {}'.format(mode))
-        sys.exit(0)
+        logger.info('By using scrapemethod: {}'.format(mode))
+        return
 
     # Let the games begin
-    if Config['SCRAPING'].get('scrapemethod', '') == 'sel':
+    if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
         # First of all, lets see how many keywords remain to scrape after parsing the cache
         if Config['GLOBAL'].getboolean('do_caching'):
             remaining = parse_all_cached_files(keywords, conn, url=Config['SELENIUM'].get('sel_scraper_base_url'))
         else:
             remaining = keywords
-
 
         # Create a lock to sync file access
         rlock = threading.RLock()
@@ -333,25 +309,21 @@ def main(return_results=True, force_reload=False, proxies=[]):
     elif Config['SCRAPING'].get('scrapemethod') == 'http':
         results = []
         cursor = conn.cursor()
-        if Config['SCRAPING'].getboolean('deep_scrape', False):
-            # TODO: implement deep scrape
-            raise NotImplementedError('Sorry. Currently deep scrape is not implemented.')
-        else:
-            for i, kw in enumerate(keywords):
-                r = scrape(kw, num_results_per_page=Config['SCRAPING'].getint('num_results_per_page', 10),
-                           num_pages=Config['SCRAPING'].getint('num_pages', 1), scrapemethod='http')
+        for i, kw in enumerate(keywords):
+            r = scrape(kw, num_results_per_page=Config['SCRAPING'].getint('num_results_per_page', 10),
+                       num_pages=Config['SCRAPING'].getint('num_pages', 1), scrapemethod='http')
 
-                if r:
-                    cursor.execute('INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query) VALUES(?,?,?,?,?)',
-                                 (i, datetime.datetime.utcnow(), 0, 0, kw))
-                    serp_id = cursor.lastrowid
-                    for result in r:
-                        for result_set in ('results', 'ads_main', 'ads_aside'):
-                            if result_set in result.keys():
-                                for title, snippet, url, pos in result[result_set]:
-                                    cursor.execute('INSERT INTO link (title, snippet, url, domain, rank, serp_id) VALUES(?, ?, ?, ?, ?, ?)',
-                                        (title, snippet, url.geturl(), url.netloc, pos, serp_id))
-                results.append(r)
+            if r:
+                cursor.execute('INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query) VALUES(?,?,?,?,?)',
+                             (i, datetime.datetime.utcnow(), 0, 0, kw))
+                serp_id = cursor.lastrowid
+                for result in r:
+                    results.append(r)
+                    for result_set in ('results', 'ads_main', 'ads_aside'):
+                        if result_set in result.keys():
+                            for title, snippet, url, pos in result[result_set]:
+                                cursor.execute('INSERT INTO link (title, snippet, url, domain, rank, serp_id) VALUES(?, ?, ?, ?, ?, ?)',
+                                    (title, snippet, url.geturl(), url.netloc, pos, serp_id))
             cursor.close()
         if Config['GLOBAL'].get('print'):
             print_scrape_results_http(results, Config['GLOBAL'].getint('verbosity', 0))

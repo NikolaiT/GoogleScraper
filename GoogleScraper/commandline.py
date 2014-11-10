@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 
-__author__ = 'nikolai'
-
 import argparse
 
 def get_command_line(static_args=False):
-    """Parse command line arguments for scraping with selenium browser instances.
+    """Parse command line arguments when GoogleScraper is used from the CLI.
 
-    @param args A Namespace object that contains config parameters. If given, don't parse from the command line.
+    Args:
+        static_args: A Namespace object that contains config parameters.
+                        If supplied, don't parse from the command line and
+                        apply the command parser on them instead.
+    Returns:
+        The configuration as a dictionary that determines the behaviour of the app.
     """
 
     parser = argparse.ArgumentParser(prog='GoogleScraper',
@@ -44,10 +47,6 @@ def get_command_line(static_args=False):
                         comes shipped with a thoroughly commented configuration file named `config.cfg`''')
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its rough length will be printed.''')
     parser.add_argument('--print', action='store_true', default=True, required=False, help='''If set, print all scraped output GoogleScraper finds. Don't use it when scraping a lot, results are stored in a sqlite3 database anyway.''')
-    parser.add_argument('-x', '--deep-scrape', action='store_true', default=False,
-                        help='Launches a wide range of parallel searches by modifying the search ' \
-                             'query string with synonyms and by scraping with different Google search parameter combinations that might yield more unique ' \
-                             'results. The algorithm is optimized for maximum of results for a specific keyword whilst trying avoid detection. This is the heart of GoogleScraper.')
     parser.add_argument('--view', action='store_true', default=False, help="View the response in a default browser tab."
                                                                            " Mainly for debug purposes. Works only when caching is enabled.")
     parser.add_argument('--fix-cache-names', action='store_true', default=False, help="For internal use only. Renames the cache files after a hash constructed after the keywords located in the <title> tag.")
@@ -70,7 +69,7 @@ def get_command_line(static_args=False):
                                 in args.__dict__.items() if (key in L and value is not None)])
 
     return {
-        'SCRAPING': make_dict(['scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'deep_scrape']),
+        'SCRAPING': make_dict(['scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file']),
         'GLOBAL':  make_dict(['base_search_url', 'check_oto', 'debug', 'fix_cache_names', 'simulate', 'print', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity']),
         'SELENIUM': make_dict(['num_browser_instances'])
     }

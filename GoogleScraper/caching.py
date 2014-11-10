@@ -288,8 +288,6 @@ def cache_results(data, kw, url, params={}):
         kw: The search keyword
         url: The search url for the search request
         params: The search params, Optional
-    Returns:
-        Nothing.
     """
     fname = cached_file_name(kw, url, params)
     cachedir = Config['GLOBAL'].get('cachedir', '.scrapecache')
@@ -399,9 +397,6 @@ def fix_broken_cache_names(url):
 
     Args:
         url: A list of strings to add to each cached_file_name() call.
-
-    Returns;
-        Nothing.
     """
     files = _get_all_cache_files()
     logger.debug('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir', '.scrapecache')))
