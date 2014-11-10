@@ -228,6 +228,8 @@ def main(return_results=True):
     if Config['SCRAPING'].getint('num_results_per_page') > 100:
         raise InvalidConfigurationException('Not more that 100 results per page available for Google searches.')
 
+    proxies = []
+
     if proxy_db:
         proxies = get_proxies_from_mysql_db(proxy_db)
     elif proxy_file:
