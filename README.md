@@ -2,7 +2,7 @@
 
 ### News
 
-11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][4]!!.
+11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][5]!!.
 
 
 ### Table of Contents
