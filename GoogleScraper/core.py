@@ -20,7 +20,7 @@ import datetime
 from GoogleScraper.utils import grouper
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.res import maybe_create_db
-from GoogleScraper.scraping import SelScraper, GoogleScrape
+from GoogleScraper.scraping import SelScrape, HttpScrape
 from GoogleScraper.caching import *
 from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
@@ -45,25 +45,18 @@ except ImportError as ie:
 
 logger = logging.getLogger('GoogleScraper')
 
-def scrape(keyword='', scrapemethod='sel', num_results_per_page=10, num_pages=1, offset=0, proxy=None):
-    """Public API function to search for keywords.
+def http_scrape(keyword, offset=0):
+    """Usage function for GoogleScraper objects in 'http' mode.
 
     Args:
-        keyword: The search query. Can be whatever you want to crawl Google for.
-        scrapemethod: The method of scraping to use.
-        num_num_results_per_page: How many results should be displayed on a SERP page. Defaults to 10.
-        num_pages: How many pages to scrape.
-        offset: On which page to start scraping.
-        proxy: Optional, If set to appropriate data, will use a proxy.
+        keyword: What keyword to search for in the search engine.
+        offset: Optional argument, on which page to start scraping. By default is zero.
 
     Returns:
         The scraping results.
     """
-    if scrapemethod == 'http':
-        threads = [GoogleScrape(keyword, num_results_per_page, i, interval=i, proxy=proxy)
-                       for i in range(offset, num_pages + offset, 1)]
-    elif scrapemethod == 'sel':
-        threads = [SelScraper([keyword], proxy=proxy, captcha_lock=threading.Lock)]
+    threads = [HttpScrape(keyword, num_page=i, interval=0)
+                    for i in range(offset, Config['SCRAPING'].getint('num_of_pages') + offset, 1)]
 
     for t in threads:
         t.start()
@@ -72,10 +65,7 @@ def scrape(keyword='', scrapemethod='sel', num_results_per_page=10, num_pages=1,
     for t in threads:
         t.join()
 
-    if scrapemethod == 'http':
-        return [t.results for t in threads]
-    else:
-        return threads[0].results
+    return [t.results for t in threads]
 
 def scrape_with_config(config, **kwargs):
     """Runs GoogleScraper with the dict in config.
@@ -89,7 +79,6 @@ def scrape_with_config(config, **kwargs):
     if not isinstance(config, dict):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
 
-    GoogleScraper.config.already_parsed = True
     GoogleScraper.config.update_config(config)
     return main(return_results=True, force_reload=False, **kwargs)
 
@@ -286,7 +275,7 @@ def main(return_results=True):
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, chunk in enumerate(kwgroups):
-            scrapejobs.append(SelScraper(chunk, rlock, Q, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+            scrapejobs.append(SelScrape(chunk, rlock, Q, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in scrapejobs:
             t.start()
@@ -312,8 +301,7 @@ def main(return_results=True):
         results = []
         cursor = conn.cursor()
         for i, kw in enumerate(keywords):
-            r = scrape(kw, num_results_per_page=Config['SCRAPING'].getint('num_results_per_page', 10),
-                       num_pages=Config['SCRAPING'].getint('num_pages', 1), scrapemethod='http')
+            r = http_scrape(kw)
 
             if r:
                 cursor.execute('INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query) VALUES(?,?,?,?,?)',
@@ -328,7 +316,7 @@ def main(return_results=True):
                                     (title, snippet, url.geturl(), url.netloc, pos, serp_id))
             cursor.close()
         if Config['GLOBAL'].get('print'):
-            print_scrape_results_http(results, Config['GLOBAL'].getint('verbosity', 0))
+            print_scrape_results_http(results)
         return conn
     else:
         raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')

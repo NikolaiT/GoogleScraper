@@ -33,7 +33,7 @@ except ImportError as ie:
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name
 from GoogleScraper.config import Config
-from GoogleScraper.parsing import GoogleParser
+from GoogleScraper.parsing import Parser
 import GoogleScraper.google_search_params
 import webbrowser
 import tempfile
@@ -70,7 +70,7 @@ def timer_support(Class):
         def __init__(self, *args, **kwargs):
             # Signature of Timer or _Timer
             # def __init__(self, interval, function, args=None, kwargs=None):
-            super().__init__(kwargs.get('interval'), self._search)
+            super(Cls, self).__init__(kwargs.get('interval'), self._search)
             self._init(*args, **kwargs)
 
     # add all attributes excluding __init__() and __dict__
@@ -79,12 +79,12 @@ def timer_support(Class):
             try:
                 setattr(Cls, name, attribute)
             except AttributeError as ae:
-                pass
+                logger.error(ae)
     return Cls
 
 
 @timer_support
-class GoogleScrape():
+class HttpScrape():
     """Offers a fast way to query the google search engine using raw HTTP requests.
 
     Overrides the run() method of the superclass threading.Timer.
@@ -128,25 +128,25 @@ class GoogleScrape():
         """Dummy constructor to be modified by the timer_support class decorator."""
         pass
 
-    def _init(self, search_query, num_page=0, interval=0.0, search_params={}, proxy=None):
+    def _init(self, keyword, num_page=0, interval=0.0, search_params={}):
         """Initialises an object responsible for scraping one SERP page.
 
         Args:
-            search_query: The query to scrape for.
-                            (My tests though have shown that at most 100 results were returned per page)
+            keyword: Which keyword to scrape for.
+            num_page: The page number.
             interval: The amount of seconds to wait until executing run()
             search_params: A dictionary with additional search params. The default search params are updated with this parameter.
         """
 
         self.parser = None
-        self.search_query = search_query
+        self.keyword = keyword
         self.searchtype = Config['SCRAPING'].get('searchtype', 'normal')
         self.search_params = GoogleScraper.google_search_params.search_params
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page')
         self.num_page = num_page
 
-        if proxy:
-            self._set_proxy(proxy)
+        # if proxy:
+        #     self._set_proxy(proxy)
 
         self.requests = __import__('requests')
 
@@ -156,7 +156,7 @@ class GoogleScrape():
 
         self.search_results = {
             'cache_file': None,  # A path to a file that caches the results.
-            'search_keyword': self.search_query,  # The query keyword
+            'search_keyword': self.keyword,  # The query keyword
         }
 
     def _set_proxy(self, proxy):
@@ -208,7 +208,7 @@ class GoogleScrape():
         # params used by all search-types
         self.search_params.update(
             {
-                'q': self.search_query,
+                'q': self.keyword,
             })
 
         if self.searchtype == 'normal':
@@ -226,8 +226,8 @@ class GoogleScrape():
             self.reset_search_params()
             self.search_params.update(
                 {
-                    'q': self.search_query,
-                    'oq': self.search_query,
+                    'q': self.keyword,
+                    'oq': self.keyword,
                     'site': 'imghp',
                     'tbm': 'isch',
                     'source': 'hp',
@@ -295,8 +295,8 @@ class GoogleScrape():
         # After building the query, all parameters are set, so we know what we're requesting.
         logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self.search_params)))
 
-        html = get_cached(self.search_query, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-        self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
+        html = get_cached(self.keyword, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
+        self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
         if not html:
             try:
@@ -334,10 +334,10 @@ class GoogleScrape():
                 self.browserview(html)
 
             # cache fresh results
-            cache_results(html, self.search_query, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-            self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.search_query, Config['GLOBAL'].get('base_search_url'), self.search_params))
+            cache_results(html, self.keyword, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
+            self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
-        self.parser = GoogleParser(html, searchtype=self.searchtype)
+        self.parser = Parser(html, searchtype=self.searchtype)
         self.search_results.update(self.parser.all_results)
 
     @property
@@ -345,7 +345,7 @@ class GoogleScrape():
         return self.search_results
 
 
-class SelScraper(threading.Thread):
+class SelScrape(threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google.
     """
 
@@ -627,7 +627,7 @@ class SelScraper(threading.Thread):
             The data to insert in the database (serp_page and links table entries respectively)
         """
 
-        parser = GoogleParser(data)
+        parser = Parser(data)
         if only_results:
             return parser
 

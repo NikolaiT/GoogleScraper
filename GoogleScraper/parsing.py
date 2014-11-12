@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 
+"""
+author: Nikolai Tschacher
+date: 11.11.2014
+home: incolumitas.com
+"""
+
+# TODO: Implement alternatate selectors for different SERP formats (just use a list in the CSS selector datatypes)
+
 import sys
 import re
 import lxml.html
 import logging
 import urllib
-from collections import namedtuple
+import pprint
 
 try:
     from cssselect import HTMLTranslator, SelectorError
@@ -13,280 +21,348 @@ try:
 except ImportError as ie:
     if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
         sys.exit('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
-    if ie.name == 'socks':
-        sys.exit('socks is not installed. Try this one: https://github.com/Anorov/PySocks')
 
 logger = logging.getLogger('GoogleScraper')
 
-class GoogleParser():
-    """Parses Google SERP pages.
+class InvalidSearchTypeExcpetion(Exception):
+    pass
 
-    Given a hmtl string, GoogleParser tries to parse the links, snippets and
-    descriptions from serp entries.
+class Parser():
+    """Parses SERP pages.
+
+    Each search engine results page (SERP) has a similar layout:
+    
+    The main search results are usually in a html container element (#main, .results, #leftSide).
+    There might be separate columns for other search results (like ads for example). Then each 
+    result contains basically a link, a snippet and a description (usually some text on the
+    target site). It's really astonishing how similar other search engines are to Google.
+    
+    Each child class (that can actual parse a concrete search engine results page) needs
+    to specify css selectors for the different search types (Like normal search, news search, video search, ...).
 
     Attributes:
-        results: All results without the num_results_for_kw
-        all_results: All scraped information for this page
-        links: Just return the links of the SERP page.
+        search_results: The results after parsing.
     """
-
-    # Named tuple type for the search results
-    Result = namedtuple('LinkResult', 'link_title link_snippet link_url link_position')
-
-    # short alias because we use it so extensively
-    _xp = HTMLTranslator().css_to_xpath
-
-    # Valid URL (taken from django)
-    _REGEX_VALID_URL = re.compile(
-        r'^(?:http|ftp)s?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
-        r'localhost|'  # localhost...
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-        r'(?::\d+)?'  # optional port
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-    _REGEX_VALID_URL_SIMPLE = re.compile(
-        'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+    
+    # The supported search types. For instance, Google supports Video Search, Image Search, News search
+    search_types = []
 
     def __init__(self, html, searchtype='normal'):
-        """Create new GoogleParse instance and parse all information.
+        """Create new Parser instance and parse all information.
 
         Args:
-            html: The raw html of the Google search
-            searchtype: The google search type. By default "normal"
+            html: The raw html from the search engine search
+            searchtype: The search type. By default "normal"
+            
         Raises:
-            An parsing error if there were any exceptions.
+            Assertion error if the subclassed
+            specific parser cannot handle the the settings.
         """
+        assert searchtype in self.search_types
+        
         self.html = html
         self.searchtype = searchtype
         self.dom = None
 
-        self.search_results = {'num_results_for_kw': []}
+        self.search_results = {}
 
-        # Try to parse the google HTML result using lxml
+        # Try to parse the provided HTML string using lxml
         doc = UnicodeDammit(self.html, is_html=True)
         parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
         self.dom = lxml.html.document_fromstring(self.html, parser=parser)
         self.dom.resolve_base_href()
+        
+        # lets do the actual parsing
+        self._parse()
+        
+        # Apply sublcass specific behaviour after parsing has happened
+        self.after_parsing()
 
-        # Very redundant by now, but might change in the soon future
-        if self.searchtype == 'normal':
-            self.search_results.update({
-                'results': [],  # List of Result, list of named tuples
-                'ads_main': [],  # The google ads in the main result set.
-                'ads_aside': [],  # The google ads on the right aside.
-            })
-        elif self.searchtype == 'video':
-            self.search_results.update({
-                'results': [],  # Video search results
-                'ads_main': [],  # The google ads in the main result set.
-                'ads_aside': [],  # The google ads on the right aside.
-            })
-        elif self.searchtype == 'image':
-            self.search_results.update({
-                'results': [],  # Images links
-            })
-        elif self.searchtype == 'news':
-            self.search_results.update({
-                'results': [],  # Links from news search
-                'ads_main': [],  # The google ads in the main result set.
-                'ads_aside': [],  # The google ads on the right aside.
-            })
+    def _parse(self):
+        """Parse the dom according to the provided css selectors.
+        
+        Raises: InvalidSearchTypeExcpetion if no css selectors for the searchtype could be found.
+        """
+        # try to parse the number of results.
+        attr_name = self.searchtype + '_search_selectors'
+        selector_dict = getattr(self, attr_name, None)
+        
+        # short alias because we use it so extensively
+        css_to_xpath = HTMLTranslator().css_to_xpath
+        
+        # get the appropriate css selectors for the num_results for the keyword
+        num_results_selector = getattr(self, 'num_results_search_selectors', None)
+        if num_results_selector:
+            self.search_results['num_results'] = self.dom.xpath(css_to_xpath(num_results_selector))[0].text_content()
+        
+        if not selector_dict:
+            raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
+            
+        for result_type, selectors in selector_dict.items():
+            self.search_results[result_type] = []
+            
+            results = self.dom.xpath(
+                css_to_xpath('{container} {result_container}'.format(**selectors))
+            )
+            
+            to_extract = set(selectors.keys()) - {'container', 'result_container'}                
+            selectors_to_use = dict(((key, selectors[key]) for key in to_extract if key in selectors.keys()))
+            
+            for index, result in enumerate(results):
+                # Let's add primitve support for CSS3 pseudo selectors
+                # We just need two of them
+                # ::text
+                # ::attr(someattribute)
+                
+                # You say we should use xpath expresssions instead?
+                # Maybe you're right, but they are complicated when it comes to classes,
+                # have a look here: http://doc.scrapy.org/en/latest/topics/selectors.html
+                serp_result = {}
+                for key, selector in selectors_to_use.items():
+                    value = None
+                    if selector.endswith('::text'):
+                        try:
+                            value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].text_content()
+                        except IndexError as e:
+                            pass
+                    else:
+                        attr = re.search(r'::attr\((?P<attr>.*)\)$', selector).group('attr')
+                        if attr:
+                            try:
+                                value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].get(attr)
+                            except IndexError as e:
+                                pass
+                        else:
+                            try:
+                                value = result.xpath(css_to_xpath(selector))[0].text_content()
+                            except IndexError as e:
+                                pass
+                    serp_result[key] = value
+                if serp_result:
+                    self.search_results[result_type].append(serp_result)
+                    
+    def after_parsing(self):
+        """Sublcass specific behaviour after parsing happened.
+        
+        Override in subclass to add search engine specific behaviour.
+        Commonly used to clean the results.
+        """
+                
+    def __str__(self):
+        """Return a nicely formated overview of the results."""
+        return pprint.pformat(self.search_results)
+                
+"""
+Here follow the different classes that provide CSS selectors 
+for different types of SERP pages of several common search engines.
 
-        ### the actual PARSING happens here
-        parsing_actions = {
-            'normal': self._parse_normal_search,
-            'image': self._parse_image_search,
-            'video': self._parse_video_search,
-            'news': self._parse_news_search,
+Just look at them and add your own selectors in a new class if you
+want the Scraper to support them.
+
+You can easily just add new selectors to a search engine. Just follow
+the attribute naming convention and the parser will recognize them:
+
+If you provide a dict with a name like finance_search_selectors,
+then you're adding a new search type with the name finance.
+
+Each class needs a attribute called num_results_search_selectors, that
+extracts the number of searches that were found by the keyword.
+"""
+
+
+class GoogleParser(Parser):
+    """Parses SERP pages of the Google search engine."""
+    
+    search_types = ['normal', 'image']
+    
+    num_results_search_selectors = 'div#resultStats'
+    
+    normal_search_selectors = {
+        'results': {
+            'container': '#center_col',
+            'result_container': 'li.g ',
+            'link': 'h3.r > a:first-child::attr(href)',
+            'snippet': 'div.s span.st::text',
+            'title': 'h3.r > a:first-child::text',
+            'visible_link': 'cite::text'
+        },
+        'ads_main' : {
+            'container': '#center_col',
+            'result_container': 'li.ads-ad',
+            'link': 'h3.r > a:first-child::attr(href)',
+            'snippet': 'div.s span.st::text',
+            'title': 'h3.r > a:first-child::text',
+            'visible_link': '.ads-visurl cite::text',
         }
-        # Call the correct parsing method
-        parsing_actions.get(self.searchtype)(self.dom)
-
-        # Clean the results
-        self._clean_results()
-
-    def __iter__(self):
-        """Simple iterator generator to iterate quickly over found non ad results.
-
-        Yields:
-            title, snippet and the url for a SERP link
-        """
-        for link_title, link_snippet, link_url in self.result['results']:
-            yield (link_title, link_snippet, link_url)
-
-    def num_results(self):
-        """Return the number of pages found by keyword as shown in top of SERP page."""
-        return self.search_results['num_results_for_kw']
-
-    @property
-    def results(self):
-        """Return all results including sidebar and main result advertisements"""
-        return {k: v for k, v in self.search_results.items() if k not in
-                                                                ('num_results_for_kw', )}
-    @property
-    def all_results(self):
-        return self.search_results
-
-    @property
-    def links(self):
-        """Only return non ad results"""
-        return self.search_results['results']
-
-    def _clean_results(self):
-        """Clean/extract the found href or data-href attributes from results."""
-
-        # Now try to create ParseResult objects from the URL
-        for key in ('results', 'ads_aside', 'ads_main'):
-            for i, e in enumerate(self.search_results[key]):
-                # First try to extract the url from the strange relative /url?sa= format
-                matcher = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', e.link_url)
-                if matcher:
-                    url = matcher.group(1)
-                else:
-                    url = e.link_url
-
-                self.search_results[key][i] = \
-                    self.Result(link_title=e.link_title, link_url=urllib.parse.urlparse(url),
-                                link_snippet=e.link_snippet, link_position=e.link_position)
-
-    def _parse_num_results(self):
-        """Try to get the number of results for our search query."""
-        try:
-            self.search_results['num_results_for_kw'] = \
-                self.dom.xpath(self._xp('div#resultStats'))[0].text_content()
-        except IndexError as e:
-            logger.debug('Cannot parse number of results for keyword from SERP page: {}'.format(e))
-
-    def _parse_normal_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a normal search.
-
-        Args:
-            dom: The page source to parse.
-        """
-
-        # There might be several list of different css selectors to handle different SERP formats
-        css_selectors = {
-            # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s span.st'], ),
-            # to parse the centered ads
-            'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
-                         ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
-            # the ads on on the right
-            'ads_aside': (['#rhs_block li.ads-ad', 'h3.r > a', 'div.ads-creative'], ),
+    }
+    
+    image_search_selectors = {
+        'results': {
+            'container': 'li#isr_mc',
+            'result_container': 'div.rg_di',
+            'imgurl': 'a.rg_l::attr(href)'
         }
-        self._parse(dom, css_selectors)
-
-    def _parse_image_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a image search.
-
-        Args:
-            dom: The page source to parse.
+    }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+    def after_parsing(self):
+        """Clean the urls.
+        
+        A typical scraped results looks like the following:
+        
+        '/url?q=http://www.youtube.com/user/Apple&sa=U&ei=lntiVN7JDsTfPZCMgKAO&ved=0CFQQFjAO&usg=AFQjCNGkX65O-hKLmyq1FX9HQqbb9iYn9A'
+        
+        Clean with a short regex.
         """
-        css_selectors = {
-            'results': (['div.rg_di', 'a:first-child', 'span.rg_ilmn'], )
+        super().after_parsing()
+        for key, value in self.search_results.items():
+            if isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, dict) and item['link']:
+                        result = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', item['link'])
+                        if result:
+                            self.search_results[key][i]['link'] = result.group('url')
+                            
+
+class YandexParser(Parser):
+    """Parses SERP pages of the Yandex search engine."""
+
+    search_types = ['normal']
+    
+    num_results_search_selectors = None
+    
+    normal_search_selectors = {
+        'results': {
+            'container': 'div.serp-list',
+            'result_container': 'div.serp-item__wrap ',
+            'link': 'a.serp-item__title-link::attr(href)',
+            'snippet': 'div.serp-item__text::text',
+            'title': 'a.serp-item__title-link::text',
+            'visible_link': 'a.serp-url__link::attr(href)'
+        },
+    }
+    
+    
+class BingParser(Parser):
+    """Parses SERP pages of the Bing search engine."""
+    
+    search_types = ['normal']
+    
+    num_results_search_selectors = '.sb_count'
+    
+    normal_search_selectors = {
+        'results': {
+            'container': 'ol#b_results',
+            'result_container': 'li.b_algo',
+            'link': '.b_title > h2 > a::attr(href)',
+            'snippet': '.b_snippet > p::text',
+            'title': '.b_title > h2 > a::text',
+            'visible_link': 'cite::text'
+        },
+        'ads_main' : {
+            'container': 'ol#b_results',
+            'result_container': 'li.b_ad',
+            'link': '.sb_add > h2 > a::attr(href)',
+            'snippet': '.b_caption::text',
+            'title': '.sb_add > h2 > a::text',
+            'visible_link': 'cite::text'
         }
-        self._parse(dom, css_selectors)
+    }
 
-    def _parse_video_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a video search.
 
-        Very similar to a normal search. Basically the same. But this is a unique method
-        because the parsing logic may change over time.
+class YahooParser(Parser):
+    """Parses SERP pages of the Yahoo search engine."""
+    
+    search_types = ['normal']
+    
+    num_results_search_selectors = '#pg > span:last-child'
+    
+    normal_search_selectors = {
+        'results': {
+            'container': '#main',
+            'result_container': '.res',
+            'link': 'div > h3 > a::attr(href)',
+            'snippet': 'div.abstr::text',
+            'title': 'div > h3 > a::text',
+            'visible_link': 'span.url::text'
+        },
+    }
+    
 
-        Args:
-            dom: The page source to parse.
-        """
-        css_selectors = {
-            # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s > span.st'], ),
-            # to parse the centered ads
-            'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
-                         ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
-            # the ads on on the right
-            'ads_aside': (['#rhs_block li.ads-ad', 'h3.r > a', 'div.ads-creative'], ),
-        }
-        self._parse(dom, css_selectors)
+class BaiduParser(Parser):
+    """Parses SERP pages of the Baidu search engine."""
+    
+    search_types = ['normal']
+    
+    num_results_search_selectors = '#container .nums'
+    
+    normal_search_selectors = {
+        'results': {
+            'container': '#content_left',
+            'result_container': '.result-op',
+            'link': 'h3 > a.t::attr(href)',
+            'snippet': '.c-abstract::text',
+            'title': 'h3 > a.t::text',
+            'visible_link': 'span.c-showurl::text'
+        },
+    }
 
-    def _parse_news_search(self, dom):
-        """Specifies the CSS selectors to extract links/snippets for a news search.
 
-        Is also similar to a normal search. But must be a separate function since
-        https://news.google.com/nwshp? needs own parsing code...
+class DuckduckgoParser(Parser):
+    """Parses SERP pages of the Duckduckgo search engine."""
+    
+    search_types = ['normal']
+    
+    num_results_search_selectors = None
+    
+    normal_search_selectors = {
+        'results': {
+            'container': '#links',
+            'result_container': '.result',
+            'link': '.result__title > a::attr(href)',
+            'snippet': 'result__snippet::text',
+            'title': '.result__title > a::text',
+            'visible_link': '.result__url__domain::text'
+        },
+    }
 
-        Args:
-            dom: The page source to parse.
-        """
-        css_selectors = {
-            # to extract all links of non-ad results, including their snippets(descriptions) and titles.
-            # The first CSS selector is the wrapper element where the search results are situated
-            # the second CSS selector selects the link and the title. If there are 4 elements in the list, then
-            # the second and the third element are for the link and the title.
-            # the 4th selector is for the snippet.
-            'results': (['li.g', 'h3.r > a:first-child', 'div.s span.st'], ),
-            # to parse the centered ads
-            'ads_main': (['div#center_col li.ads-ad', 'h3.r > a', 'div.ads-creative'],
-                         ['div#tads li', 'h3 > a:first-child', 'span:last-child']),
-            # the ads on on the right
-            'ads_aside': (['#rhs_block li.ads-ad', 'h3.r > a', 'div.ads-creative'], ),
-        }
-        self._parse(dom, css_selectors)
 
-    def _parse(self, dom, css_selectors):
-        """Generic parse method.
-
-        Args:
-            dom: The dom that was parsed in the constructor.
-            css_selectors: A list of css_selectors to apply on the dom.
-        """
-        for key, slist in css_selectors.items():
-            for selectors in slist:
-                self.search_results[key].extend(self._parse_links(dom, *selectors))
-        self._parse_num_results()
-
-    def _parse_links(self, dom, container_selector, link_selector, snippet_selector):
-        """Try to extract all links of non-ad results.
-
-        Including their snippets(descriptions) and titles.
-        The parsing should be as robust as possible. Sometimes we can't extract all data, but as much as humanly
-        possible.
-
-        Args:
-            dom: The dom that was parsed in the constructor.
-            container_selector: The selector that encompasses a whole link.
-            link_selector: Selector for a specific link
-            snippet_selector: CSS selector for te snippet for each link
-
-        Returns:
-            The parsed results
-
-        Raises:
-            A Failure that probably reveals some error about applying the selectors.
-        """
-        links = []
-        rank = 0
-        try:
-            li_g_results = dom.xpath(self._xp(container_selector))
-            for i, e in enumerate(li_g_results):
-                snippet = link = title = ''
-                try:
-                    link_element = e.xpath(self._xp(link_selector))
-                    link = link_element[0].get('href')
-                    title = link_element[0].text_content()
-                    # For every result where we can parse the link and title, increase the rank
-                    rank += 1
-                except IndexError as err:
-                    logger.debug(
-                        'Error while parsing link/title element with selector={}: {}'.format(link_selector, err))
-                try:
-                    for r in e.xpath(self._xp(snippet_selector)):
-                        snippet += r.text_content()
-                except Exception as err:
-                    logger.debug('Error in parsing snippet with selector={}.Error: {}'.format(
-                                            snippet_selector, repr(e), err))
-
-                links.append(self.Result(link_title=title, link_url=link, link_snippet=snippet, link_position=rank))
-        # Catch further errors besides parsing errors that take shape as IndexErrors
-        except Exception as err:
-            logger.error('Error in parsing result links with selector={}: {}'.format(container_selector, err))
-            raise
-        return links or []
+if __name__ == '__main__':
+    """Originally part of https://github.com/NikolaiT/GoogleScraper.
+    
+    Only for testing purposes: May be called directly with an search engine 
+    search url. For example:
+    
+    python3 parsing.py 'http://yandex.ru/yandsearch?text=GoogleScraper&lr=178&csg=82%2C4317%2C20%2C20%2C0%2C0%2C0'
+    
+    Please note: Using this module directly makes little sense, because requesting such urls
+    directly without imitating a real browser (which is done in my GoogleScraper module) makes
+    the search engines return crippled html, which makes it impossible to parse.
+    But for some engines it nevertheless works (for example: yandex, google, ...).
+    """
+    import requests
+    assert len(sys.argv) == 2, 'Usage: {} url'.format(sys.argv[0])
+    url = sys.argv[1]
+    raw_html = requests.get(url).text
+    parser = None
+    
+    if re.search(r'^http[s]?://www\.google', url):
+        parser = GoogleParser(raw_html)
+    elif re.search(r'^http://yandex\.ru', url):
+        parser = YandexParser(raw_html)
+    elif re.search(r'^http://www\.bing\.', url):
+        parser = BingParser(raw_html)
+    elif re.search(r'^http[s]?://search\.yahoo.', url):
+        parser = YahooParser(raw_html)
+    elif re.search(r'^http://www\.baidu\.com', url):
+        parser = BaiduParser(raw_html)
+    elif re.search(r'^https://duckduckgo\.com', url):
+        parser = DuckduckgoParser(raw_html)
+        
+    print(parser)
+    
+    with open('/tmp/testhtml.html', 'w') as of:
+        of.write(raw_html)
+    

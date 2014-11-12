@@ -12,7 +12,7 @@ from GoogleScraper.log import setup_logger
 All objects imported here are exposed as the public API of GoogleScraper
 """
 
-from GoogleScraper.core import scrape, scrape_with_config
+from GoogleScraper.core import http_scrape, scrape_with_config
 from GoogleScraper.scraping import GoogleSearchError
 
 Config = get_config()

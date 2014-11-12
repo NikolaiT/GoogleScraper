@@ -2,7 +2,7 @@ import os
 import time
 import sqlite3
 from GoogleScraper.config import Config
-from GoogleScraper.parsing import GoogleParser
+from GoogleScraper.parsing import Parser
 
 RESULTS_PATH = 'google_scraper_results'
 
@@ -70,7 +70,7 @@ def parse_links(data, conn, kw, page_num=1, ip='127.0.0.1'):
         page_num: On which page of the SERP the data was scaped.
         ip: Which ip scraped the data.
     """
-    parser = GoogleParser(data)
+    parser = Parser(data)
     results = parser.links
     conn.execute('''
         INSERT INTO serp_page

@@ -14,6 +14,7 @@ Config = {
     'SCRAPING': {
         # Whether to scrape with own ip address or just with proxies
         'use_own_ip': True,
+        'scrapemethod': 'http'
     },
     'GLOBAL': {
         # The database name, with a timestamp as fmt

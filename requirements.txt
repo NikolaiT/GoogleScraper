@@ -1,3 +1,4 @@
+lxml
 selenium
 beautifulsoup4
 cssselect
