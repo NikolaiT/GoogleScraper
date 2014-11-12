@@ -1,5 +1,10 @@
 ## GoogleScraper - Scraping the Google Search Engine
 
+### News
+
+11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][4]!!.
+
+
 ### Table of Contents
 
 1. [Installation](#install)
@@ -393,3 +398,4 @@ If you feel like contacting me, do so and send me a mail. You can find my contac
 [2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
 [3]: http://incolumitas.com/about/contact/ "Contact with author"
 [4]: http://incolumitas.com/2013/01/06/googlesearch-a-rapid-python-class-to-get-search-results/
+[5]: http://incolumitas.com/2014/11/12/scraping-and-extracting-links-from-any-major-search-engine-like-google-yandex-baidu-bing-and-duckduckgo/
