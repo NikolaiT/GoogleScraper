@@ -1,18 +1,22 @@
 """
-Contains all parameters and sources/information on how the Google Search engine works.
+Contains all parameters and sources/information about the parameters of the supported search engines.
+
+All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
+"""
+
+
+"""
+*** Google ***
 
 Some good stuff:
     http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
     http://www.rankpanel.com/blog/google-search-parameters/
     http://lifehacker.com/5933248/avoid-getting-redirected-to-country-specific-versions-of-google
 
-Args:
-    search_params: All values set to None, are NOT INCLUDED in the GET request! Everything else (also the empty string), is included in the request
-
-                    All search requests must include the parameters site, client, q, and output. All parameter values
-                    must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
+All search requests must include the parameters site, client, q, and output. All parameter values
+must be URL-encoded (see “Appendix B: URL Encoding” on page 94), except where otherwise noted.
 """
-search_params = {
+google_search_params = {
     'q': '',  # the search query string
     'oq': None,  # Shows the original query.
     'num': '',  # the number of results per page
@@ -152,4 +156,53 @@ search_params = {
     # 1: Standard Uses only the search appliance’s synonym file.
     # 2: Local Uses all displayed and activated synonym files.
     # 3: Full Uses both standard and local synonym files.
+}
+
+
+"""
+Yandex search params.
+
+
+"""
+yandex_search_params = {
+
+}
+
+
+"""
+Bing search params.
+
+
+"""
+bing_search_params = {
+
+}
+
+
+"""
+Yahoo search params.
+
+
+"""
+yahoo_search_params = {
+
+}
+
+
+"""
+Baidu search params.
+
+
+"""
+baidu_search_params = {
+
+}
+
+
+"""Duckduckgo search params.
+
+
+"""
+duckduckgo_search_params = {
+
 }

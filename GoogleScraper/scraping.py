@@ -11,6 +11,7 @@ import lxml.html
 import time
 import socket
 import os
+import abc
 
 try:
     from cssselect import HTMLTranslator, SelectorError
@@ -51,7 +52,60 @@ class MaliciousRequestDetected(GoogleSearchError):
 
 class SeleniumMisconfigurationError(Exception):
     pass
+    
+    
+class SearchEngineScrape(metaclass=abc.ABCMeta):
+    """Abstract base class that represents a search engine scrape.
+    
+    Each subclass that derives from SearchEngineScrape needs to 
+    implement some common functionality like setting a proxy, 
+    returning the found results, caching results and pushing scraped
+    data to a storage like a database or an output file.
+    
+    The derivation is divided in two hierarchies: First we divide child
+    classes in different Transport mechanisms. Scraping can happen over 
+    different communication channels like Raw HTTP, doing it with the 
+    selenium framework or using the Twisted HTTP client.
+    
+    The next layer is the concrete implementation of the search functionality
+    of the specific search engines. This is not done in a next derivation
+    hierarchy (otherwise there would be a lot of base classes for each
+    search engine and thus quite some boilerplate overhead).
+    Instead we determine our search engine over the internal state
+    (An attribute name self.search_engine) and handle the different search
+    engine in the search function.    
+    """
 
+    def __init__(self, search_engine=None, search_type=None,):
+        if not search_engine:
+            self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
+        else:
+            self.search_engine = search_engine
+
+        self.search_engine = self.search_engine.lower()
+
+        if not search_type:
+            self.search_type = Config['SCRAPING'].get('search_type', 'normal')
+        else:
+            self.search_type = search_type
+
+    
+    @abc.abstractmethod
+    def search(self):
+        """Send the search request(s) over the transport."""
+        
+    @abc.abstractmethod
+    def set_proxy(self):
+        """Install a proxy on the communication channel."""
+        
+    @abc.abstractmethod
+    def switch_proxy(self, proxy):
+        """Switch the proxy on the communication channel."""
+        
+    @abc.abstractmethod
+    def handle_request_denied(self):
+        """Behaviour when search engines dedect our scraping."""
+        
 
 def timer_support(Class):
     """Adds support for timeable threads.
@@ -84,13 +138,16 @@ def timer_support(Class):
 
 
 @timer_support
-class HttpScrape():
-    """Offers a fast way to query the google search engine using raw HTTP requests.
+class HttpScrape(SearchEngineScrape):
+    """Offers a fast way to query any search engine using raw HTTP requests.
 
     Overrides the run() method of the superclass threading.Timer.
-    Each thread represents a crawl for one Google Results Page. Inheriting
+    Each thread represents a crawl for one Search Engine SERP page. Inheriting
     from threading.Timer allows the deriving class to delay execution of the run()
     method.
+
+    This is a base class, Any supported search engine needs to subclass HttpScrape to
+    implement this specific scrape type.
 
     Attributes:
         results: Returns the found results.
@@ -99,7 +156,7 @@ class HttpScrape():
     # Several different User-Agents to diversify the requests.
     # Keep the User-Agents updated. Last update: 17th february 14
     # Get them here: http://techblog.willshouse.com/2012/01/03/most-common-user-agents/
-    _UAS = [
+    USER_AGENTS = [
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.73.11 (KHTML, like Gecko) Version/7.0.1 Safari/537.73.11',
         'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36',
         'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:26.0) Gecko/20100101 Firefox/26.0',
@@ -116,7 +173,7 @@ class HttpScrape():
         'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36'
     ]
 
-    _HEADERS = {
+    HEADERS = {
         'User-Agent': 'Mozilla/5.0',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Encoding': 'gzip, deflate',
@@ -140,13 +197,12 @@ class HttpScrape():
 
         self.parser = None
         self.keyword = keyword
-        self.searchtype = Config['SCRAPING'].get('searchtype', 'normal')
         self.search_params = GoogleScraper.google_search_params.search_params
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page')
         self.num_page = num_page
 
-        # if proxy:
-        #     self._set_proxy(proxy)
+        if proxy:
+            self._set_proxy(proxy)
 
         self.requests = __import__('requests')
 
@@ -211,14 +267,14 @@ class HttpScrape():
                 'q': self.keyword,
             })
 
-        if self.searchtype == 'normal':
+        if self.search_type == 'normal':
             # The normal web search. That's what you probably want
             self.search_params.update(
                 {
                     'num': str(self.num_results_per_page),
                     'start': str(int(self.num_results_per_page) * int(self.num_page))
                 })
-        elif self.searchtype == 'image':
+        elif self.search_type == 'image':
             # Image raw search url for keyword 'cat' in mozilla 27.0.1
             # 'q' and tbs='isch' are sufficient for a search
             # https://www.google.com/search?q=cat&client=firefox-a&rls=org.mozilla:en-US:official&channel=sb&noj=1&source=lnms&tbm=isch&sa=X&ei=XX8dU93kMMbroAS5_IGwBw&ved=0CAkQ_AUoAQ&biw=1920&bih=881
@@ -235,7 +291,7 @@ class HttpScrape():
                     'biw': 1920,
                     'bih': 881
                 })
-        elif self.searchtype == 'video':
+        elif self.search_type == 'video':
             # Video search raw url with keyword 'cat' in mozilla 27.0.1
             # 'q' and tbs='vid' are sufficient for a search
             # https://www.google.com/search?q=cat&client=firefox-a&rls=org.mozilla:en-US:official&channel=sb&noj=1&tbm=vid&source=lnms&sa=X&ei=DoAdU9uxHdGBogTp8YLACQ&ved=0CAoQ_AUoAg&biw=1920&bih=881&dpr=1
@@ -249,7 +305,7 @@ class HttpScrape():
                     'biw': 1920,
                     'bih': 881
                 })
-        elif self.searchtype == 'news':
+        elif self.search_type == 'news':
             # pretty much as above;
             # 'q' and tbs='nws' are perfectly fine for a news search
             # But there is a more elaborate Google news search with a different URL on: https://news.google.com/nwshp?
@@ -264,7 +320,7 @@ class HttpScrape():
                 })
 
         if rand:
-            self._HEADERS['User-Agent'] = random.choice(self._UAS)
+            self.HEADERS['User-Agent'] = random.choice(self.USER_AGENTS)
 
     def browserview(self, html):
         """View html in browser.
@@ -305,14 +361,14 @@ class HttpScrape():
                 if Config['GLOBAL'].getint('verbosity', 0) > 1:
                     logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
                         base_url=base_url,
-                        headers=self._HEADERS,
+                        headers=self.HEADERS,
                         params=self.search_params
                     ))
 
-                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self._HEADERS,
+                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self.HEADERS,
                                  params=self.search_params, timeout=3.0)
 
-                logger.debug("Scraped with url: {} and User-Agent: {}".format(r.url, self._HEADERS['User-Agent']))
+                logger.debug("Scraped with url: {} and User-Agent: {}".format(r.url, self.HEADERS['User-Agent']))
 
             except self.requests.ConnectionError as ce:
                 logger.error('Network problem occurred {}'.format(ce))
@@ -323,9 +379,6 @@ class HttpScrape():
 
             if not r.ok:
                 logger.error('HTTP Error: {}'.format(r.status_code))
-                if str(r.status_code)[0] == '5':
-                    print('Maybe google recognizes you as sneaky spammer after'
-                          ' you requested their services too inexhaustibly :D')
                 return False
 
             html = r.text
@@ -337,7 +390,7 @@ class HttpScrape():
             cache_results(html, self.keyword, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
             self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
-        self.parser = Parser(html, searchtype=self.searchtype)
+        self.parser = Parser(html, searchtype=self.search_type)
         self.search_results.update(self.parser.all_results)
 
     @property

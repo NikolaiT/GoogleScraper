@@ -6,7 +6,7 @@ date: 11.11.2014
 home: incolumitas.com
 """
 
-# TODO: Implement alternatate selectors for different SERP formats (just use a list in the CSS selector datatypes)
+# TODO: Implement alternate selectors for different SERP formats (just use a list in the CSS selector datatypes)
 
 import sys
 import re
@@ -46,6 +46,15 @@ class Parser():
     
     # The supported search types. For instance, Google supports Video Search, Image Search, News search
     search_types = []
+
+
+    # Each subclass of Parser may declare an arbitrary amount of attribute that
+    # follow a naming convention like this:
+    # *_search_selectors
+    # where the asterix may be replaced with arbirary identifier names.
+    # Any of these attributes represent css selectors for a specific search type.
+    # If you didn't specify the search type in the search_types list, this attribute
+    # will not be evaluated and no data will be parsed.
 
     def __init__(self, html, searchtype='normal'):
         """Create new Parser instance and parse all information.
