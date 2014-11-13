@@ -55,7 +55,7 @@ def http_scrape(keyword, offset=0):
     Returns:
         The scraping results.
     """
-    threads = [HttpScrape(keyword, num_page=i, interval=0)
+    threads = [HttpScrape(keywords=keyword, num_page=i, time_offset=0)
                     for i in range(offset, Config['SCRAPING'].getint('num_of_pages') + offset, 1)]
 
     for t in threads:

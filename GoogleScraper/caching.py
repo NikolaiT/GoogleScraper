@@ -418,11 +418,29 @@ def fix_broken_cache_names(url):
     logger.debug('Renamed {} files.'.format(i))
 
 
-def cached(f):
-    """decorator: Cache the result of the function."""
-    def wrapper(args*, kwargs**):
-        value = f()
-        cache_results(value)
+def cached(f, attr_to_cache=None):
+    """Decoator that makes return value of functions cachable.
+    
+    Any function that returns a value and that is decoratated with 
+    cached will be supplied with the previously calculated result of
+    an earlier call. The parameter name with the cached value may 
+    be set with attr_to_cache.
+    
+    Args:
+        attr_to_cache: The name of attribute whose data
+                        is cachable.
+    
+    Returns: The modified and wrapped function.
+    """
+    def wraps(*args, **kwargs):
+        cached_value = get_cached(*args, params=kwargs)
+        if cached_value:
+            value = f(*args, attr_to_cache=cached_value, **kwargs)
+        else:
+            # Nothing was cached for this attribute
+            value = f(*args, attr_to_cache=None, **kwargs)
+            cache_results(value, *args, params=kwargs)
+    return wraps
     
 if __name__ == '__main__':
     import doctest

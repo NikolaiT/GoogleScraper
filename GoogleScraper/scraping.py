@@ -34,12 +34,10 @@ except ImportError as ie:
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
 from GoogleScraper.config import Config
-from GoogleScraper.parsing import Parser
-import GoogleScraper.google_search_params
-import webbrowser
-import tempfile
+from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser
 
 logger = logging.getLogger('GoogleScraper')
+
 
 class GoogleSearchError(Exception):
     pass
@@ -65,7 +63,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     The derivation is divided in two hierarchies: First we divide child
     classes in different Transport mechanisms. Scraping can happen over 
     different communication channels like Raw HTTP, doing it with the 
-    selenium framework or using the an asynchroneous HTTP client.
+    selenium framework or using the an asynchronous HTTP client.
     
     The next layer is the concrete implementation of the search functionality
     of the specific search engines. This is not done in a extra derivation
@@ -75,7 +73,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     (An attribute name self.search_engine) and handle the different search
     engines in the search function.
     
-    Each must behave similarily: It can only scape at one search engine at the same time,
+    Each must behave similarly: It can only scape at one search engine at the same time,
     but it may search for multiple search keywords. The initial start number may be
     set by the configuration. The number of pages that should be scraped for each
     keyword may be also set.
@@ -87,7 +85,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, search_engine=None, search_type=None, proxy=None):
+    def __init__(self, keywords=None, num_page=1, search_engine=None, search_type=None, proxy=None):
         if not search_engine:
             self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
         else:
@@ -110,15 +108,35 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.proxy = proxy
         
         # The keywords that need to be scraped
-        self.keywords = Config['SCRAPING'].get(keywords, [])
+        # If a SearchEngineScrape receives explicitly keywords,
+        # scrape them. otherwise scrape the ones specified in the Config.
+        if keywords:
+            self.keywords = keywords
+        else:
+            self.keywords = Config['SCRAPING'].get('keywords', [])
+
+        if not isinstance(keywords, list):
+            self.keywords = list(self.keywords)
+        
+        # The actual keyword that is to be scraped next
+        self.current_keyword = ''
+        
+        # The parser that should be used to parse the search engine results
+        self.parser = None
         
         # The number of results per page
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
+
+        # The page where to start scraping. By default the starting page is 1.
+        self.num_page = 1 if num_page < 1 else num_page
         
         # Install the proxy if one was provided
         self.proxy = proxy
         if proxy:
             self.set_proxy()
+
+        # get the base search url based on the search engine.
+        self.base_search_url = Config['SCRAPING'].get('{search_engine}_search_url'.format(search_engine=self.search_engine))
         
     
     @abc.abstractmethod
@@ -135,11 +153,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         
     @abc.abstractmethod
     def handle_request_denied(self):
-        """Behaviour when search engines dedect our scraping."""
-        
-    @abc.abstractmethod
+        """Behaviour when search engines detect our scraping."""
+
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
+        self.num_page += 1
         
     def next_keyword(self):
         """Spits out search queries as long as there are some remaining.
@@ -148,43 +166,13 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             False if no more search keywords are present. Otherwise the next keyword.
         """
         try:
-            return self.keywords.pop()
+            keyword = self.keywords.pop()
+
         except IndexError as e:
             return False
         
-    
-def timer_support(Class):
-    """Adds support for timeable threads.
 
-    In python versions prior to 3.3, threading.Timer
-    seems to be a function that returns an instance
-    of _Timer which is the class we want.
-    """
-    if isinstance(threading.Timer, (types.FunctionType, types.BuiltinFunctionType)) \
-            and hasattr(threading, '_Timer'):
-        timer_class = threading._Timer
-    else:
-        timer_class = threading.Timer
-
-    class Cls(timer_class):
-        def __init__(self, *args, **kwargs):
-            # Signature of Timer or _Timer
-            # def __init__(self, interval, function, args=None, kwargs=None):
-            super(Cls, self).__init__(kwargs.get('time_offset'), self._search)
-            self._init(*args, **kwargs)
-
-    # add all attributes excluding __init__() and __dict__
-    for name, attribute in Class.__dict__.items():
-        if name not in ('__init__', '__dict__'):
-            try:
-                setattr(Cls, name, attribute)
-            except AttributeError as ae:
-                logger.error(ae)
-    return Cls
-
-
-@timer_support
-class HttpScrape(SearchEngineScrape):
+class HttpScrape(SearchEngineScrape, threading.Timer):
     """Offers a fast way to query any search engine using raw HTTP requests.
 
     Overrides the run() method of the superclass threading.Timer.
@@ -200,40 +188,37 @@ class HttpScrape(SearchEngineScrape):
     """
 
     # Several different User-Agents to diversify the requests.
-    # Keep the User-Agents updated. Last update: 17th february 14
+    # Keep the User-Agents updated. Last update: 13th November 2014
     # Get them here: http://techblog.willshouse.com/2012/01/03/most-common-user-agents/
     USER_AGENTS = [
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.73.11 (KHTML, like Gecko) Version/7.0.1 Safari/537.73.11',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:26.0) Gecko/20100101 Firefox/26.0',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.107 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.77 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.107 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.102 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.102 Safari/537.36',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 7_0_4 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11B554a Safari/9537.53',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:26.0) Gecko/20100101 Firefox/26.0',
-        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:26.0) Gecko/20100101 Firefox/26.0',
-        'Mozilla/5.0 (iPad; CPU OS 7_0_4 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11B554a Safari/9537.53',
-        'Mozilla/5.0 (Windows NT 6.1; rv:26.0) Gecko/20100101 Firefox/26.0',
-        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1700.76 Safari/537.36'
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10) AppleWebKit/600.1.25 (KHTML, like Gecko) Version/8.0 Safari/600.1.25',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/600.1.17 (KHTML, like Gecko) Version/7.1 Safari/537.85.10',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:32.0) Gecko/20100101 Firefox/32.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:33.0) Gecko/20100101 Firefox/33.0',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.124 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 6.3; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 8_1 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12B411 Safari/600.1.4',
+        'Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:33.0) Gecko/20100101 Firefox/33.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.9; rv:32.0) Gecko/20100101 Firefox/32.0',
+        'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36'
     ]
 
-    HEADERS = {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Encoding': 'gzip, deflate',
-        'Connection': 'close',
-        'DNT': '1'
-    }
+    def __init__(self, *args, time_offset=0.0, **kwargs):
+        """Initialize an HttScrape object to scrape over blocking http.
 
-    def __init__(self, *args, **kwargs):
-        """Dummy constructor to be modified by the timer_support class decorator."""
-        pass
-
-    def _init(self, time_offset=0.0):
-        """Initialize an HttScrape object to scrape over blocking http."""
-        super().__init__()
+        HttpScrape inherits from SearchEngineScrape
+        and from threading.Timer.
+        """
+        super(threading.Timer, self).__init__(time_offset, self.search)
+        super(SearchEngineScrape, self).__init__(*args, **kwargs)
         
         # Bind the requests module to this instance such that each 
         # instance may have an own proxy
@@ -241,6 +226,16 @@ class HttpScrape(SearchEngineScrape):
         
         # initialize the GET parameters for the search request
         self.search_params = {}
+
+        # initialize the HTTP headers of the search request
+        # to some base values that mozilla uses with requests.
+        # the Host and User-Agent field need to be set additionally.
+        self.headers = {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+        }
 
     def set_proxy(self):
         """Setup a socks connection for the socks module bound to this instance.
@@ -260,9 +255,15 @@ class HttpScrape(SearchEngineScrape):
         }
         # Patch the socket module
         # rdns is by default on true. Never use rnds=False with TOR, otherwise you are screwed!
-        socks.setdefaultproxy(pmapping.get(proxy.proto), proxy.host, int(proxy.port), rdns=True)
+        socks.setdefaultproxy(pmapping.get(self.proxy.proto), self.proxy.host, int(self.proxy.port), rdns=True)
         socks.wrap_module(socket)
         socket.create_connection = create_connection
+
+    def switch_proxy(self, proxy):
+        super().switch_proxy()
+
+    def handle_request_denied(self, status_code):
+        raise Exception('Request not allowed')
 
     def build_search(self):
         """Build the headers and params for the search request for the search engine."""
@@ -271,12 +272,15 @@ class HttpScrape(SearchEngineScrape):
         
         keyword = self.next_keyword()
         
+        start_search_position = None if self.search_offset == 1 else str(int(self.num_results_per_page) * int(self.num_page))
+        
         if self.search_engine == 'google':
+            self.parser = GoogleParser(searchtype=self.search_type)
             self.search_params['q'] = keyword
             self.search_params['num'] = str(self.num_results_per_page)
-            self.search_params['start'] = None if self.search_offset == 1 else str(int(self.num_results_per_page) * int(self.num_page))
+            self.search_params['start'] = start_search_position
 
-            elif self.search_type == 'image':
+            if self.search_type == 'image':
                 self.search_params.update({
                     'oq': keyword,
                     'site': 'imghp',
@@ -285,7 +289,7 @@ class HttpScrape(SearchEngineScrape):
                     #'sa': 'X',
                     'biw': 1920,
                     'bih': 881
-                })     
+                }) 
             elif self.search_type == 'video':
                 self.search_params.update({
                     'tbm': 'vid',
@@ -301,45 +305,52 @@ class HttpScrape(SearchEngineScrape):
                     'sa': 'X'
                 })
         elif self.search_engine == 'yandex':
-            raise NotImplemented('todo')
+            self.parser = YandexParser(searchtype=self.search_type)
+            self.search_params['text'] = keyword
+            self.search_params['p'] = start_search_position
+        
         elif self.search_engine == 'bing':
-            raise NotImplemented('todo')      
+            self.parser = BingParser(searchtype=self.search_type)
+            self.search_params['q'] = keyword
+            self.search_params['first'] = start_search_position
+            
         elif self.search_engine == 'yahoo':
-            raise NotImplemented('todo')
+            self.parser = YahooParser(searchtype=self.search_type)
+            self.search_params['p'] = keyword
+            self.search_params['b'] = start_search_position
+            self.search_params['ei'] = 'UTF-8'
+            
         elif self.search_engine == 'baidu':
-            raise NotImplemented('todo')      
+            self.parser = BaiduParser(searchtype=self.search_type)
+            self.search_params['wd'] = keyword
+            self.search_params['pn'] = start_search_position
+            self.search_params['ie'] = 'utf-8'
         elif self.search_engine == 'duckduckgo':
-            raise NotImplemented('todo')
-
-    @cached
+            self.parser = DuckduckgoParser(searchtype=self.search_type)
+            self.search_params['q'] = keyword
+            
     def search(self, rand=False):
         """The actual search and parsing of the results."""
         self.build_search()
         
         if rand:
-            self.HEADERS['User-Agent'] = random.choice(self.USER_AGENTS)
-
-        # After building the query, all parameters are set, so we know what we're requesting.
-        logger.debug("Created new HttpScrape({search_engine}) object with request parameters={params}".format(search_engine=self.search_engine, params=pprint.pformat(self.search_params)))
+            self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
 
         html = get_cached(self.keyword, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-        self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
         if not html:
             try:
-                base_url=Config['GLOBAL'].get('base_search_url')
+                base_url = Config['GLOBAL'].get('base_search_url')
 
                 if Config['GLOBAL'].getint('verbosity', 0) > 1:
                     logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
                         base_url=base_url,
-                        headers=self.HEADERS,
-                        params=self.search_params
-                    ))
+                        headers=self.headers,
+                        params=self.search_params)
+                    )
 
-                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self.HEADERS,
+                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self.headers,
                                  params=self.search_params, timeout=3.0)
-
-                logger.debug("Scraped with url: {} and User-Agent: {}".format(r.url, self.HEADERS['User-Agent']))
 
             except self.requests.ConnectionError as ce:
                 logger.error('Network problem occurred {}'.format(ce))
@@ -350,23 +361,18 @@ class HttpScrape(SearchEngineScrape):
 
             if not r.ok:
                 logger.error('HTTP Error: {}'.format(r.status_code))
+                self.handle_request_denied(r.status_code)
                 return False
 
             html = r.text
 
-            if Config['HTTP'].getboolean('view', False):
-                self.browserview(html)
-
             # cache fresh results
             cache_results(html, self.keyword, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
-            self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
 
-        self.parser = Parser(html, searchtype=self.search_type)
-        self.search_results.update(self.parser.all_results)
-
-    @property
-    def results(self):
-        return self.search_results
+        self.parser.parse(html)
+        
+        # TODO: remove it and save it to a data storage
+        print(self.parser)
         
 class AsyncHttpScrape(SearchEngineScrape):
     pass
@@ -680,8 +686,3 @@ class SelScrape(threading.Thread):
     @property
     def results(self):
         return self._results
-        
-        
-if __name__ == '__main__':
-    """For testing purposes.
-    """

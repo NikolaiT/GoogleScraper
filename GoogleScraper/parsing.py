@@ -56,11 +56,12 @@ class Parser():
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
 
-    def __init__(self, html, searchtype='normal'):
+    def __init__(self, html=None, searchtype='normal'):
         """Create new Parser instance and parse all information.
 
         Args:
-            html: The raw html from the search engine search
+            html: The raw html from the search engine search. If not provided, you can parse 
+                    the data later by calling parse(html) directly.
             searchtype: The search type. By default "normal"
             
         Raises:
@@ -72,14 +73,18 @@ class Parser():
         self.html = html
         self.searchtype = searchtype
         self.dom = None
-
         self.search_results = {}
-
-        # Try to parse the provided HTML string using lxml
-        doc = UnicodeDammit(self.html, is_html=True)
-        parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
-        self.dom = lxml.html.document_fromstring(self.html, parser=parser)
-        self.dom.resolve_base_href()
+        
+        if self.html:
+            self.parse()
+        
+    def parse(self, html):
+        """Public function to start parsing the search engine results.
+        
+        Args: 
+            html: The raw html data to extract the SERP entries from.
+        """
+        self.html = html
         
         # lets do the actual parsing
         self._parse()
@@ -88,10 +93,17 @@ class Parser():
         self.after_parsing()
 
     def _parse(self):
-        """Parse the dom according to the provided css selectors.
+        """Internal parse the dom according to the provided css selectors.
         
         Raises: InvalidSearchTypeExcpetion if no css selectors for the searchtype could be found.
         """
+        
+        # Try to parse the provided HTML string using lxml
+        doc = UnicodeDammit(self.html, is_html=True)
+        parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
+        self.dom = lxml.html.document_fromstring(self.html, parser=parser)
+        self.dom.resolve_base_href()
+        
         # try to parse the number of results.
         attr_name = self.searchtype + '_search_selectors'
         selector_dict = getattr(self, attr_name, None)
