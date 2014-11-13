@@ -32,7 +32,7 @@ except ImportError as ie:
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
 import GoogleScraper.socks as socks
-from GoogleScraper.caching import get_cached, cache_results, cached_file_name
+from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
 from GoogleScraper.config import Config
 from GoogleScraper.parsing import Parser
 import GoogleScraper.google_search_params
@@ -65,18 +65,29 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     The derivation is divided in two hierarchies: First we divide child
     classes in different Transport mechanisms. Scraping can happen over 
     different communication channels like Raw HTTP, doing it with the 
-    selenium framework or using the Twisted HTTP client.
+    selenium framework or using the an asynchroneous HTTP client.
     
     The next layer is the concrete implementation of the search functionality
-    of the specific search engines. This is not done in a next derivation
+    of the specific search engines. This is not done in a extra derivation
     hierarchy (otherwise there would be a lot of base classes for each
-    search engine and thus quite some boilerplate overhead).
-    Instead we determine our search engine over the internal state
+    search engine and thus quite some boilerplate overhead), 
+    instead we determine our search engine over the internal state
     (An attribute name self.search_engine) and handle the different search
-    engine in the search function.    
+    engines in the search function.
+    
+    Each must behave similarily: It can only scape at one search engine at the same time,
+    but it may search for multiple search keywords. The initial start number may be
+    set by the configuration. The number of pages that should be scraped for each
+    keyword may be also set.
+    
+    It may be possible to apply all the above rules dynamically for each
+    search query. This means that the search page offset, the number of
+    consecutive search pages may be provided for all keywords uniquely instead
+    that they are the same for all keywords. But this requires also a
+    sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, search_engine=None, search_type=None,):
+    def __init__(self, search_engine=None, search_type=None, proxy=None):
         if not search_engine:
             self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
         else:
@@ -88,7 +99,27 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.search_type = Config['SCRAPING'].get('search_type', 'normal')
         else:
             self.search_type = search_type
-
+            
+        # On which page to begin scraping
+        self.search_offset = Config['SCRAPING'].getint('search_offset', 1)
+        
+        # The number of pages to scrape for each keyword
+        self.num_pages_per_keyword = Config['SCRAPING'].getint('num_of_pages', 1)
+        
+        # The proxy to use
+        self.proxy = proxy
+        
+        # The keywords that need to be scraped
+        self.keywords = Config['SCRAPING'].get(keywords, [])
+        
+        # The number of results per page
+        self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
+        
+        # Install the proxy if one was provided
+        self.proxy = proxy
+        if proxy:
+            self.set_proxy()
+        
     
     @abc.abstractmethod
     def search(self):
@@ -106,7 +137,22 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def handle_request_denied(self):
         """Behaviour when search engines dedect our scraping."""
         
-
+    @abc.abstractmethod
+    def next_page(self):
+        """Increment the page. The next search request will request the next page."""
+        
+    def next_keyword(self):
+        """Spits out search queries as long as there are some remaining.
+        
+        Returns:
+            False if no more search keywords are present. Otherwise the next keyword.
+        """
+        try:
+            return self.keywords.pop()
+        except IndexError as e:
+            return False
+        
+    
 def timer_support(Class):
     """Adds support for timeable threads.
 
@@ -124,7 +170,7 @@ def timer_support(Class):
         def __init__(self, *args, **kwargs):
             # Signature of Timer or _Timer
             # def __init__(self, interval, function, args=None, kwargs=None):
-            super(Cls, self).__init__(kwargs.get('interval'), self._search)
+            super(Cls, self).__init__(kwargs.get('time_offset'), self._search)
             self._init(*args, **kwargs)
 
     # add all attributes excluding __init__() and __dict__
@@ -185,38 +231,19 @@ class HttpScrape(SearchEngineScrape):
         """Dummy constructor to be modified by the timer_support class decorator."""
         pass
 
-    def _init(self, keyword, num_page=0, interval=0.0, search_params={}):
-        """Initialises an object responsible for scraping one SERP page.
+    def _init(self, time_offset=0.0):
+        """Initialize an HttScrape object to scrape over blocking http."""
+        super().__init__()
+        
+        # Bind the requests module to this instance such that each 
+        # instance may have an own proxy
+        self.requests == __import__('requests')
+        
+        # initialize the GET parameters for the search request
+        self.search_params = {}
 
-        Args:
-            keyword: Which keyword to scrape for.
-            num_page: The page number.
-            interval: The amount of seconds to wait until executing run()
-            search_params: A dictionary with additional search params. The default search params are updated with this parameter.
-        """
-
-        self.parser = None
-        self.keyword = keyword
-        self.search_params = GoogleScraper.google_search_params.search_params
-        self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page')
-        self.num_page = num_page
-
-        if proxy:
-            self._set_proxy(proxy)
-
-        self.requests = __import__('requests')
-
-        # Maybe update the default search params when the user has supplied a dictionary
-        if search_params is not None and isinstance(search_params, dict):
-            self.search_params.update(search_params)
-
-        self.search_results = {
-            'cache_file': None,  # A path to a file that caches the results.
-            'search_keyword': self.keyword,  # The query keyword
-        }
-
-    def _set_proxy(self, proxy):
-        """Setup a socks connection for the socks module bound to the instance.
+    def set_proxy(self):
+        """Setup a socks connection for the socks module bound to this instance.
 
         Args:
             proxy: Namedtuple, Proxy to use for this thread.
@@ -237,119 +264,63 @@ class HttpScrape(SearchEngineScrape):
         socks.wrap_module(socket)
         socket.create_connection = create_connection
 
-    def reset_search_params(self):
-        """Reset all search params to None.
+    def build_search(self):
+        """Build the headers and params for the search request for the search engine."""
+        
+        self.search_params = {}
+        
+        keyword = self.next_keyword()
+        
+        if self.search_engine == 'google':
+            self.search_params['q'] = keyword
+            self.search_params['num'] = str(self.num_results_per_page)
+            self.search_params['start'] = None if self.search_offset == 1 else str(int(self.num_results_per_page) * int(self.num_page))
 
-        Such that they won't be used in the query
-        """
-        for k, v in self.search_params.items():
-            self.search_params[k] = None
-
-    def _build_query(self, rand=False):
-        """Build the headers and params for the GET request for the Google server.
-
-        If random is True, several headers (like the UA) are chosen
-        randomly.
-
-        There are currently four different Google searches supported:
-        - The normal web search: 'normal'
-        - image search: 'image'
-        - video search: 'video'
-        - news search: 'news'
-
-        Args:
-            rand: Whether to use an random user-agent. By default set to False.
-        """
-
-        # params used by all search-types
-        self.search_params.update(
-            {
-                'q': self.keyword,
-            })
-
-        if self.search_type == 'normal':
-            # The normal web search. That's what you probably want
-            self.search_params.update(
-                {
-                    'num': str(self.num_results_per_page),
-                    'start': str(int(self.num_results_per_page) * int(self.num_page))
-                })
-        elif self.search_type == 'image':
-            # Image raw search url for keyword 'cat' in mozilla 27.0.1
-            # 'q' and tbs='isch' are sufficient for a search
-            # https://www.google.com/search?q=cat&client=firefox-a&rls=org.mozilla:en-US:official&channel=sb&noj=1&source=lnms&tbm=isch&sa=X&ei=XX8dU93kMMbroAS5_IGwBw&ved=0CAkQ_AUoAQ&biw=1920&bih=881
-            # Link that Chromium generates: https://www.google.com/search?site=imghp&tbm=isch&source=hp&biw=1536&bih=769&q=good+view&oq=good+view&gs_l=img.3..0l10.18.3212.0.3351.17.16.1.0.0.0.355.2509.3j9j0j3.15.0....0...1ac.1.37.img..6.11.1342.tSOKFxzvFbE
-            self.reset_search_params()
-            self.search_params.update(
-                {
-                    'q': self.keyword,
-                    'oq': self.keyword,
+            elif self.search_type == 'image':
+                self.search_params.update({
+                    'oq': keyword,
                     'site': 'imghp',
                     'tbm': 'isch',
                     'source': 'hp',
                     #'sa': 'X',
                     'biw': 1920,
                     'bih': 881
-                })
-        elif self.search_type == 'video':
-            # Video search raw url with keyword 'cat' in mozilla 27.0.1
-            # 'q' and tbs='vid' are sufficient for a search
-            # https://www.google.com/search?q=cat&client=firefox-a&rls=org.mozilla:en-US:official&channel=sb&noj=1&tbm=vid&source=lnms&sa=X&ei=DoAdU9uxHdGBogTp8YLACQ&ved=0CAoQ_AUoAg&biw=1920&bih=881&dpr=1
-            self.search_params.update(
-                {
-                    'num': str(self.num_results_per_page),
-                    'start': str(int(self.num_results_per_page) * int(self.num_page)),
+                })     
+            elif self.search_type == 'video':
+                self.search_params.update({
                     'tbm': 'vid',
                     'source': 'lnms',
                     'sa': 'X',
                     'biw': 1920,
                     'bih': 881
                 })
-        elif self.search_type == 'news':
-            # pretty much as above;
-            # 'q' and tbs='nws' are perfectly fine for a news search
-            # But there is a more elaborate Google news search with a different URL on: https://news.google.com/nwshp?
-            # this code only handles the standard search news
-            self.search_params.update(
-                {
-                    'num': str(self.num_results_per_page),
-                    'start': str(int(self.num_results_per_page) * int(self.num_page)),
+            elif self.search_type == 'news':
+                self.search_params.update({
                     'tbm': 'nws',
                     'source': 'lnms',
                     'sa': 'X'
                 })
+        elif self.search_engine == 'yandex':
+            raise NotImplemented('todo')
+        elif self.search_engine == 'bing':
+            raise NotImplemented('todo')      
+        elif self.search_engine == 'yahoo':
+            raise NotImplemented('todo')
+        elif self.search_engine == 'baidu':
+            raise NotImplemented('todo')      
+        elif self.search_engine == 'duckduckgo':
+            raise NotImplemented('todo')
 
+    @cached
+    def search(self, rand=False):
+        """The actual search and parsing of the results."""
+        self.build_search()
+        
         if rand:
             self.HEADERS['User-Agent'] = random.choice(self.USER_AGENTS)
 
-    def browserview(self, html):
-        """View html in browser.
-
-        Args:
-            html: The html to inspect in the default browser.
-        """
-        tf = tempfile.NamedTemporaryFile(delete=False)
-        tf.write(html.encode())
-        webbrowser.open(tf.name)
-
-    def _search(self):
-        """The actual search and parsing of the results.
-
-        Private, internal method.
-        Parsing is done with lxml and cssselect. The html structure of the Google Search
-        results may change over time. Effective: February 2014
-
-        There are several parts of a SERP results page the average user is most likely interested:
-
-        (Probably in this order)
-        - Non-advertisement links, as well as their little snippet and title
-        - The message that indicates how many results were found. For example: "About 834,000,000 results (0.39 seconds)"
-        - Advertisement search results (links, titles, snippets like above)
-        """
-        self._build_query()
-
         # After building the query, all parameters are set, so we know what we're requesting.
-        logger.debug("Created new GoogleScrape object with searchparams={}".format(pprint.pformat(self.search_params)))
+        logger.debug("Created new HttpScrape({search_engine}) object with request parameters={params}".format(search_engine=self.search_engine, params=pprint.pformat(self.search_params)))
 
         html = get_cached(self.keyword, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
         self.search_results['cache_file'] = os.path.join(Config['GLOBAL'].get('cachedir'), cached_file_name(self.keyword, Config['GLOBAL'].get('base_search_url'), self.search_params))
@@ -396,7 +367,9 @@ class HttpScrape(SearchEngineScrape):
     @property
     def results(self):
         return self.search_results
-
+        
+class AsyncHttpScrape(SearchEngineScrape):
+    pass
 
 class SelScrape(threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google.
@@ -707,3 +680,8 @@ class SelScrape(threading.Thread):
     @property
     def results(self):
         return self._results
+        
+        
+if __name__ == '__main__':
+    """For testing purposes.
+    """

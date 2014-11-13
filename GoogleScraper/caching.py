@@ -418,6 +418,12 @@ def fix_broken_cache_names(url):
     logger.debug('Renamed {} files.'.format(i))
 
 
+def cached(f):
+    """decorator: Cache the result of the function."""
+    def wrapper(args*, kwargs**):
+        value = f()
+        cache_results(value)
+    
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
