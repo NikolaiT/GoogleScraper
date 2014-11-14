@@ -114,8 +114,11 @@ class Parser():
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
         if num_results_selector:
-            self.search_results['num_results'] = self.dom.xpath(css_to_xpath(num_results_selector))[0].text_content()
-        
+            try:
+                self.search_results['num_results'] = self.dom.xpath(css_to_xpath(num_results_selector))[0].text_content()
+            except IndexError as e:
+                pass
+
         if not selector_dict:
             raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
             
@@ -130,7 +133,7 @@ class Parser():
             selectors_to_use = dict(((key, selectors[key]) for key in to_extract if key in selectors.keys()))
             
             for index, result in enumerate(results):
-                # Let's add primitve support for CSS3 pseudo selectors
+                # Let's add primitive support for CSS3 pseudo selectors
                 # We just need two of them
                 # ::text
                 # ::attr(someattribute)

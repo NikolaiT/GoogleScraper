@@ -45,28 +45,6 @@ except ImportError as ie:
 
 logger = logging.getLogger('GoogleScraper')
 
-def http_scrape(keyword, offset=0):
-    """Usage function for GoogleScraper objects in 'http' mode.
-
-    Args:
-        keyword: What keyword to search for in the search engine.
-        offset: Optional argument, on which page to start scraping. By default is zero.
-
-    Returns:
-        The scraping results.
-    """
-    threads = [HttpScrape(keywords=keyword, num_page=i, time_offset=0)
-                    for i in range(offset, Config['SCRAPING'].getint('num_of_pages') + offset, 1)]
-
-    for t in threads:
-        t.start()
-
-    # wait for all threads to end running
-    for t in threads:
-        t.join()
-
-    return [t.results for t in threads]
-
 def scrape_with_config(config, **kwargs):
     """Runs GoogleScraper with the dict in config.
 
@@ -162,6 +140,39 @@ def print_scrape_results_http(results):
                             print('*' * 70)
                             print()
 
+
+
+def assign_keywords_to_scrapers(all_keywords):
+    """Scrapers are often threads or asynchronous objects.
+
+    Splitting the keywords equally on the workers is crucial
+    for maximal performance.
+
+    Args:
+        all_keywords: All keywords to scrape
+
+    Returns:
+        A list of list. The inner list should be assigned to individual scrapers.
+    """
+    mode = Config['SCRAPING'].get('scrapemethod')
+
+
+    if mode == 'sel':
+        num_scrapers = Config['SELENIUM'].getint('num_browser_instances', 1)
+    elif mode == 'http':
+        num_scrapers = Config['HTTP'].getint('num_threads', 1)
+    else:
+        num_scrapers = 0
+
+
+    if len(all_keywords) > num_scrapers:
+        kwgroups = grouper(all_keywords, len(all_keywords)//num_scrapers, fillvalue=None)
+    else:
+        # thats a little special there :)
+        kwgroups = [[kw, ] for kw in all_keywords]
+
+    return kwgroups
+
 def main(return_results=True):
     """Runs the GoogleScraper application as determined by the various configuration points.
 
@@ -243,26 +254,21 @@ def main(return_results=True):
         logger.info('By using scrapemethod: {}'.format(mode))
         return
 
+    # First of all, lets see how many keywords remain to scrape after parsing the cache
+    if Config['GLOBAL'].getboolean('do_caching'):
+        remaining = parse_all_cached_files(keywords, conn, url=Config['SELENIUM'].get('sel_scraper_base_url'))
+    else:
+        remaining = keywords
+
+    kwgroups = assign_keywords_to_scrapers(remaining)
+
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
-        # First of all, lets see how many keywords remain to scrape after parsing the cache
-        if Config['GLOBAL'].getboolean('do_caching'):
-            remaining = parse_all_cached_files(keywords, conn, url=Config['SELENIUM'].get('sel_scraper_base_url'))
-        else:
-            remaining = keywords
-
         # Create a lock to sync file access
         rlock = threading.RLock()
 
         # A lock to prevent multiple threads from solving captcha.
         lock = threading.Lock()
-
-        max_sel_browsers = Config['SELENIUM'].getint('num_browser_instances')
-        if len(remaining) > max_sel_browsers:
-            kwgroups = grouper(remaining, len(remaining)//max_sel_browsers, fillvalue=None)
-        else:
-            # thats a little special there :)
-            kwgroups = [[kw, ] for kw in remaining]
 
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
@@ -298,25 +304,17 @@ def main(return_results=True):
             conn.close()
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http':
-        results = []
-        cursor = conn.cursor()
-        for i, kw in enumerate(keywords):
-            r = http_scrape(kw)
+        threads = []
+        for group in kwgroups:
+            threads.append(HttpScrape(keywords=group))
 
-            if r:
-                cursor.execute('INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query) VALUES(?,?,?,?,?)',
-                             (i, datetime.datetime.utcnow(), 0, 0, kw))
-                serp_id = cursor.lastrowid
-                for result in r:
-                    results.append(r)
-                    for result_set in ('results', 'ads_main', 'ads_aside'):
-                        if result_set in result.keys():
-                            for title, snippet, url, pos in result[result_set]:
-                                cursor.execute('INSERT INTO link (title, snippet, url, domain, rank, serp_id) VALUES(?, ?, ?, ?, ?, ?)',
-                                    (title, snippet, url.geturl(), url.netloc, pos, serp_id))
-            cursor.close()
-        if Config['GLOBAL'].get('print'):
-            print_scrape_results_http(results)
-        return conn
+        for thread in threads:
+            thread.start()
+
+        for thread in threads:
+            thread.join()
+
+    elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
+        pass
     else:
         raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')

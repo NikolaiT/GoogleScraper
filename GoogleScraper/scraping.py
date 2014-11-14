@@ -119,8 +119,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.keywords = list(self.keywords)
         
         # The actual keyword that is to be scraped next
-        self.current_keyword = ''
-        
+        self.current_keyword = self.next_keyword()
+
         # The parser that should be used to parse the search engine results
         self.parser = None
         
@@ -167,9 +167,16 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         """
         try:
             keyword = self.keywords.pop()
-
+            return keyword
         except IndexError as e:
             return False
+
+
+class TimableSearchEngineScrape(threading.Timer):
+    """Provides timing functionality to a SearchEngineScrape."""
+
+    def __init__(self, time_offset=0.0):
+        super().__init__(time_offset, self.search)
         
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
@@ -217,12 +224,12 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         HttpScrape inherits from SearchEngineScrape
         and from threading.Timer.
         """
-        super(threading.Timer, self).__init__(time_offset, self.search)
-        super(SearchEngineScrape, self).__init__(*args, **kwargs)
+        threading.Timer.__init__(self, time_offset, self.search)
+        SearchEngineScrape.__init__(self, *args, **kwargs)
         
         # Bind the requests module to this instance such that each 
         # instance may have an own proxy
-        self.requests == __import__('requests')
+        self.requests = __import__('requests')
         
         # initialize the GET parameters for the search request
         self.search_params = {}
@@ -270,19 +277,17 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         
         self.search_params = {}
         
-        keyword = self.next_keyword()
-        
         start_search_position = None if self.search_offset == 1 else str(int(self.num_results_per_page) * int(self.num_page))
         
         if self.search_engine == 'google':
             self.parser = GoogleParser(searchtype=self.search_type)
-            self.search_params['q'] = keyword
+            self.search_params['q'] = self.current_keyword
             self.search_params['num'] = str(self.num_results_per_page)
             self.search_params['start'] = start_search_position
 
             if self.search_type == 'image':
                 self.search_params.update({
-                    'oq': keyword,
+                    'oq': self.current_keyword,
                     'site': 'imghp',
                     'tbm': 'isch',
                     'source': 'hp',
@@ -306,73 +311,79 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                 })
         elif self.search_engine == 'yandex':
             self.parser = YandexParser(searchtype=self.search_type)
-            self.search_params['text'] = keyword
+            self.search_params['text'] = self.current_keyword
             self.search_params['p'] = start_search_position
         
         elif self.search_engine == 'bing':
             self.parser = BingParser(searchtype=self.search_type)
-            self.search_params['q'] = keyword
+            self.search_params['q'] = self.current_keyword
             self.search_params['first'] = start_search_position
             
         elif self.search_engine == 'yahoo':
             self.parser = YahooParser(searchtype=self.search_type)
-            self.search_params['p'] = keyword
+            self.search_params['p'] = self.current_keyword
             self.search_params['b'] = start_search_position
             self.search_params['ei'] = 'UTF-8'
             
         elif self.search_engine == 'baidu':
             self.parser = BaiduParser(searchtype=self.search_type)
-            self.search_params['wd'] = keyword
+            self.search_params['wd'] = self.current_keyword
             self.search_params['pn'] = start_search_position
             self.search_params['ie'] = 'utf-8'
         elif self.search_engine == 'duckduckgo':
             self.parser = DuckduckgoParser(searchtype=self.search_type)
-            self.search_params['q'] = keyword
+            self.search_params['q'] = self.current_keyword
             
     def search(self, rand=False):
-        """The actual search and parsing of the results."""
-        self.build_search()
-        
-        if rand:
-            self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
+        """The actual search loop for the search engine."""
 
-        html = get_cached(self.keyword, Config['GLOBAL'].get('base_search_url'), params=self.search_params)
+        while self.current_keyword:
 
-        if not html:
-            try:
-                base_url = Config['GLOBAL'].get('base_search_url')
+            self.build_search()
 
-                if Config['GLOBAL'].getint('verbosity', 0) > 1:
-                    logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
-                        base_url=base_url,
-                        headers=self.headers,
-                        params=self.search_params)
-                    )
+            if rand:
+                self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
 
-                r = self.requests.get(Config['GLOBAL'].get('base_search_url'), headers=self.headers,
-                                 params=self.search_params, timeout=3.0)
+            html = get_cached(self.current_keyword, self.base_search_url, params=self.search_params)
 
-            except self.requests.ConnectionError as ce:
-                logger.error('Network problem occurred {}'.format(ce))
-                raise ce
-            except self.requests.Timeout as te:
-                logger.error('Connection timeout {}'.format(te))
-                raise te
+            if not html:
+                try:
+                    if Config['GLOBAL'].getint('verbosity', 0) > 1:
+                        logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
+                            base_url=self.base_search_url,
+                            headers=self.headers,
+                            params=self.search_params)
+                        )
 
-            if not r.ok:
-                logger.error('HTTP Error: {}'.format(r.status_code))
-                self.handle_request_denied(r.status_code)
-                return False
+                    r = self.requests.get(self.base_search_url, headers=self.headers,
+                                     params=self.search_params, timeout=3.0)
 
-            html = r.text
+                except self.requests.ConnectionError as ce:
+                    logger.error('Network problem occurred {}'.format(ce))
+                    raise ce
+                except self.requests.Timeout as te:
+                    logger.error('Connection timeout {}'.format(te))
+                    raise te
 
-            # cache fresh results
-            cache_results(html, self.keyword, url=Config['GLOBAL'].get('base_search_url'), params=self.search_params)
+                if not r.ok:
+                    logger.error('HTTP Error: {}'.format(r.status_code))
+                    self.handle_request_denied(r.status_code)
+                    return False
 
-        self.parser.parse(html)
-        
-        # TODO: remove it and save it to a data storage
-        print(self.parser)
+                html = r.text
+
+                # cache fresh results
+                cache_results(html, self.current_keyword, url=self.base_search_url, params=self.search_params)
+
+            self.parser.parse(html)
+
+            # TODO: remove it and save it to a data storage
+            print(self.parser)
+
+            self.current_keyword = self.next_keyword()
+
+    def run(self):
+        self.search(rand=True)
         
 class AsyncHttpScrape(SearchEngineScrape):
     pass
