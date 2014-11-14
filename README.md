@@ -9,7 +9,9 @@ virtualenv --python python3 env
 source env/bin/activate
 pip install git+git://github.com/NikolaiT/GoogleScraper/
 
-
+# Then you can have fun like this:
+# just replace "examples/kw.txt" with your own keyword file :D
+GoogleScraper sel --keyword-file examples/kw.txt --search-engine duckduckgo
 ```
 
 11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][5]!!.
