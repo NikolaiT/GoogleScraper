@@ -37,7 +37,7 @@ def get_command_line(static_args=False):
     parser.add_argument('--base-search-url', type=str,
                         action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
 
-    parser.add_argument('-p', '--num-pages', metavar='num_of_pages', type=int, dest='num_pages', action='store',
+    parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
 
     parser.add_argument('-s', '--storing-type', metavar='results_storing', type=str, dest='storing_type',
@@ -82,7 +82,7 @@ def get_command_line(static_args=False):
                                 in args.__dict__.items() if (key in L and value is not None)])
 
     return {
-        'SCRAPING': make_dict(['search_engine', 'scrapemethod', 'num_pages', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file']),
+        'SCRAPING': make_dict(['search_engine', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file']),
         'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity']),
         'SELENIUM': make_dict(['num_browser_instances'])
     }

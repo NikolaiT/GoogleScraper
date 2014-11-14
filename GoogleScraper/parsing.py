@@ -164,6 +164,25 @@ class Parser():
                     serp_result[key] = value
                 if serp_result:
                     self.search_results[result_type].append(serp_result)
+
+    def clean_html(self, html):
+        """Clean the html from any bloated data that is of no interest.
+
+        For example in Google SERP html pages, most data is lots of
+        javascript code that tells os nothing about the results. When
+        stripping it away and then caching, we save a lot of disk space.
+
+        Args:
+            html: The html to clean.
+
+        Returns:
+            The cleaned html.
+        """
+        parsed = lxml.html.fromstring(html)
+        for bad in parsed.xpath('//script|//style'):
+            bad.getparent().remove(bad)
+
+        return lxml.html.tostring(parsed)
                     
     def after_parsing(self):
         """Sublcass specific behaviour after parsing happened.

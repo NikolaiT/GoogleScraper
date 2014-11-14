@@ -1,16 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import threading
-import types
+from urllib.parse import urljoin
 import random
 import math
 import logging
-import pprint
 import sys
-import lxml.html
 import time
 import socket
-import os
 import abc
 
 try:
@@ -85,7 +82,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, keywords=None, num_page=1, search_engine=None, search_type=None, proxy=None):
+    def __init__(self, keywords=None, start_page_pos=1, search_engine=None, search_type=None, proxy=None):
         if not search_engine:
             self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
         else:
@@ -98,11 +95,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         else:
             self.search_type = search_type
             
-        # On which page to begin scraping
-        self.search_offset = Config['SCRAPING'].getint('search_offset', 1)
-        
         # The number of pages to scrape for each keyword
-        self.num_pages_per_keyword = Config['SCRAPING'].getint('num_of_pages', 1)
+        self.num_pages_per_keyword = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
         
         # The proxy to use
         self.proxy = proxy
@@ -111,12 +105,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # If a SearchEngineScrape receives explicitly keywords,
         # scrape them. otherwise scrape the ones specified in the Config.
         if keywords:
-            self.keywords = keywords
+            self.keywords = set(keywords)
         else:
-            self.keywords = Config['SCRAPING'].get('keywords', [])
+            self.keywords = set(Config['SCRAPING'].get('keywords', []))
 
         if not isinstance(keywords, list):
-            self.keywords = list(self.keywords)
+            self.keywords = set([self.keywords])
         
         # The actual keyword that is to be scraped next
         self.current_keyword = self.next_keyword()
@@ -128,7 +122,13 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
 
         # The page where to start scraping. By default the starting page is 1.
-        self.num_page = 1 if num_page < 1 else num_page
+        if start_page_pos:
+            self.start_page_pos = 1 if start_page_pos < 1 else start_page_pos
+        else:
+            self.start_page_pos = Config['SCRAPING'].getint('search_offset', 1)
+
+        # The page where we are right now
+        self.current_page = self.start_page_pos
         
         # Install the proxy if one was provided
         self.proxy = proxy
@@ -140,8 +140,31 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         
     
     @abc.abstractmethod
-    def search(self):
+    def search(self, *args, **kwargs):
         """Send the search request(s) over the transport."""
+
+
+    def blocking_search(self, callback, *args, **kwargs):
+        """Similar transports have the same search loop layout.
+
+        The SelScrape and HttpScrape classes have the same search loops. Just
+        the transport mechanism is quite different (In HttpScrape class we replace
+        the browsers functionality with our own for example).
+
+        Args:
+            callback: A callable with the search functionality.
+        """
+        while self.current_keyword:
+
+            self.current_page = self.start_page_pos
+
+            for self.current_page in range(1, self.num_pages_per_keyword + 1):
+
+                # set the actual search code in the derived class
+                callback(*args, **kwargs)
+
+            self.current_keyword = self.next_keyword()
+
         
     @abc.abstractmethod
     def set_proxy(self):
@@ -157,7 +180,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
-        self.num_page += 1
+        self.start_page_pos += 1
         
     def next_keyword(self):
         """Spits out search queries as long as there are some remaining.
@@ -168,16 +191,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         try:
             keyword = self.keywords.pop()
             return keyword
-        except IndexError as e:
+        except KeyError as e:
             return False
 
-
-class TimableSearchEngineScrape(threading.Timer):
-    """Provides timing functionality to a SearchEngineScrape."""
-
-    def __init__(self, time_offset=0.0):
-        super().__init__(time_offset, self.search)
-        
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
     """Offers a fast way to query any search engine using raw HTTP requests.
@@ -276,8 +292,9 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         """Build the headers and params for the search request for the search engine."""
         
         self.search_params = {}
-        
-        start_search_position = None if self.search_offset == 1 else str(int(self.num_results_per_page) * int(self.num_page))
+
+        # Don't set the offset parameter explicitly if the default search (no offset) is correct.
+        start_search_position = None if self.current_page == 1 else str(int(self.num_results_per_page) * int(self.current_page))
         
         if self.search_engine == 'google':
             self.parser = GoogleParser(searchtype=self.search_type)
@@ -334,65 +351,65 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.parser = DuckduckgoParser(searchtype=self.search_type)
             self.search_params['q'] = self.current_keyword
             
-    def search(self, rand=False):
-        """The actual search loop for the search engine."""
+    def search(self, *args, rand=False, **kwargs):
+        """The actual search for the search engine."""
 
-        while self.current_keyword:
+        self.build_search()
 
-            self.build_search()
+        if rand:
+            self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
 
-            if rand:
-                self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
+        html = get_cached(self.current_keyword, self.base_search_url, params=self.search_params)
 
-            html = get_cached(self.current_keyword, self.base_search_url, params=self.search_params)
+        if not html:
+            try:
+                if Config['GLOBAL'].getint('verbosity', 0) > 1:
+                    logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
+                        base_url=self.base_search_url,
+                        headers=self.headers,
+                        params=self.search_params)
+                    )
 
-            if not html:
-                try:
-                    if Config['GLOBAL'].getint('verbosity', 0) > 1:
-                        logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
-                            base_url=self.base_search_url,
-                            headers=self.headers,
-                            params=self.search_params)
-                        )
+                r = self.requests.get(self.base_search_url, headers=self.headers,
+                                 params=self.search_params, timeout=3.0)
 
-                    r = self.requests.get(self.base_search_url, headers=self.headers,
-                                     params=self.search_params, timeout=3.0)
+            except self.requests.ConnectionError as ce:
+                logger.error('Network problem occurred {}'.format(ce))
+                raise ce
+            except self.requests.Timeout as te:
+                logger.error('Connection timeout {}'.format(te))
+                raise te
 
-                except self.requests.ConnectionError as ce:
-                    logger.error('Network problem occurred {}'.format(ce))
-                    raise ce
-                except self.requests.Timeout as te:
-                    logger.error('Connection timeout {}'.format(te))
-                    raise te
+            if not r.ok:
+                logger.error('HTTP Error: {}'.format(r.status_code))
+                self.handle_request_denied(r.status_code)
+                return False
 
-                if not r.ok:
-                    logger.error('HTTP Error: {}'.format(r.status_code))
-                    self.handle_request_denied(r.status_code)
-                    return False
+            html = r.text
 
-                html = r.text
+            # cache fresh results
+            cache_results(html, self.current_keyword, url=self.base_search_url, params=self.search_params)
 
-                # cache fresh results
-                cache_results(html, self.current_keyword, url=self.base_search_url, params=self.search_params)
+        self.parser.parse(html)
 
-            self.parser.parse(html)
+        # TODO: remove it and save it to a data storage
+        print(self.parser)
 
-            # TODO: remove it and save it to a data storage
-            print(self.parser)
-
-            self.current_keyword = self.next_keyword()
 
     def run(self):
-        self.search(rand=True)
+        args = []
+        kwargs = {}
+        kwargs['rand'] = False
+        SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
         
 class AsyncHttpScrape(SearchEngineScrape):
     pass
 
-class SelScrape(threading.Thread):
+class SelScrape(SearchEngineScrape, threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google.
     """
 
-    def __init__(self, keywords, rlock=None, queue=None, captcha_lock=None, proxy=None, browser_num=0):
+    def __init__(self, *args, rlock=None, queue=None, captcha_lock=None, **kwargs):
         """Create a new SelScraper Thread.
 
         Args:
@@ -403,18 +420,18 @@ class SelScrape(threading.Thread):
             proxy: Optional, if set, use the proxy to route all scrapign through it.
             browser_num: A unique, semantic number for each thread.
         """
-        super().__init__()
-        self.num_pages = Config['SCRAPING'].getint('num_of_pages')
+        threading.Thread.__init__()
+        SearchEngineScrape.__init__(self, *args, **kwargs)
+
+
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
-        logger.info('[+] SelScraper[{}] created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(self.browser_type, len(keywords), proxy, self.num_pages, browser_num))
-        self.url = Config['SELENIUM'].get('sel_scraper_base_url',
-                                    Config['GLOBAL'].get('base_search_url'))
-        self.proxy = proxy
-        self.browser_num = browser_num
+        if Config['GLOBAL'].getint('verbosity', 0) > 1:
+            logger.info('[+] SelScraper[{}] created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(self.browser_type, len(keywords), proxy, self.num_pages, browser_num))
+
+        self.browser_num = self.name
         self.queue = queue
         self.rlock = rlock
         self.captcha_lock = captcha_lock
-        self.keywords = set(keywords)
         self.ip = '127.0.0.1'
         self._parse_config()
         self._results = []
@@ -441,22 +458,11 @@ class SelScrape(threading.Thread):
         # sleep one second
         return (1, 2)
 
-    def _maybe_crop(self, html):
-        """Crop Google the HTML of  SERP pages.
+    def set_proxy(self):
+        """Install a proxy on the communication channel."""
 
-        If we find the needle that indicates the beginning of the main content, use lxml to crop the selections.
-
-        Args:
-            html: The html to crop.
-
-        Returns:
-            The cropped html.
-        """
-        parsed = lxml.html.fromstring(html)
-        for bad in parsed.xpath('//script|//style'):
-            bad.getparent().remove(bad)
-
-        return lxml.html.tostring(parsed)
+    def switch_proxy(self, proxy):
+        """Switch the proxy on the communication channel."""
 
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
@@ -574,13 +580,76 @@ class SelScrape(threading.Thread):
         else:
             raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
 
+
+    def build_search(self):
+        """Build the search for SelScrapers"""
+        assert self.webdriver, 'Webdriver needs to be ready to build the search'
+
+        self.starting_point = self.base_search_url
+
+        url_params = ''
+
+        if self.search_engine == 'google':
+            url_params = 'q={query}'
+
+    def search(self):
+        """Search with webdriver."""
+
+            self.webdriver.get(self.)
+            # match the largest sleep range
+            j = random.randrange(*self._largest_sleep_range(i))
+            if self.proxy:
+                logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
+            else:
+                logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, j, kw, url=next_url))
+            time.sleep(j)
+            try:
+                self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
+            except TimeoutException as e:
+                if not self.handle_request_denied():
+                    open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
+                    raise GoogleSearchError('`q` search input cannot be found.')
+
+            if write_kw:
+                self.element.clear()
+                time.sleep(.25)
+                self.element.send_keys(kw + Keys.ENTER)
+                write_kw = False
+            # Waiting until the keyword appears in the title may
+            # not be enough. The content may still be off the old page.
+            try:
+                WebDriverWait(self.webdriver, 10).until(EC.title_contains(kw))
+            except TimeoutException as e:
+                logger.debug('Keyword not found in title: {}'.format(e))
+
+            try:
+                # wait until the next page link emerges
+                WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '#pnnext')))
+                next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
+            except TimeoutException as te:
+                logger.debug('Cannot locate next page html id #pnnext')
+            except WebDriverException as e:
+                # leave if no next results page is available
+                pass
+
+            # That's because we sleep explicitly one second, so the site and
+            # whatever js loads all shit dynamically has time to update the
+            # DOM accordingly.
+            time.sleep(1.5)
+
+            html = self._maybe_crop(self.webdriver.page_source)
+
+            if self.rlock or self.queue:
+                # Lock for the sake that two threads write to same file (not probable)
+                self.rlock.acquire()
+                cache_results(html, kw, self.url)
+                self.rlock.release()
+                # commit in intervals specified in the config
+                self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
+
+            self._results.append(self._get_parse_links(html, kw, only_results=True).all_results)
+
     def run(self):
-        """The core logic of an GoogleScrape"""
-
-        # Create the browser and align it according to its position and in maximally two rows
-        if len(self.keywords) <= 0:
-            return True
-
         if not self._get_webdriver():
             raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
 
@@ -588,112 +657,4 @@ class SelScrape(threading.Thread):
             self.webdriver.set_window_size(400, 400)
             self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
 
-        for i, kw in enumerate(self.keywords):
-            if not kw:
-                continue
-            write_kw = True
-            next_url = ''
-            for page_num in range(0, self.num_pages):
-                if not next_url:
-                    next_url = self.url
-                self.webdriver.get(next_url)
-                # match the largest sleep range
-                j = random.randrange(*self._largest_sleep_range(i))
-                if self.proxy:
-                    logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
-                else:
-                    logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, j, kw, url=next_url))
-                time.sleep(j)
-                try:
-                    self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
-                except TimeoutException as e:
-                    if not self.handle_request_denied():
-                        open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
-                        raise GoogleSearchError('`q` search input cannot be found.')
-
-                if write_kw:
-                    self.element.clear()
-                    time.sleep(.25)
-                    self.element.send_keys(kw + Keys.ENTER)
-                    write_kw = False
-                # Waiting until the keyword appears in the title may
-                # not be enough. The content may still be off the old page.
-                try:
-                    WebDriverWait(self.webdriver, 10).until(EC.title_contains(kw))
-                except TimeoutException as e:
-                    logger.debug('Keyword not found in title: {}'.format(e))
-                    continue
-
-                try:
-                    # wait until the next page link emerges
-                    WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '#pnnext')))
-                    next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
-                except TimeoutException as te:
-                    logger.debug('Cannot locate next page html id #pnnext')
-                except WebDriverException as e:
-                    # leave if no next results page is available
-                    break
-
-                # That's because we sleep explicitly one second, so the site and
-                # whatever js loads all shit dynamically has time to update the
-                # DOM accordingly.
-                time.sleep(1.5)
-
-                html = self._maybe_crop(self.webdriver.page_source)
-
-                if self.rlock or self.queue:
-                    # Lock for the sake that two threads write to same file (not probable)
-                    self.rlock.acquire()
-                    cache_results(html, kw, self.url)
-                    self.rlock.release()
-                    # commit in intervals specified in the config
-                    self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
-
-                self._results.append(self._get_parse_links(html, kw, only_results=True).all_results)
-
-        self.webdriver.close()
-
-    def _get_parse_links(self, data, kw, only_results=False, page_num = 1, ip='127.0.0.1'):
-        """Act the same as _parse_links, but just return the db data instead of inserting data into a connection or
-        or building actual queries.
-
-        [[lastrowid]] needs to be replaced with the last rowid from the database when inserting.
-
-        Args:
-            data: The html to parse.
-            kw: The keywords that was used in the scrape.
-            only_results: Whether only the parsed results should be returned.
-            page_num: The Google page number of the parsed reqeust.
-            ip: The ip address the request was issued.
-
-        Returns:
-            The data to insert in the database (serp_page and links table entries respectively)
-        """
-
-        parser = Parser(data)
-        if only_results:
-            return parser
-
-        results = parser.links
-        first = (page_num,
-                 time.asctime(),
-                 len(results),
-                 parser.num_results() or '',
-                 kw,
-                 ip)
-
-        second = []
-        for result in results:
-            second.append([
-                result.link_title,
-                result.link_url.geturl(),
-                result.link_snippet,
-                result.link_position,
-                result.link_url.hostname
-            ])
-
-        return (first, second)
-
-    @property
-    def results(self):
-        return self._results
+        SearchEngineScrape.blocking_search(self, self.search)

@@ -46,7 +46,7 @@ Config = {
     'HTTP': {
 
     },
-    'GOOGLE_SEARCH_PARAMS': {
+    'HTTP_ASYNC': {
 
     }
 }

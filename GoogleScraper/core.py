@@ -245,7 +245,7 @@ def main(return_results=True):
         print('*' * 60 + 'SIMULATION' + '*' * 60)
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have')
         logger.info('Scraped for {} keywords (before caching), with {} results a page, in total {} pages for each keyword'.format(
-            len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_of_pages')))
+            len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_pages_for_keyword')))
         logger.info('Used {} distinct proxies in total, with the following proxies: {}'.format(len(proxies), '\t\t\n'.join(proxies)))
         if Config['SCRAPING'].get('scrapemethod') == 'sel':
             mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
