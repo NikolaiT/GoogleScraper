@@ -44,7 +44,7 @@ class SearchEngineResultsPage(Base):
     search = relationship(ScraperSearch, backref=backref('serps', uselist=True))
 
     def __str__(self):
-        return '<SearchEngineResultsPage number of results: {}>'.format(self.num_results)
+        return '<SERP number of results[{}] for query {}>'.format(self.num_results, self.query)
 
 class Link(Base):
     __tablename__= 'link'

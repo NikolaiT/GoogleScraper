@@ -155,8 +155,6 @@ def main(return_results=True):
     session_factory = sessionmaker(bind=database.engine)
     Session = scoped_session(session_factory)
     session = Session()
-    session.add(scraper_search)
-    session.commit()
 
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
@@ -194,7 +192,11 @@ def main(return_results=True):
             thread.join()
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
-        pass
+        raise NotImplemented('soon my dead friends :)')
 
     else:
         raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')
+
+    scraper_search.stopped_searching = datetime.datetime.utcnow()
+    session.add(scraper_search)
+    session.commit()

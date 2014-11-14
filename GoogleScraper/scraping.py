@@ -675,10 +675,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
             next_url = self.webdriver.find_element_by_css_selector(selector).get_attribute('href')
         except TimeoutException as te:
-            logger.debug('Cannot locate next page element.')
-            raise te
+            logger.warning('Cannot locate next page element: {}'.format(te))
+            return False
         except WebDriverException as e:
-            # leave if no next results page is available
+            logger.warning('Cannot locate next page element: {}'.format(e))
             return False
 
         return next_url
@@ -757,3 +757,5 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.build_search()
 
         SearchEngineScrape.blocking_search(self, self.search)
+
+        self.webdriver.close()
