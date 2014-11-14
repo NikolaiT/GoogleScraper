@@ -1,11 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""
-author: Nikolai Tschacher
-date: 11.11.2014
-home: incolumitas.com
-"""
-
 # TODO: Implement alternate selectors for different SERP formats (just use a list in the CSS selector datatypes)
 
 import sys
@@ -25,6 +19,14 @@ except ImportError as ie:
 logger = logging.getLogger('GoogleScraper')
 
 class InvalidSearchTypeExcpetion(Exception):
+    pass
+
+
+class UnknowUrlException(Exception):
+    pass
+
+
+class NoParserForSearchEngineException(Exception):
     pass
 
 class Parser():
@@ -372,6 +374,66 @@ class DuckduckgoParser(Parser):
     }
 
 
+def get_parser_by_url(url):
+    """Get the appropriate parser by an search engine url.
+
+    Args:
+        url: The url that was used to issue the search
+
+    Returns:
+        The correct parser that can parse results for this url.
+
+    Raises:
+        UnknowUrlException if no parser could be found for the url.
+    """
+    parser = None
+
+    if re.search(r'^http[s]?://www\.google', url):
+        parser = GoogleParser
+    elif re.search(r'^http://yandex\.ru', url):
+        parser = YandexParser
+    elif re.search(r'^http://www\.bing\.', url):
+        parser = BingParser
+    elif re.search(r'^http[s]?://search\.yahoo.', url):
+        parser = YahooParser
+    elif re.search(r'^http://www\.baidu\.com', url):
+        parser = BaiduParser
+    elif re.search(r'^https://duckduckgo\.com', url):
+        parser = DuckduckgoParser
+
+    if not parser:
+        raise UnknowUrlException('No parser for {}.'.format(url))
+
+    return parser
+
+
+def get_parser_by_search_engine(search_engine):
+    """Get the appropriate parser for the search_engine
+
+    Args:
+        search_engine: The name of a search_engine.
+
+    Returns:
+        A parser for the search_engine
+
+    Raises:
+        NoParserForSearchEngineException if no parser could be found for the name.
+    """
+    if search_engine == 'google':
+        return GoogleParser
+    elif search_engine == 'yandex':
+        return YandexParser
+    elif search_engine == 'bing':
+        return BingParser
+    elif search_engine == 'yahoo':
+        return YahooParser
+    elif search_engine == 'baidu':
+        return BaiduParser
+    elif search_engine == 'duckduckgo':
+        return DuckduckgoParser
+    else:
+        raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
+
 if __name__ == '__main__':
     """Originally part of https://github.com/NikolaiT/GoogleScraper.
     
@@ -389,21 +451,9 @@ if __name__ == '__main__':
     assert len(sys.argv) == 2, 'Usage: {} url'.format(sys.argv[0])
     url = sys.argv[1]
     raw_html = requests.get(url).text
-    parser = None
-    
-    if re.search(r'^http[s]?://www\.google', url):
-        parser = GoogleParser(raw_html)
-    elif re.search(r'^http://yandex\.ru', url):
-        parser = YandexParser(raw_html)
-    elif re.search(r'^http://www\.bing\.', url):
-        parser = BingParser(raw_html)
-    elif re.search(r'^http[s]?://search\.yahoo.', url):
-        parser = YahooParser(raw_html)
-    elif re.search(r'^http://www\.baidu\.com', url):
-        parser = BaiduParser(raw_html)
-    elif re.search(r'^https://duckduckgo\.com', url):
-        parser = DuckduckgoParser(raw_html)
-        
+    parser = get_parser_by_url(url)
+    parser = parser(raw_html)
+    parser.parse()
     print(parser)
     
     with open('/tmp/testhtml.html', 'w') as of:

@@ -31,7 +31,7 @@ except ImportError as ie:
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
 from GoogleScraper.config import Config
-from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser
+from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -116,7 +116,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.current_keyword = self.next_keyword()
 
         # The parser that should be used to parse the search engine results
-        self.parser = None
+        self.parser = get_parser_by_search_engine(self.search_engine)
         
         # The number of results per page
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
@@ -407,6 +407,8 @@ class AsyncHttpScrape(SearchEngineScrape):
 
 class SelScrape(SearchEngineScrape, threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google.
+
+    This is a quite cool approach if you ask me :D
     """
 
     def __init__(self, *args, rlock=None, queue=None, captcha_lock=None, **kwargs):
@@ -433,14 +435,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.rlock = rlock
         self.captcha_lock = captcha_lock
         self.ip = '127.0.0.1'
-        self._parse_config()
-        self._results = []
+        self.search_number = 0
+        self.search_input = None
 
-    def _parse_config(self):
-        """Parse the config parameter given in the constructor.
-
-        First apply some default values. The config parameter overwrites them, if given.
-        """
         # How long to sleep (ins seconds) after every n-th request
         self.sleeping_ranges = dict()
         for line in Config['SELENIUM'].get('sleeping_ranges').split('\n'):
@@ -448,12 +445,12 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             key, value = line.split(';')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
-    def _largest_sleep_range(self, i):
-        assert i >= 0
-        if i != 0:
+    def _largest_sleep_range(self, search_number):
+        assert search_number >= 0
+        if search_number != 0:
             s = sorted(self.sleeping_ranges.keys(), reverse=True)
             for n in s:
-                if i % n == 0:
+                if search_number % n == 0:
                     return self.sleeping_ranges[n]
         # sleep one second
         return (1, 2)
@@ -568,7 +565,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                         solution = input('enter the captcha please...')
                         self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
                         try:
-                            self.element = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.NAME, "q")))
+                            self.search_input = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.NAME, "q")))
                         except TimeoutException as e:
                             raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
                         tf.close()
@@ -585,69 +582,134 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """Build the search for SelScrapers"""
         assert self.webdriver, 'Webdriver needs to be ready to build the search'
 
-        self.starting_point = self.base_search_url
+        url_params= {
+            'google': 'q={query}',
+            'yandex': 'text={query}',
+            'bing': 'q={query}',
+            'yahoo': 'p={query}',
+            'baidu': 'wd={query}',
+            'duckduckgo': 'q={query}'
+        }[self.search_engine]
 
-        url_params = ''
+        url_params = url_params.format(query=self.current_keyword)
 
-        if self.search_engine == 'google':
-            url_params = 'q={query}'
+        self.starting_point = urljoin(self.base_search_url, url_params)
+
+        self.webdriver.get(self.starting_point)
+
+    def _get_search_input_field(self):
+        """Get the search input field for the current search_engine.
+
+        Returns:
+            A tuple to locate the search field as used by seleniums function presence_of_element_located()
+        """
+
+        input_field_selectors = {
+            'google': (By.NAME, 'q'),
+            'yandex': (By.NAME, 'text'),
+            'bing': (By.NAME, 'q'),
+            'yahoo': (By.NAME, 'p'),
+            'baidu': (By.NAME, 'wd'),
+            'duckduckgo': (By.NAME, 'q')
+        }
+
+        return input_field_selectors[self.search_engine]
+
+
+    def _get_next_page_url(self):
+        """Finds the url that locates the next page for any search_engine.
+
+        Returns:
+            The href attribute of the next_url for further results.
+        """
+
+        next_page_selectors = {
+            'google': '#pnnext',
+            'yandex': '.pager__button_kind_next',
+            'bing': '.sb_pagN',
+            'yahoo': '#pg-next',
+            'baidu': '.n',
+            'duckduckgo': '' # loads results dynamically with ajax
+        }
+
+        selector = next_page_selectors[self.search_engine]
+
+        next_url = ''
+
+        try:
+            # wait until the next page link emerges
+            WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+            next_url = self.webdriver.find_element_by_css_selector(selector).get_attribute('href')
+        except TimeoutException as te:
+            logger.debug('Cannot locate next page html id #pnnext')
+            raise te
+        except WebDriverException as e:
+            # leave if no next results page is available
+            return False
+
+        return next_url
+
+    def next_keyword(self):
+        keyword = SearchEngineScrape.next_keyword(self)
+
+        if self.search_input:
+            self.search_input.clear()
+            time.sleep(.25)
+            self.search_input.send_keys(self.current_keyword + Keys.ENTER)
+
+        return keyword
 
     def search(self):
         """Search with webdriver."""
 
-            self.webdriver.get(self.)
-            # match the largest sleep range
-            j = random.randrange(*self._largest_sleep_range(i))
+        next_url = None
+
+        # log stuff if verbosity is set accordingly
+        if Config['GLOBAL'].getint('verbosity', 1 ) > 1:
             if self.proxy:
-                logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, j, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
+                logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, sleep_time, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
             else:
-                logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, j, kw, url=next_url))
-            time.sleep(j)
-            try:
-                self.element = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located((By.NAME, "q")))
-            except TimeoutException as e:
-                if not self.handle_request_denied():
-                    open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
-                    raise GoogleSearchError('`q` search input cannot be found.')
+                logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, sleep_time, kw, url=next_url))
 
-            if write_kw:
-                self.element.clear()
-                time.sleep(.25)
-                self.element.send_keys(kw + Keys.ENTER)
-                write_kw = False
-            # Waiting until the keyword appears in the title may
-            # not be enough. The content may still be off the old page.
-            try:
-                WebDriverWait(self.webdriver, 10).until(EC.title_contains(kw))
-            except TimeoutException as e:
-                logger.debug('Keyword not found in title: {}'.format(e))
 
-            try:
-                # wait until the next page link emerges
-                WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, '#pnnext')))
-                next_url = self.webdriver.find_element_by_css_selector('#pnnext').get_attribute('href')
-            except TimeoutException as te:
-                logger.debug('Cannot locate next page html id #pnnext')
-            except WebDriverException as e:
-                # leave if no next results page is available
-                pass
+        # match the largest sleep range
+        sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
+        time.sleep(sleep_time)
 
-            # That's because we sleep explicitly one second, so the site and
-            # whatever js loads all shit dynamically has time to update the
-            # DOM accordingly.
-            time.sleep(1.5)
+        try:
+            self.search_input = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located(self._get_search_input_field()))
+        except TimeoutException as e:
+            if not self.handle_request_denied():
+                open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
+                raise GoogleSearchError('`q` search input cannot be found.')
 
-            html = self._maybe_crop(self.webdriver.page_source)
+        # Waiting until the keyword appears in the title may
+        # not be enough. The content may still be off the old page.
+        try:
+            WebDriverWait(self.webdriver, 10).until(EC.title_contains(self.current_keyword))
+        except TimeoutException as e:
+            logger.debug('Keyword not found in title: {}'.format(e))
 
-            if self.rlock or self.queue:
-                # Lock for the sake that two threads write to same file (not probable)
-                self.rlock.acquire()
-                cache_results(html, kw, self.url)
-                self.rlock.release()
-                # commit in intervals specified in the config
-                self.queue.put(self._get_parse_links(html, kw, page_num=page_num+1, ip=self.ip))
+        next_url = self._get_next_page_url()
 
-            self._results.append(self._get_parse_links(html, kw, only_results=True).all_results)
+        # That's because we sleep explicitly one second, so the site and
+        # whatever js loads all shit dynamically has time to update the
+        # DOM accordingly.
+        time.sleep(1.5)
+
+        html = self.webdriver.page_source
+
+        self.parser.parse(html)
+
+        if self.rlock or self.queue:
+            # Lock for the sake that two threads write to same file (not probable)
+            self.rlock.acquire()
+            cache_results(html, self.current_keyword, self.url)
+            self.rlock.release()
+            # commit in intervals specified in the config
+            self.queue.put(self.parser)
+
+        self.search_number += 1
 
     def run(self):
         if not self._get_webdriver():

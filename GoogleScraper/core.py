@@ -1,21 +1,9 @@
 # -*- coding: utf-8 -*-
 
-"""
-This file contains the core functionality of GoogleScraper.
-
-This is a little module that uses Google to automate search
-queries. It gives straightforward access to all relevant data of Google such as
-- The links of the result page
-- The title of the links
-- The caption/description below each link
-- The number of results for this keyword
-- The rank for the specific results
-"""
 import math
 import threading
 import queue
 from urllib.parse import urlparse, unquote
-import datetime
 
 from GoogleScraper.utils import grouper
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
@@ -24,24 +12,6 @@ from GoogleScraper.scraping import SelScrape, HttpScrape
 from GoogleScraper.caching import *
 from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
-
-try:
-    from cssselect import HTMLTranslator, SelectorError
-    from bs4 import UnicodeDammit
-    from selenium import webdriver
-    from selenium.common.exceptions import TimeoutException, WebDriverException
-    from selenium.webdriver.common.keys import Keys
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
-    from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
-except ImportError as ie:
-    if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
-        sys.exit('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
-    if ie.name == 'socks':
-        sys.exit('socks is not installed. Try this one: https://github.com/Anorov/PySocks')
-
-    print(ie)
-    sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -193,12 +163,7 @@ def main(return_results=True):
         print(open(CONFIG_FILE).read())
         return
 
-    if Config['GLOBAL'].getboolean('do_caching'):
-        d = Config['GLOBAL'].get('cachedir')
-        if not os.path.exists(d):
-            os.mkdir(d, 0o744)
-        else:
-            maybe_clean_cache()
+    maybe_clean_cache()
 
     kwfile = Config['SCRAPING'].get('keyword_file')
     keyword = Config['SCRAPING'].get('keyword')
@@ -226,7 +191,7 @@ def main(return_results=True):
         _caching_is_one_to_one(keyword)
 
     if Config['SCRAPING'].getint('num_results_per_page') > 100:
-        raise InvalidConfigurationException('Not more that 100 results per page available for Google searches.')
+        raise InvalidConfigurationException('Not more that 100 results per page available for searches.')
 
     proxies = []
 
@@ -241,7 +206,7 @@ def main(return_results=True):
 
     # Create a sqlite3 database to store the results
     conn = maybe_create_db()
-    if Config['GLOBAL'].getboolean('simulate'):
+    if Config['GLOBAL'].getboolean('simulate', False):
         print('*' * 60 + 'SIMULATION' + '*' * 60)
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have')
         logger.info('Scraped for {} keywords (before caching), with {} results a page, in total {} pages for each keyword'.format(
