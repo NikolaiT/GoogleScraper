@@ -12,7 +12,6 @@ import re
 import logging
 import functools
 from GoogleScraper.config import Config
-from GoogleScraper.res import parse_links
 
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
@@ -384,7 +383,7 @@ def parse_all_cached_files(keywords, conn, url, try_harder=True):
                     continue
             else:
                 continue
-        parse_links(data, conn.cursor(), query)
+        # TODO: Push to database
         mapping.pop(fname)
     conn.commit()
 

@@ -3,14 +3,16 @@
 import math
 import threading
 import queue
-from urllib.parse import urlparse, unquote
-
+import datetime
 from GoogleScraper.utils import grouper
+from GoogleScraper import database
+from GoogleScraper.database import ScraperSearch
+from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import sessionmaker
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
-from GoogleScraper.res import maybe_create_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
 from GoogleScraper.caching import *
-from GoogleScraper.config import get_config, InvalidConfigurationException, parse_cmd_args, Config
+from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -29,88 +31,6 @@ def scrape_with_config(config, **kwargs):
 
     GoogleScraper.config.update_config(config)
     return main(return_results=True, force_reload=False, **kwargs)
-
-class ResultsHandler(threading.Thread):
-    """Consume data that the SelScraper/GoogleScrape threads put in the queue.
-
-    Opens a database connection and puts data in it. Intended to be run in the main thread.
-
-    Implements the multi-producer pattern.
-
-    The ResultHandler cannot necessarily know when he should stop waiting. That's why we
-    have a special DONE element in the Config that signals that all threads have finished and
-    all data was processed.
-    """
-    def __init__(self, queue, conn):
-        super().__init__()
-        self.queue = queue
-        self.conn = conn
-        self.cursor = self.conn.cursor()
-
-    def _insert_in_db(self, e):
-        """Inserts elements obtained from the queue in the database.
-
-        Args:
-            e: A tuple that contains a serp_page and link result.
-        """
-        assert isinstance(e, tuple) and len(e) == 2
-        first, second = e
-        self.cursor.execute(
-            'INSERT INTO serp_page (page_number, requested_at, num_results, num_results_for_kw_google, search_query, requested_by) VALUES(?, ?, ?, ?, ?, ?)', first)
-        lastrowid = self.cursor.lastrowid
-        self.cursor.executemany('''INSERT INTO link
-        ( title,
-         url,
-         snippet,
-         rank,
-         domain,
-         serp_id) VALUES(?, ?, ?, ?, ?, ?)''', [tuple(t)+ (lastrowid, ) for t in second])
-
-    def run(self):
-        """Waits for elements in the queue until a special token ends the endless loop"""
-        i = 0
-        while True:
-            #  If optional args block is true and timeout is None (the default), block if necessary until an item is available.
-            item = self.queue.get(block=True)
-            if item == Config['GLOBAL']['all_processed_sig']:
-                logger.info('turning down. All results processed.')
-                break
-            self._insert_in_db(item)
-            self.queue.task_done()
-            if i > 0 and (i % Config['GLOBAL'].getint('commit_interval')) == 0:
-                # commit in intervals specified in the config
-                self.conn.commit()
-            i += 1
-
-def print_scrape_results_http(results):
-    """Print the results obtained by "http" method.
-
-    Args:
-        results: The results to be printed to stdout.
-    """
-    for t in results:
-        for result in t:
-            logger.info('{} links found. The search with the keyword "{}" yielded the result: "{}"'.format(
-                len(result['results']), result['search_keyword'], result['num_results_for_kw']))
-            import textwrap
-            for result_set in ('results', 'ads_main', 'ads_aside'):
-                if result_set in result.keys():
-                    print('### {} link results for "{}" ###'.format(len(result[result_set]), result_set))
-                    for link_title, link_snippet, link_url, link_position in result[result_set]:
-                        try:
-                            print('  Link: {}'.format(unquote(link_url.geturl())))
-                        except AttributeError as ae:
-                            print(ae)
-                        if Config['GLOBAL'].getint('verbosity') > 1:
-                            print(
-                                '  Title: \n{}'.format(textwrap.indent('\n'.join(textwrap.wrap(link_title, 50)), '\t')))
-                            print(
-                                '  Description: \n{}\n'.format(
-                                    textwrap.indent('\n'.join(textwrap.wrap(link_snippet, 70)), '\t')))
-                            print('*' * 70)
-                            print()
-
-
 
 def assign_keywords_to_scrapers(all_keywords):
     """Scrapers are often threads or asynchronous objects.
@@ -204,8 +124,6 @@ def main(return_results=True):
     if Config['SCRAPING'].get('search_type') not in valid_search_types:
         InvalidConfigurationException('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
 
-    # Create a sqlite3 database to store the results
-    conn = maybe_create_db()
     if Config['GLOBAL'].getboolean('simulate', False):
         print('*' * 60 + 'SIMULATION' + '*' * 60)
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have')
@@ -221,23 +139,33 @@ def main(return_results=True):
 
     # First of all, lets see how many keywords remain to scrape after parsing the cache
     if Config['GLOBAL'].getboolean('do_caching'):
-        remaining = parse_all_cached_files(keywords, conn, url=Config['SELENIUM'].get('sel_scraper_base_url'))
+        remaining = parse_all_cached_files(keywords, None, url=Config['SELENIUM'].get('sel_scraper_base_url'))
     else:
         remaining = keywords
 
     kwgroups = assign_keywords_to_scrapers(remaining)
 
+    scraper_search = ScraperSearch(
+        number_search_engines_used=1,
+        number_proxies_used=len(proxies),
+        number_search_queries=len(keywords),
+        started_searching=datetime.datetime.utcnow()
+    )
+
+    session_factory = sessionmaker(bind=database.engine)
+    Session = scoped_session(session_factory)
+    session = Session()
+    session.add(scraper_search)
+    session.commit()
+
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
-        # Create a lock to sync file access
-        rlock = threading.RLock()
-
         # A lock to prevent multiple threads from solving captcha.
         lock = threading.Lock()
+        rlock = threading.RLock()
 
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
-        Q = queue.Queue()
 
         if Config['SCRAPING'].getboolean('use_own_ip'):
             proxies.append(None)
@@ -245,33 +173,19 @@ def main(return_results=True):
             raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
-        for i, chunk in enumerate(kwgroups):
-            scrapejobs.append(SelScrape(chunk, rlock, Q, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+        for i, keyword_group in enumerate(kwgroups):
+            scrapejobs.append(SelScrape(keywords=keyword_group,rlock=rlock, session=session, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
 
         for t in scrapejobs:
             t.start()
 
-        handler = ResultsHandler(Q, conn)
-        handler.start()
-
         for t in scrapejobs:
             t.join()
-
-        # All scrape jobs done, signal the db handler to stop
-        Q.put(Config['GLOBAL'].get('all_processed_sig'))
-        handler.join()
-
-        conn.commit()
-
-        if return_results:
-            return conn
-        else:
-            conn.close()
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http':
         threads = []
         for group in kwgroups:
-            threads.append(HttpScrape(keywords=group))
+            threads.append(HttpScrape(keywords=group, session=session))
 
         for thread in threads:
             thread.start()
@@ -281,5 +195,6 @@ def main(return_results=True):
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
         pass
+
     else:
         raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')

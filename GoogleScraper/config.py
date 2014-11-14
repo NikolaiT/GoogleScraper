@@ -103,7 +103,6 @@ def parse_config(cmd_args=False):
     # and replace the global Config variable with the real thing
     Config = cfg_parser
 
-
 def parse_cmd_args(cmd_args=None):
     """Parse the command line
 

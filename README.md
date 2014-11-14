@@ -1,6 +1,12 @@
 ## GoogleScraper - Scraping the Google Search Engine
 
-### News
+### News Updated 14th november 2014
+
+*Please install from source, the current pip version 0.1.3 doesn't work! Within the next 3 days, there should be a new pip release
+How to install from source;
+```
+pip install git+git://github.com/NikolaiT/GoogleScraper/
+```
 
 11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][5]!!.
 

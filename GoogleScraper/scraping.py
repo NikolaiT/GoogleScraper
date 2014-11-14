@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import threading
-from urllib.parse import urljoin
+import datetime
 import random
 import math
 import logging
@@ -30,6 +30,7 @@ except ImportError as ie:
 
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
+from GoogleScraper.database import SearchEngineResultsPage, Link
 from GoogleScraper.config import Config
 from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine
 
@@ -47,7 +48,9 @@ class MaliciousRequestDetected(GoogleSearchError):
 
 class SeleniumMisconfigurationError(Exception):
     pass
-    
+
+class SeleniumSearchError(Exception):
+    pass
     
 class SearchEngineScrape(metaclass=abc.ABCMeta):
     """Abstract base class that represents a search engine scrape.
@@ -82,7 +85,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, keywords=None, start_page_pos=1, search_engine=None, search_type=None, proxy=None):
+    def __init__(self, keywords=None, session=None, scaper_search=None, start_page_pos=1, search_engine=None, search_type=None, proxy=None):
         if not search_engine:
             self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
         else:
@@ -116,7 +119,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.current_keyword = self.next_keyword()
 
         # The parser that should be used to parse the search engine results
-        self.parser = get_parser_by_search_engine(self.search_engine)
+        self.parser = get_parser_by_search_engine(self.search_engine)()
         
         # The number of results per page
         self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
@@ -134,6 +137,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.proxy = proxy
         if proxy:
             self.set_proxy()
+
+        # set the database scoped session
+        self.session = session
+
+        # the scraper_search database object
+        self.scraper_search = scaper_search
 
         # get the base search url based on the search engine.
         self.base_search_url = Config['SCRAPING'].get('{search_engine}_search_url'.format(search_engine=self.search_engine))
@@ -177,6 +186,35 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def handle_request_denied(self):
         """Behaviour when search engines detect our scraping."""
+
+    def store(self):
+        """Store the parsed data in the sqlalchemy scoped session."""
+        assert self.session, 'You need to pass a sqlalchemy scoped session to SearchEngineScrape instances'
+
+        serp = SearchEngineResultsPage(
+            search_engine_name=self.search_engine,
+            page_number=self.current_page,
+            requested_at=datetime.datetime.utcnow(),
+            requested_by='127.0.0.1',
+            query=self.current_keyword,
+            num_results_for_keyword=self.parser.search_results['num_results'],
+            search=self.scraper_search
+        )
+        self.session.add(serp)
+
+        for key, value in self.parser.search_results.items():
+            if isinstance(value, list):
+                for link in value:
+                    l = Link(
+                        url=link['link'],
+                        snippet=link['snippet'],
+                        title=link['title'],
+                        visible_link=link['visible_link'],
+                        serp=serp
+                    )
+                    self.session.add(l)
+
+        self.session.commit()
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -391,10 +429,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             cache_results(html, self.current_keyword, url=self.base_search_url, params=self.search_params)
 
         self.parser.parse(html)
-
-        # TODO: remove it and save it to a data storage
+        self.store()
         print(self.parser)
-
 
     def run(self):
         args = []
@@ -411,32 +447,25 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     This is a quite cool approach if you ask me :D
     """
 
-    def __init__(self, *args, rlock=None, queue=None, captcha_lock=None, **kwargs):
+    def __init__(self, *args, rlock=None, captcha_lock=None, browser_num=1, **kwargs):
         """Create a new SelScraper Thread.
 
         Args:
-            rlock: To synchronize multiple SelScraper objects. If no threading.Rlock is given
-                     it is assumed that no synchronization is needed. Mainly used for caching and fs interaction.
-            queue: A queue to push scraped results to be consumed by a worker thread.
             captcha_lock: To sync captcha solving (stdin)
             proxy: Optional, if set, use the proxy to route all scrapign through it.
             browser_num: A unique, semantic number for each thread.
         """
-        threading.Thread.__init__()
+        self.search_input = None
+
+        threading.Thread.__init__(self)
         SearchEngineScrape.__init__(self, *args, **kwargs)
 
-
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
-        if Config['GLOBAL'].getint('verbosity', 0) > 1:
-            logger.info('[+] SelScraper[{}] created. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(self.browser_type, len(keywords), proxy, self.num_pages, browser_num))
-
-        self.browser_num = self.name
-        self.queue = queue
-        self.rlock = rlock
+        self.browser_num = browser_num
         self.captcha_lock = captcha_lock
+        self.rlock = rlock
         self.ip = '127.0.0.1'
         self.search_number = 0
-        self.search_input = None
 
         # How long to sleep (ins seconds) after every n-th request
         self.sleeping_ranges = dict()
@@ -444,6 +473,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             assert line.count(';') == 1
             key, value = line.split(';')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
+
+        if Config['GLOBAL'].getint('verbosity', 0) > 1:
+            logger.info('[+] SelScraper[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword, self.name))
 
     def _largest_sleep_range(self, search_number):
         assert search_number >= 0
@@ -593,7 +625,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         url_params = url_params.format(query=self.current_keyword)
 
-        self.starting_point = urljoin(self.base_search_url, url_params)
+        self.starting_point = self.base_search_url +  url_params
+
+        logger.info(self.starting_point)
 
         self.webdriver.get(self.starting_point)
 
@@ -641,7 +675,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
             next_url = self.webdriver.find_element_by_css_selector(selector).get_attribute('href')
         except TimeoutException as te:
-            logger.debug('Cannot locate next page html id #pnnext')
+            logger.debug('Cannot locate next page element.')
             raise te
         except WebDriverException as e:
             # leave if no next results page is available
@@ -664,31 +698,32 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         next_url = None
 
+        # match the largest sleep range
+        sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
+
         # log stuff if verbosity is set accordingly
         if Config['GLOBAL'].getint('verbosity', 1 ) > 1:
             if self.proxy:
-                logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(page_num, self._ident, sleep_time, url= next_url, ip=self.proxy.host, port=self.proxy.port, kw=kw))
+                logger.info('[i] Page number={}, ScraperThread({url}) ({ip}:{port} {} is sleeping for {} seconds...Next keyword: ["{kw}"]'.format(self.current_page, self._ident, sleep_time, url=next_url, ip=self.proxy.host, port=self.proxy.port, kw=self.current_keyword))
             else:
-                logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(page_num, self._ident, sleep_time, kw, url=next_url))
+                logger.info('[i] Page number={}, ScraperThread({url}) ({} is sleeping for {} seconds...Next keyword: ["{}"]'.format(self.current_page, self._ident, sleep_time, self.current_keyword, url=next_url))
 
-
-        # match the largest sleep range
-        sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
         time.sleep(sleep_time)
 
         try:
-            self.search_input = WebDriverWait(self.webdriver, 10).until(EC.presence_of_element_located(self._get_search_input_field()))
+            self.search_input = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located(self._get_search_input_field()))
         except TimeoutException as e:
+            logger.error(e)
             if not self.handle_request_denied():
                 open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
-                raise GoogleSearchError('`q` search input cannot be found.')
+                raise GoogleSearchError('search input field cannot be found.')
 
         # Waiting until the keyword appears in the title may
         # not be enough. The content may still be off the old page.
         try:
-            WebDriverWait(self.webdriver, 10).until(EC.title_contains(self.current_keyword))
+            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
         except TimeoutException as e:
-            logger.debug('Keyword not found in title: {}'.format(e))
+            raise SeleniumSearchError('Keyword not found in title: {}'.format(e))
 
         next_url = self._get_next_page_url()
 
@@ -700,14 +735,14 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         html = self.webdriver.page_source
 
         self.parser.parse(html)
+        self.store()
+        print(self.parser)
 
-        if self.rlock or self.queue:
+        if self.rlock:
             # Lock for the sake that two threads write to same file (not probable)
             self.rlock.acquire()
-            cache_results(html, self.current_keyword, self.url)
+            cache_results(html, self.current_keyword, next_url if next_url else self.starting_point)
             self.rlock.release()
-            # commit in intervals specified in the config
-            self.queue.put(self.parser)
 
         self.search_number += 1
 
@@ -718,5 +753,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if self.browser_type != 'browser_type':
             self.webdriver.set_window_size(400, 400)
             self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
+
+        self.build_search()
 
         SearchEngineScrape.blocking_search(self, self.search)

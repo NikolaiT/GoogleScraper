@@ -6,9 +6,7 @@ import sys
 import re
 import lxml.html
 import logging
-import urllib
 import pprint
-
 try:
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
@@ -53,7 +51,7 @@ class Parser():
     # Each subclass of Parser may declare an arbitrary amount of attribute that
     # follow a naming convention like this:
     # *_search_selectors
-    # where the asterix may be replaced with arbirary identifier names.
+    # where the asterix may be replaced with arbitrary identifier names.
     # Any of these attributes represent css selectors for a specific search type.
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
@@ -91,8 +89,11 @@ class Parser():
         # lets do the actual parsing
         self._parse()
         
-        # Apply sublcass specific behaviour after parsing has happened
+        # Apply subclass specific behaviour after parsing has happened
         self.after_parsing()
+
+        # push the data to the database
+
 
     def _parse(self):
         """Internal parse the dom according to the provided css selectors.
@@ -115,11 +116,12 @@ class Parser():
         
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
+        self.search_results['num_results'] = ''
         if num_results_selector:
             try:
                 self.search_results['num_results'] = self.dom.xpath(css_to_xpath(num_results_selector))[0].text_content()
             except IndexError as e:
-                pass
+                logger.warning('Cannot parse num_results from serp page')
 
         if not selector_dict:
             raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
@@ -187,7 +189,7 @@ class Parser():
         return lxml.html.tostring(parsed)
                     
     def after_parsing(self):
-        """Sublcass specific behaviour after parsing happened.
+        """Subclass specific behaviour after parsing happened.
         
         Override in subclass to add search engine specific behaviour.
         Commonly used to clean the results.

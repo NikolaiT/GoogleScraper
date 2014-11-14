@@ -4,3 +4,4 @@ beautifulsoup4
 cssselect
 requests
 PyMySql
+sqlalchemy
