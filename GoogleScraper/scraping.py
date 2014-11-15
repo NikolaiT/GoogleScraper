@@ -397,7 +397,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         if rand:
             self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
 
-        html = get_cached(self.current_keyword, self.base_search_url, params=self.search_params)
+        html = get_cached(self.current_keyword, self.search_engine, 'http')
 
         if not html:
             try:
@@ -426,7 +426,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             html = r.text
 
             # cache fresh results
-            cache_results(html, self.current_keyword, url=self.base_search_url, params=self.search_params)
+            cache_results(html, self.current_keyword, self.search_engine, 'http')
 
         self.parser.parse(html)
         self.store()
@@ -741,7 +741,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if self.rlock:
             # Lock for the sake that two threads write to same file (not probable)
             self.rlock.acquire()
-            cache_results(html, self.current_keyword, next_url if next_url else self.starting_point)
+            cache_results(html, self.current_keyword, self.search_engine, 'sel')
             self.rlock.release()
 
         self.search_number += 1

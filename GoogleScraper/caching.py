@@ -4,7 +4,6 @@ import os
 import time
 import itertools
 import hashlib
-import zlib
 import gzip
 import bz2
 import sys
@@ -15,16 +14,26 @@ from GoogleScraper.config import Config
 
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
-you may need to repeat the same searches several times and you might end being banned by
-Google. This is why all searches are chached by default.
+you may need to repeat the same searches several times and you might end up being banned by
+the search engine providers. This is why all searches are chached by default.
 
 Every SERP page is cached in a separate file. In the future, it might be more straightforward to
-merge several logically adjacent search result HTML code together.
+cache scraping jobs in archives (zip files).
+
+What determines the uniqueness of a SERP result?
+- The complete url (because there the search query and the params are included)
+- The scrape mode: Raw Http might request different resources than a browser does.
+- Optionally the http headers (because different User-Agents can yield different results)
+
+Using these three pieces of information would guarantee that we cache only unique requests,
+but then we couldn't read back the information of the cache files, since these parameters
+are only available at runtime of the scrapers. So we have to be satisfied with the
+keyword, search_engine and scrapemode as entropy params.
 """
 
 logger = logging.getLogger('GoogleScraper')
 
-ALLOWED_COMPRESSION_ALGORITHMS = ('zip', 'gz', 'bz2')
+ALLOWED_COMPRESSION_ALGORITHMS = ('gz', 'bz2')
 
 class InvalidConfigurationFileException(Exception):
     """
@@ -36,16 +45,17 @@ class InvalidConfigurationFileException(Exception):
 
 
 class CompressedFile(object):
-    """Open and return the data of a compressed file
+    """Read and write the data of a compressed file.
+    Used to cache files for GoogleScraper.s
 
-    Supported algorithms: zlib, gz, bz2
+    Supported algorithms: gz, bz2
 
     >>> import os
-    >>> f = CompressedFile('zip', '/tmp/test.txt')
+    >>> f = CompressedFile('gz', '/tmp/test.txt')
     >>> f.write('hello world')
-    >>> assert os.path.exists('/tmp/test.txt.zip')
+    >>> assert os.path.exists('/tmp/test.txt.gz')
 
-    >>> f2 = CompressedFile('zip', '/tmp/test.txt.zip')
+    >>> f2 = CompressedFile('gz', '/tmp/test.txt.gz')
     >>> assert f2.read() == 'hello world'
     """
 
@@ -58,7 +68,8 @@ class CompressedFile(object):
                 on the action called.
         """
 
-        assert algorithm in ALLOWED_COMPRESSION_ALGORITHMS, algorithm
+        assert algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
+            '{algo} is not an supported compression utility'.format(algo=algorithm)
 
         self.algorithm = algorithm
         if path.endswith(algorithm):
@@ -66,67 +77,39 @@ class CompressedFile(object):
         else:
             self.path = '{path}.{ext}'.format(path=path, ext=algorithm)
 
-        self.data = b''
         self.readers = {
-            'zip': self.read_zlib,
             'gz': self.read_gz,
-            'bzw': self.read_bz2
+            'bz2': self.read_bz2
         }
         self.writers = {
-            'zip': self.write_zlib,
             'gz': self.write_gz,
-            'bzw': self.write_bz2
+            'bz2': self.write_bz2
         }
 
-    def _read(self):
-        if not self.data:
-            with open(self.path, 'rb') as fd:
-                self.data = fd.read()
-
-    def _write(self, data):
-        with open(self.path, 'wb') as f:
-            f.write(data)
-
-    def read_zlib(self):
-        self._read()
-        try:
-            data = zlib.decompress(self.data).decode()
-            return data
-        except zlib.error as e:
-            raise e
-
     def read_gz(self):
-        try:
-            file = gzip.GzipFile(self.path)
-            return file.read()
-        except Exception as e:
-            raise
+        with gzip.open(self.path, 'rb') as f:
+            return f.read()
 
     def read_bz2(self):
-        raise NotImplemented('yet')
+        with bz2.open(self.path, 'rb') as f:
+            return f.read()
 
-    def write_zlib(self, data):
-        if not isinstance(data, bytes):
-            data = data.encode()
+    def write_gz(self, data):
+        with gzip.open(self.path, 'wb') as f:
+            f.write(data)
 
-        try:
-            self._write(zlib.compress(data, 5))
-        except zlib.error as e:
-            raise e
-
-    def write_gz(self):
-        pass
-
-    def write_bz2(self):
-        pass
+    def write_bz2(self, data):
+        with bz2.open(self.path, 'wb') as f:
+            f.write(data)
 
     def read(self):
         assert os.path.exists(self.path)
         return self.readers[self.algorithm]()
 
     def write(self, data):
+        if not isinstance(data, bytes):
+            data = data.encode()
         return self.writers[self.algorithm](data)
-
 
 
 def maybe_create_cache_dir():
@@ -152,38 +135,39 @@ def maybe_clean_cache():
      Clean all cached searches (the obtained html code) in the cache directory iff
      the respective files are older than specified in the configuration. Defaults to 12 hours.
      """
-    for fname in os.listdir(Config['GLOBAL'].get('cachedir', '.scrapecache')):
-        path = os.path.join(Config['GLOBAL'].get('cachedir'), fname)
-        if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after', 12)):
-            # Remove the whole directory if necessary
-            if os.path.isdir(path):
-                import shutil
+    cachedir = Config['GLOBAL'].get('cachedir', '.scrapecache')
+    if os.path.exists(cachedir):
+        for fname in os.listdir(cachedir):
+            path = os.path.join(cachedir, fname)
+            if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after', 12)):
+                # Remove the whole directory if necessary
+                if os.path.isdir(path):
+                    import shutil
+                    shutil.rmtree(path)
+                else:
+                    os.remove(os.path.join(cachedir, fname))
 
-                shutil.rmtree(path)
-            else:
-                os.remove(os.path.join(Config['GLOBAL'].get('cachedir'), fname))
 
-
-def cached_file_name(kw, url, params={}):
-    """Make a unique file name from the Google search request.
+def cached_file_name(keyword, search_engine, scrapemode):
+    """Make a unique file name from the search engine search request.
 
     Important! The order of the sequence is darn important! If search queries have the same
     words but in a different order, they are unique searches.
 
     Args:
-        kw: The search keyword
-        url: The url for the search (without params)
-        params: The parameters used in the search url without the "q" parameter. Optional and may be empty.
+        keyword: The keyword that was used in the search.
+        search_engine: The search engine the keyword was scraped for.
+        scrapemode: The scrapemode that was used.
 
     Returns:
         A unique file name based on the parameters of the search request.
 
     """
-    assert isinstance(kw, str), kw
-    assert isinstance(url, str), url
-    assert isinstance(params, dict)
+    assert isinstance(keyword, str), 'Keyword {} must be a string'.format(keyword)
+    assert isinstance(search_engine, str), 'Seach engine {} must be a string'.format(search_engine)
+    assert isinstance(scrapemode, str), 'Scapemode {} needs to be a string'.format(scrapemode)
 
-    unique = list(itertools.chain([kw, ], url, params.keys(), params.values()))
+    unique = [keyword, search_engine, scrapemode]
 
     sha = hashlib.sha256()
     sha.update(b''.join(str(s).encode() for s in unique))
@@ -191,20 +175,20 @@ def cached_file_name(kw, url, params={}):
 
 
 @if_caching
-def get_cached(kw, url, params={}):
+def get_cached(keyword, search_engine, scrapemode):
     """Loads a cached SERP result.
 
     Args:
-        kw: The keyword used in the search request. Value of "q" parameter.
-        url: The base search url used while requesting.
-        params: The search parameters as a dictionary, optional.
+        keyword: The keyword that was used in the search.
+        search_engine: The search engine the keyword was scraped for.
+        scrapemode: The scrapemode that was used.
 
     Returns:
         The contents of the HTML that was shipped while searching. False if there couldn't
         be found a file based on the above params.
 
     """
-    fname = cached_file_name(kw, url, params)
+    fname = cached_file_name(keyword, search_engine, scrapemode)
 
     cdir = Config['GLOBAL'].get('cachedir', '.scrapecache')
 
@@ -230,10 +214,10 @@ def read_cached_file(path):
     """Read a zipped or unzipped.
 
     The compressing schema is determined by the file extension. For example
-    a file that ends with .zip needs to be unzipped.
+    a file that ends with .gz needs to be gunzipped.
 
     Supported algorithms:
-    zlib, gzip, and bzip2
+    gzip, and bzip2
 
     Args:
         path: The path to the cached file.
@@ -273,7 +257,7 @@ def read_cached_file(path):
 
 
 @if_caching
-def cache_results(data, kw, url, params={}):
+def cache_results(data, keyword, search_engine, scrapemode):
     """Stores the data in a file.
 
     The file name is determined by the parameters kw, url and params.
@@ -284,16 +268,16 @@ def cache_results(data, kw, url, params={}):
 
     Args:
         data: The data to cache.
-        kw: The search keyword
-        url: The search url for the search request
-        params: The search params, Optional
+        keyword: The keyword that was used in the search.
+        search_engine: The search engine the keyword was scraped for.
+        scrapemode: The scrapemode that was used.
     """
-    fname = cached_file_name(kw, url, params)
+    fname = cached_file_name(keyword, search_engine, scrapemode)
     cachedir = Config['GLOBAL'].get('cachedir', '.scrapecache')
     path = os.path.join(cachedir, fname)
 
     if Config['GLOBAL'].getboolean('compress_cached_files'):
-        algorithm = Config['GLOBAL'].get('compressing_algorithm', 'zip')
+        algorithm = Config['GLOBAL'].get('compressing_algorithm', 'gz')
         f = CompressedFile(algorithm, path)
         f.write(data)
     else:
@@ -310,29 +294,30 @@ def _get_all_cache_files():
     Returns:
         All files that have the string "cache" in it within the cache directory.
         Files are either uncompressed filename.cache or are compressed with a
-        compresssion algorithm: "filename.cache.zip"
+        compression algorithm: "filename.cache.zip"
     """
     files = set()
-    for dirpath, dirname, filenames in os.walk(Config['GLOBAL'].get('cachedir')):
+    for dirpath, dirname, filenames in os.walk(Config['GLOBAL'].get('cachedir', '.scrapecache')):
         for name in filenames:
             if 'cache' in name:
                 files.add(os.path.join(dirpath, name))
     return files
 
 
-def _caching_is_one_to_one(keywords, url):
+def _caching_is_one_to_one(keywords, search_engine, scrapemode):
     """Check whether all keywords map to a unique file name.
 
     Args:
         keywords: All keywords for which to check the uniqueness of the hash
-        url: The search url
+        search_engine: The search engine the keyword was scraped for.
+        scrapemode: The scrapemode that was used.
 
     Returns:
         True if all keywords map to a unique hash and False if not.
     """
     mappings = {}
     for kw in keywords:
-        hash = cached_file_name(kw, url)
+        hash = cached_file_name(kw, search_engine, scrapemode)
         if hash not in mappings:
             mappings.update({hash: [kw, ]})
         else:
@@ -347,34 +332,42 @@ def _caching_is_one_to_one(keywords, url):
         return True
 
 
-def parse_all_cached_files(keywords, conn, url, try_harder=True):
+def parse_all_cached_files(keywords, session, try_harder=False):
     """Walk recursively through the cachedir (as given by the Config) and parse all cached files.
 
     Args:
-        keywords: A sequence of keywords which were used as search query strings.
-        conn: A sqlite3 database connection.
-        try_harder: If there is a cache file that cannot be mapped to a keyword, read it and try it again with the query.
+        identifying_list: A list of list with elements that identify the result. The consist of the keyword, search_engine, scrapemode.
+        session: An sql alchemy session to add the entities
+        try_harder: If there is a cache file that cannot be mapped to a keyword, read it and try it again and try to
+                    extract the search query from the html.
 
     Returns:
         A list of keywords that couldn't be parsed and which need to be scraped anew.
     """
-    r = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
+    google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
     files = _get_all_cache_files()
-    mapping = {cached_file_name(kw, url): kw for kw in keywords}
+    mapping = {}
+    for kw in keywords:
+        key = cached_file_name(
+            kw,
+            Config['SCRAPING'].get('search_engine'),
+            Config['SCRAPING'].get('scrapemethod')
+        )
+        mapping[key] = kw
+
     diff = set(mapping.keys()).difference({os.path.split(path)[1] for path in files})
     logger.info('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')))
     logger.info('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
         len(keywords) - len(diff), len(keywords), len(diff)))
 
-    if Config['GLOBAL'].getboolean('simulate'):
-        sys.exit(0)
-
     for path in files:
         fname = os.path.split(path)[1]
-        query = mapping.get(fname)
-        data = read_cached_file(path)
+        query = mapping.get(fname, None)
+        if query:
+            mapping.pop(fname)
         if not query and try_harder:
-            m = r.search(data)
+            data = read_cached_file(path)
+            m = google_query_needle.search(data)
             if m:
                 query = m.group('kw').strip()
                 if query in mapping.values():
@@ -383,15 +376,12 @@ def parse_all_cached_files(keywords, conn, url, try_harder=True):
                     continue
             else:
                 continue
-        # TODO: Push to database
-        mapping.pop(fname)
-    conn.commit()
 
     # return the remaining keywords to scrape
     return mapping.values()
 
 
-def fix_broken_cache_names(url):
+def fix_broken_cache_names(url, search_engine, scrapemode):
     """Fix broken cache names.
 
     Args:
@@ -405,7 +395,7 @@ def fix_broken_cache_names(url):
         fname = os.path.split(path)[1].strip()
         data = read_cached_file(path)
         infilekws = r.search(data).group('kw')
-        realname = cached_file_name(infilekws, url)
+        realname = cached_file_name(infilekws, search_engine, scrapemode)
         if fname != realname:
             logger.debug(
                 'The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(
@@ -418,9 +408,9 @@ def fix_broken_cache_names(url):
 
 
 def cached(f, attr_to_cache=None):
-    """Decoator that makes return value of functions cachable.
+    """Decorator that makes return value of functions cachable.
     
-    Any function that returns a value and that is decoratated with 
+    Any function that returns a value and that is decorated with
     cached will be supplied with the previously calculated result of
     an earlier call. The parameter name with the cached value may 
     be set with attr_to_cache.

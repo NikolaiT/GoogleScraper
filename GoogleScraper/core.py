@@ -126,10 +126,14 @@ def main(return_results=True):
 
     if Config['GLOBAL'].getboolean('simulate', False):
         print('*' * 60 + 'SIMULATION' + '*' * 60)
-        logger.info('If GoogleScraper would have been run without the --simulate flag, it would have')
-        logger.info('Scraped for {} keywords (before caching), with {} results a page, in total {} pages for each keyword'.format(
+        logger.info('If GoogleScraper would have been run without the --simulate flag, it would have:')
+        logger.info('Scraped for {} keywords, with {} results a page, in total {} pages for each keyword'.format(
             len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_pages_for_keyword')))
-        logger.info('Used {} distinct proxies in total, with the following proxies: {}'.format(len(proxies), '\t\t\n'.join(proxies)))
+        parse_all_cached_files(keywords, None)
+        logger.info('Used {} distinct proxies in total'.format(len(proxies)))
+        if proxies:
+            logger.info('The following proxies are used: {}'.format('\t\t\n'.join(proxies)))
+
         if Config['SCRAPING'].get('scrapemethod') == 'sel':
             mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
         else:
@@ -137,9 +141,14 @@ def main(return_results=True):
         logger.info('By using scrapemethod: {}'.format(mode))
         return
 
+    # get a scoped sqlalchemy session
+    session_factory = sessionmaker(bind=database.engine)
+    Session = scoped_session(session_factory)
+    session = Session()
+
     # First of all, lets see how many keywords remain to scrape after parsing the cache
     if Config['GLOBAL'].getboolean('do_caching'):
-        remaining = parse_all_cached_files(keywords, None, url=Config['SELENIUM'].get('sel_scraper_base_url'))
+        remaining = parse_all_cached_files(keywords, session)
     else:
         remaining = keywords
 
@@ -151,10 +160,6 @@ def main(return_results=True):
         number_search_queries=len(keywords),
         started_searching=datetime.datetime.utcnow()
     )
-
-    session_factory = sessionmaker(bind=database.engine)
-    Session = scoped_session(session_factory)
-    session = Session()
 
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
