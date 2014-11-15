@@ -11,8 +11,6 @@ import socket
 import abc
 
 try:
-    from cssselect import HTMLTranslator, SelectorError
-    from bs4 import UnicodeDammit
     from selenium import webdriver
     from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.webdriver.common.keys import Keys
@@ -20,11 +18,6 @@ try:
     from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
     from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
 except ImportError as ie:
-    if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
-        sys.exit('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
-    if ie.name == 'socks':
-        sys.exit('socks is not installed. Try this one: https://github.com/Anorov/PySocks')
-
     print(ie)
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
@@ -147,7 +140,10 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # get the base search url based on the search engine.
         self.base_search_url = Config['SCRAPING'].get('{search_engine}_search_url'.format(search_engine=self.search_engine))
         
-    
+        # the scrape mode
+        # to be set by subclasses
+        self.scrapemethod = ''
+
     @abc.abstractmethod
     def search(self, *args, **kwargs):
         """Send the search request(s) over the transport."""
@@ -191,29 +187,42 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         """Store the parsed data in the sqlalchemy scoped session."""
         assert self.session, 'You need to pass a sqlalchemy scoped session to SearchEngineScrape instances'
 
+        num_results = 0
+
+        ip = '127.0.0.1'
+        if self.proxy:
+            ip = self.proxy.ip
+
         serp = SearchEngineResultsPage(
             search_engine_name=self.search_engine,
+            scrapemethod=self.scrapemethod,
             page_number=self.current_page,
             requested_at=datetime.datetime.utcnow(),
-            requested_by='127.0.0.1',
+            requested_by=ip,
             query=self.current_keyword,
             num_results_for_keyword=self.parser.search_results['num_results'],
-            search=self.scraper_search
+            search=self.scraper_search,
         )
         self.session.add(serp)
 
         for key, value in self.parser.search_results.items():
             if isinstance(value, list):
+                rank = 1
                 for link in value:
                     l = Link(
                         url=link['link'],
                         snippet=link['snippet'],
                         title=link['title'],
                         visible_link=link['visible_link'],
+                        rank=rank,
                         serp=serp
                     )
                     self.session.add(l)
+                    num_results += 1
+                    rank += 1
 
+        serp.num_results = num_results
+        self.session.add(serp)
         self.session.commit()
 
     def next_page(self):
@@ -297,6 +306,9 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
         }
+
+        # the mode
+        self.scrapemethod = 'http'
 
     def set_proxy(self):
         """Setup a socks connection for the socks module bound to this instance.
@@ -426,7 +438,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             html = r.text
 
             # cache fresh results
-            cache_results(html, self.current_keyword, self.search_engine, 'http')
+            cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
 
         self.parser.parse(html)
         self.store()
@@ -466,6 +478,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.rlock = rlock
         self.ip = '127.0.0.1'
         self.search_number = 0
+        self.scrapemethod = 'sel'
 
         # How long to sleep (ins seconds) after every n-th request
         self.sleeping_ranges = dict()
@@ -741,7 +754,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if self.rlock:
             # Lock for the sake that two threads write to same file (not probable)
             self.rlock.acquire()
-            cache_results(html, self.current_keyword, self.search_engine, 'sel')
+            cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
             self.rlock.release()
 
         self.search_number += 1

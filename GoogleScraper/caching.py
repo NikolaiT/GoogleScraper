@@ -2,15 +2,16 @@
 
 import os
 import time
-import itertools
 import hashlib
 import gzip
 import bz2
-import sys
 import re
 import logging
 import functools
+from sqlalchemy.orm.exc import NoResultFound
 from GoogleScraper.config import Config
+from GoogleScraper.database import SearchEngineResultsPage
+from GoogleScraper.log import out
 
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
@@ -29,6 +30,12 @@ Using these three pieces of information would guarantee that we cache only uniqu
 but then we couldn't read back the information of the cache files, since these parameters
 are only available at runtime of the scrapers. So we have to be satisfied with the
 keyword, search_engine and scrapemode as entropy params.
+
+How does caching work on a higher level?
+
+Assume the user interrupted his scrape job at 1000/2000 keywords and there remain
+quite some keywords to scrape for. Then the previously parsed 1000 results are already
+stored in the database and shouldn't be added a second time.
 """
 
 logger = logging.getLogger('GoogleScraper')
@@ -116,7 +123,7 @@ def maybe_create_cache_dir():
     if Config['GLOBAL'].getboolean('do_caching'):
         cd = Config['GLOBAL'].get('cachedir', '.scrapecache')
         if not os.path.exists(cd):
-            os.mkdirs(cd)
+            os.mkdir(cd)
 
 
 def if_caching(f):
@@ -332,7 +339,7 @@ def _caching_is_one_to_one(keywords, search_engine, scrapemode):
         return True
 
 
-def parse_all_cached_files(keywords, session, try_harder=False):
+def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
     """Walk recursively through the cachedir (as given by the Config) and parse all cached files.
 
     Args:
@@ -347,36 +354,58 @@ def parse_all_cached_files(keywords, session, try_harder=False):
     google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
     files = _get_all_cache_files()
     mapping = {}
+    search_engine = Config['SCRAPING'].get('search_engine')
+    scrapemethod = Config['SCRAPING'].get('scrapemethod')
     for kw in keywords:
-        key = cached_file_name(
-            kw,
-            Config['SCRAPING'].get('search_engine'),
-            Config['SCRAPING'].get('scrapemethod')
-        )
+        key = cached_file_name(kw, search_engine, scrapemethod)
+
+        out('Params(keyword="{kw}", search_engine="{se}", scrapemethod="{sm}" yields {hash}'.format(
+                kw=kw,
+                se=search_engine,
+                sm=scrapemethod,
+                hash=key
+            ), lvl=5)
+
         mapping[key] = kw
 
-    diff = set(mapping.keys()).difference({os.path.split(path)[1] for path in files})
-    logger.info('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')))
-    logger.info('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
-        len(keywords) - len(diff), len(keywords), len(diff)))
-
     for path in files:
+        # strip of the extension of the path if it has eny
         fname = os.path.split(path)[1]
+        for ext in ALLOWED_COMPRESSION_ALGORITHMS:
+            if fname.endswith(ext):
+                fname = fname.rstrip('.' + ext)
         query = mapping.get(fname, None)
         if query:
+            # we found a file that contains the keyword, search engine name and
+            # searchmode that fits our description. Let's see if there is already
+            # an record in the database and link it to our new ScraperSearch object.
+            try:
+                serp = session.query(SearchEngineResultsPage).filter(
+                    SearchEngineResultsPage.query == query,
+                    SearchEngineResultsPage.search_engine_name == search_engine,
+                    SearchEngineResultsPage.scrapemethod == scrapemethod).one()
+                scraper_search.serps.append(serp)
+            except NoResultFound as e:
+                # that shouldn't happen
+                # we have a cache file that matches the above identifying information
+                # but it was never stored to the database.
+                logger.error('Never parser file {}. {}'.format(fname, e))
             mapping.pop(fname)
-        if not query and try_harder:
-            data = read_cached_file(path)
-            m = google_query_needle.search(data)
-            if m:
-                query = m.group('kw').strip()
-                if query in mapping.values():
-                    logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
-                else:
-                    continue
-            else:
-                continue
 
+        # TODO: support query detection for all supported search engines.
+        # if not query and try_harder:
+        #     m = google_query_needle.search(data)
+        #     if m:
+        #         query = m.group('kw').strip()
+        #         if query in mapping.values():
+        #             logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
+
+    out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
+    out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
+        len(keywords) - len(mapping), len(keywords), len(mapping)), lvl=1)
+
+    session.add(scraper_search)
+    session.commit()
     # return the remaining keywords to scrape
     return mapping.values()
 
@@ -397,9 +426,7 @@ def fix_broken_cache_names(url, search_engine, scrapemode):
         infilekws = r.search(data).group('kw')
         realname = cached_file_name(infilekws, search_engine, scrapemode)
         if fname != realname:
-            logger.debug(
-                'The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(
-                    path))
+            out('The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(path), lvl=3)
             src = os.path.abspath(path)
             dst = os.path.abspath(os.path.join(os.path.split(path)[0], realname))
             logger.debug('Renamed from {} => {}'.format(src, dst))

@@ -11,6 +11,8 @@ from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session
+from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
 
@@ -26,13 +28,17 @@ class ScraperSearch(Base):
     stopped_searching = Column(DateTime)
 
     def __str__(self):
-        return '<ScraperSearch started: {} stopped: {}>'.format(self.started_searching, self.stopped_searching)
+        return '<ScraperSearch[{id}] scraped for {number_search_queries} unique keywords. Started scraping: {started_searching} and stopped: {stopped_searching}>'.format(**self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
 
 class SearchEngineResultsPage(Base):
     __tablename__ = 'serp'
 
     id = Column(Integer, primary_key=True)
     search_engine_name = Column(String)
+    scrapemethod = Column(String)
     page_number = Column(Integer)
     requested_at = Column(DateTime)
     requested_by = Column(String)
@@ -44,7 +50,13 @@ class SearchEngineResultsPage(Base):
     search = relationship(ScraperSearch, backref=backref('serps', uselist=True))
 
     def __str__(self):
-        return '<SERP number of results[{}] for query {}>'.format(self.num_results, self.query)
+        return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(**self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
+
+# Alias as a shorthand for working in the shell
+SERP = SearchEngineResultsPage
 
 class Link(Base):
     __tablename__= 'link'
@@ -61,9 +73,33 @@ class Link(Base):
     serp = relationship(SearchEngineResultsPage, backref=backref('links', uselist=True))
 
     def __str__(self):
-        return '<Link url: {}>'.format(self.url)
+        return '<Link at rank {rank} has url: {url}>'.format(**self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
 
 
-engine = create_engine('sqlite:///' + Config['GLOBAL'].get('database_name'), echo=True)
-Base.metadata.create_all(engine)
+def get_engine(create=True):
+    """Return the sqlalchemy engine.
 
+    Returns:
+        The sqlalchemy engine.
+    """
+    echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 3) else False
+    engine = create_engine('sqlite:///' + Config['GLOBAL'].get('database_name'), echo=echo)
+    if create:
+        Base.metadata.create_all(engine)
+
+    return engine
+
+
+def get_session(scoped=False, create=False):
+    engine = get_engine(create=create)
+    session_factory = sessionmaker(bind=engine)
+    if scoped:
+        ScopedSession = scoped_session(session_factory)
+        session = ScopedSession()
+    else:
+        session = session_factory()
+
+    return session

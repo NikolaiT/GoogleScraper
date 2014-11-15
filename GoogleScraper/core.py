@@ -2,16 +2,14 @@
 
 import math
 import threading
-import queue
 import datetime
+import os
+import logging
 from GoogleScraper.utils import grouper
-from GoogleScraper import database
-from GoogleScraper.database import ScraperSearch
-from sqlalchemy.orm import scoped_session
-from sqlalchemy.orm import sessionmaker
+from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
-from GoogleScraper.caching import *
+from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
 
@@ -62,6 +60,47 @@ def assign_keywords_to_scrapers(all_keywords):
         kwgroups = [[kw, ] for kw in all_keywords]
 
     return kwgroups
+
+
+# taken from https://github.com/scrapy/utils/console.py
+def start_python_console(namespace=None, noipython=False, banner=''):
+    """Start Python console bound to the given namespace. If IPython is
+    available, an IPython console will be started instead, unless `noipython`
+    is True. Also, tab completion will be used on Unix systems.
+    """
+    if namespace is None:
+        namespace = {}
+
+    try:
+        try: # use IPython if available
+            if noipython:
+                raise ImportError()
+
+            try:
+                from IPython.terminal.embed import InteractiveShellEmbed
+                from IPython.terminal.ipapp import load_default_config
+            except ImportError:
+                from IPython.frontend.terminal.embed import InteractiveShellEmbed
+                from IPython.frontend.terminal.ipapp import load_default_config
+
+            config = load_default_config()
+            shell = InteractiveShellEmbed(
+                banner1=banner, user_ns=namespace, config=config)
+            shell()
+        except ImportError:
+            import code
+            try: # readline module is only available on unix systems
+                import readline
+            except ImportError:
+                pass
+            else:
+                import rlcompleter
+                readline.parse_and_bind("tab:complete")
+            code.interact(banner=banner, local=namespace)
+    except SystemExit: # raised when using exit() in python code.interact
+        pass
+
+
 
 def main(return_results=True):
     """Runs the GoogleScraper application as determined by the various configuration points.
@@ -141,18 +180,22 @@ def main(return_results=True):
         logger.info('By using scrapemethod: {}'.format(mode))
         return
 
+    if Config['GLOBAL'].getboolean('shell', False):
+        namespace = {}
+        namespace['session'] = get_session(scoped=False, create=False)
+        namespace['ScraperSearch'] = ScraperSearch
+        namespace['SERP'] = SERP
+        namespace['Link'] = Link
+        print('Available objects:')
+        print('session - A sqlalchemy session of the results database')
+        print('ScraperSearch - Search/Scrape job instances')
+        print('SERP - A search engine results page')
+        print('Link - A single link belonging to a SERP')
+        start_python_console(namespace)
+        return
+
     # get a scoped sqlalchemy session
-    session_factory = sessionmaker(bind=database.engine)
-    Session = scoped_session(session_factory)
-    session = Session()
-
-    # First of all, lets see how many keywords remain to scrape after parsing the cache
-    if Config['GLOBAL'].getboolean('do_caching'):
-        remaining = parse_all_cached_files(keywords, session)
-    else:
-        remaining = keywords
-
-    kwgroups = assign_keywords_to_scrapers(remaining)
+    session = get_session(scoped=True, create=True)
 
     scraper_search = ScraperSearch(
         number_search_engines_used=1,
@@ -160,6 +203,14 @@ def main(return_results=True):
         number_search_queries=len(keywords),
         started_searching=datetime.datetime.utcnow()
     )
+
+    # First of all, lets see how many keywords remain to scrape after parsing the cache
+    if Config['GLOBAL'].getboolean('do_caching'):
+        remaining = parse_all_cached_files(keywords, session, scraper_search)
+    else:
+        remaining = keywords
+
+    kwgroups = assign_keywords_to_scrapers(remaining)
 
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':

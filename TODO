@@ -3,7 +3,7 @@
 - write functional tests
 - add sqlalchemy support for results
 - add better proxy handling
-- extend parsing funcionality
+- extend parsing functionality
 - update readme
 - prevent parsing config two times
 
@@ -11,4 +11,21 @@
 04.11.2014:
 
   - Refactor code, change docstrings to google format
-      https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Commentss
+      https://google-styleguide.googlecode.com/svn/trunk/pyguide.html#Commentss [done]
+
+15.11.2014:
+  - add shell access with sqlalchemy session [done]
+  - test selenium mode thoroughly
+  - double check selectors
+  - add alternative selectors
+  - Add gevent support
+  - make all modes workable through proxies
+  - update README
+  - write blog post that illustrates usage of GoogleScraper
+  - some testing
+  - release version 0.2.0 on the cheeseshop
+
+
+
+
+
