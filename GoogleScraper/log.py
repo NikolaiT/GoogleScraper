@@ -17,10 +17,9 @@ def setup_logger(level=logging.INFO):
         logger.addHandler(ch)
 
 
-
 logger = logging.getLogger('GoogleScraper')
 
 def out(msg, lvl=2):
     level = Config['GLOBAL'].getint('verbosity', 2)
-    if lvl >= level:
+    if lvl <= level:
         logger.info(msg)

@@ -78,7 +78,13 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, keywords=None, session=None, scaper_search=None, start_page_pos=1, search_engine=None, search_type=None, proxy=None):
+    def __init__(self, keywords=None, session=None, scaper_search=None, db_lock=None, cache_lock=None,
+                 start_page_pos=1, search_engine=None, search_type=None, proxy=None):
+        """Instantiate an SearchEngineScrape object.
+
+        Args:
+            TODO
+        """
         if not search_engine:
             self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
         else:
@@ -134,7 +140,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # set the database scoped session
         self.session = session
 
-        # the scraper_search database object
+        # the scraper_search object
         self.scraper_search = scaper_search
 
         # get the base search url based on the search engine.
@@ -143,6 +149,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # the scrape mode
         # to be set by subclasses
         self.scrapemethod = ''
+
+        # set the database lock
+        self.db_lock = db_lock
+
+        # init the cache lock
+        self.cache_lock = cache_lock
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
@@ -201,29 +213,33 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             requested_by=ip,
             query=self.current_keyword,
             num_results_for_keyword=self.parser.search_results['num_results'],
-            search=self.scraper_search,
         )
-        self.session.add(serp)
 
-        for key, value in self.parser.search_results.items():
-            if isinstance(value, list):
-                rank = 1
-                for link in value:
-                    l = Link(
-                        url=link['link'],
-                        snippet=link['snippet'],
-                        title=link['title'],
-                        visible_link=link['visible_link'],
-                        rank=rank,
-                        serp=serp
-                    )
-                    self.session.add(l)
-                    num_results += 1
-                    rank += 1
+        with (yield from self.db_lock):
+            self.scraper_search.serps.append(serp)
+            self.session.add(serp)
+            self.session.add(self.scraper_search)
+            self.session.commit()
 
-        serp.num_results = num_results
-        self.session.add(serp)
-        self.session.commit()
+            for key, value in self.parser.search_results.items():
+                if isinstance(value, list):
+                    rank = 1
+                    for link in value:
+                        l = Link(
+                            url=link['link'],
+                            snippet=link['snippet'],
+                            title=link['title'],
+                            visible_link=link['visible_link'],
+                            rank=rank,
+                            serp=serp
+                        )
+                        self.session.add(l)
+                        num_results += 1
+                        rank += 1
+
+            serp.num_results = num_results
+            self.session.add(serp)
+            self.session.commit()
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -459,7 +475,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     This is a quite cool approach if you ask me :D
     """
 
-    def __init__(self, *args, rlock=None, captcha_lock=None, browser_num=1, **kwargs):
+    def __init__(self, *args, captcha_lock=None, browser_num=1, **kwargs):
         """Create a new SelScraper Thread.
 
         Args:
@@ -475,7 +491,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
-        self.rlock = rlock
         self.ip = '127.0.0.1'
         self.search_number = 0
         self.scrapemethod = 'sel'
@@ -751,11 +766,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.store()
         print(self.parser)
 
-        if self.rlock:
-            # Lock for the sake that two threads write to same file (not probable)
-            self.rlock.acquire()
+        # Lock for the sake that two threads write to same file (not probable)
+        with (yield from self.cache_lock):
             cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
-            self.rlock.release()
 
         self.search_number += 1
 
@@ -763,9 +776,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if not self._get_webdriver():
             raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
 
-        if self.browser_type != 'browser_type':
+        try:
             self.webdriver.set_window_size(400, 400)
             self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
+        except WebDriverException as e:
+            logger.error(e)
 
         self.build_search()
 

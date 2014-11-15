@@ -5,6 +5,7 @@ import threading
 import datetime
 import os
 import logging
+from asyncio import Lock
 from GoogleScraper.utils import grouper
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
@@ -51,7 +52,6 @@ def assign_keywords_to_scrapers(all_keywords):
         num_scrapers = Config['HTTP'].getint('num_threads', 1)
     else:
         num_scrapers = 0
-
 
     if len(all_keywords) > num_scrapers:
         kwgroups = grouper(all_keywords, len(all_keywords)//num_scrapers, fillvalue=None)
@@ -212,11 +212,16 @@ def main(return_results=True):
 
     kwgroups = assign_keywords_to_scrapers(remaining)
 
+    # Create a lock to synchronize database access in the sqlalchemy session
+    db_lock = Lock()
+
+    # create a lock to cache results
+    cache_lock = Lock()
+
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
         # A lock to prevent multiple threads from solving captcha.
         lock = threading.Lock()
-        rlock = threading.RLock()
 
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
@@ -228,7 +233,17 @@ def main(return_results=True):
 
         chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, keyword_group in enumerate(kwgroups):
-            scrapejobs.append(SelScrape(keywords=keyword_group,rlock=rlock, session=session, captcha_lock=lock, browser_num=i, proxy=proxies[i//chunks_per_proxy]))
+            scrapejobs.append(
+                SelScrape(
+                    keywords=keyword_group,
+                    db_lock=db_lock,
+                    cache_lock=cache_lock,
+                    session=session,
+                    captcha_lock=lock,
+                    browser_num=i,
+                    proxy=proxies[i//chunks_per_proxy]
+                )
+            )
 
         for t in scrapejobs:
             t.start()
@@ -239,7 +254,14 @@ def main(return_results=True):
     elif Config['SCRAPING'].get('scrapemethod') == 'http':
         threads = []
         for group in kwgroups:
-            threads.append(HttpScrape(keywords=group, session=session))
+            threads.append(
+                HttpScrape(
+                    keywords=group,
+                    session=session,
+                    cache_lock=cache_lock,
+                    db_lock=db_lock
+                )
+            )
 
         for thread in threads:
             thread.start()

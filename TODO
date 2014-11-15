@@ -7,7 +7,6 @@
 - update readme
 - prevent parsing config two times
 
-
 04.11.2014:
 
   - Refactor code, change docstrings to google format

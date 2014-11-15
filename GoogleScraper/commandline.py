@@ -25,7 +25,7 @@ def get_command_line(static_args=False):
                          You may search more than 1000 requests per second if you have the necessary number of proxies available.
                          ''', choices=('http', 'sel'), default='sel')
 
-    parser.add_argument('-q', '--keyword', metavar='keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
+    parser.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
 
     parser.add_argument('--keyword-file', type=str, action='store',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
@@ -36,20 +36,20 @@ def get_command_line(static_args=False):
 
     parser.add_argument('--shell', action='store_true', default=False, help='Fire up a shell with a loaded sqlalchemy session.')
 
-    parser.add_argument('-n', '--num-results-per-page', metavar='number_of_results_per_page', type=int,
+    parser.add_argument('-n', '--num-results-per-page', type=int,
                          action='store', default=50,
                         help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for sel mode.')
 
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
 
-    parser.add_argument('-z', '--num-browser-instances', metavar='num_browser_instances', type=int,
+    parser.add_argument('-z', '--num-browser-instances', type=int,
                         action='store',  help='This arguments sets the number of browser instances to use in `sel` mode. In raw mode, this argument is quitely ignored.')
 
     parser.add_argument('--base-search-url', type=str,
                         action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
 
-    parser.add_argument('-t', '--search-type', metavar='search_type', type=str, dest='searchtype', action='store',
+    parser.add_argument('-t', '--search-type', type=str, dest='searchtype', action='store',
                         default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
 

@@ -95,7 +95,11 @@ def get_engine(create=True):
 
 def get_session(scoped=False, create=False):
     engine = get_engine(create=create)
-    session_factory = sessionmaker(bind=engine)
+    session_factory = sessionmaker(
+        bind=engine,
+        autoflush=True,
+        autocommit=False,
+    )
     if scoped:
         ScopedSession = scoped_session(session_factory)
         session = ScopedSession()
