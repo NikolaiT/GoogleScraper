@@ -5,7 +5,6 @@ import threading
 import datetime
 import os
 import logging
-from asyncio import Lock
 from GoogleScraper.utils import grouper
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
@@ -195,7 +194,7 @@ def main(return_results=True):
         return
 
     # get a scoped sqlalchemy session
-    session = get_session(scoped=True, create=True)
+    session = get_session(scoped=False, create=True)
 
     scraper_search = ScraperSearch(
         number_search_engines_used=1,
@@ -213,10 +212,10 @@ def main(return_results=True):
     kwgroups = assign_keywords_to_scrapers(remaining)
 
     # Create a lock to synchronize database access in the sqlalchemy session
-    db_lock = Lock()
+    db_lock = threading.Lock()
 
     # create a lock to cache results
-    cache_lock = Lock()
+    cache_lock = threading.Lock()
 
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
@@ -239,6 +238,7 @@ def main(return_results=True):
                     db_lock=db_lock,
                     cache_lock=cache_lock,
                     session=session,
+                    scraper_search=scraper_search,
                     captcha_lock=lock,
                     browser_num=i,
                     proxy=proxies[i//chunks_per_proxy]
@@ -258,6 +258,7 @@ def main(return_results=True):
                 HttpScrape(
                     keywords=group,
                     session=session,
+                    scraper_search=scraper_search,
                     cache_lock=cache_lock,
                     db_lock=db_lock
                 )
@@ -270,7 +271,7 @@ def main(return_results=True):
             thread.join()
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
-        raise NotImplemented('soon my dead friends :)')
+        raise NotImplemented('soon my dear friends :)')
 
     else:
         raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')

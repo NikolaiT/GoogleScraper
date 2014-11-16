@@ -11,6 +11,7 @@ import functools
 from sqlalchemy.orm.exc import NoResultFound
 from GoogleScraper.config import Config
 from GoogleScraper.database import SearchEngineResultsPage
+from GoogleScraper.parsing import parse_serp
 from GoogleScraper.log import out
 
 """
@@ -50,7 +51,6 @@ class InvalidConfigurationFileException(Exception):
     """
     pass
 
-
 class CompressedFile(object):
     """Read and write the data of a compressed file.
     Used to cache files for GoogleScraper.s
@@ -58,28 +58,33 @@ class CompressedFile(object):
     Supported algorithms: gz, bz2
 
     >>> import os
-    >>> f = CompressedFile('gz', '/tmp/test.txt')
+    >>> f = CompressedFile('/tmp/test.txt', algorithm='gz')
     >>> f.write('hello world')
     >>> assert os.path.exists('/tmp/test.txt.gz')
 
-    >>> f2 = CompressedFile('gz', '/tmp/test.txt.gz')
+    >>> f2 = CompressedFile('/tmp/test.txt.gz', algorithm='gz')
     >>> assert f2.read() == 'hello world'
     """
 
-    def __init__(self, algorithm, path):
+    def __init__(self, path, algorithm=None):
         """Create a new compressed file to read and write data to.
+
+        TODO: detect algorithm by extension for reading
 
         Args:
             algorithm: Which algorithm to use.
             path: A valid file path to the file to read/write. Depends
                 on the action called.
         """
+        if algorithm:
+            self.algorithm = algorithm
+            assert algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
+                '{algo} is not an supported compression utility'.format(algo=algorithm)
+        else:
+            assert path.split('.')[-1] in ALLOWED_COMPRESSION_ALGORITHMS, 'Invalid file path {}'.format(path)
+            self.algorithm = path.split('.')[-1]
 
-        assert algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
-            '{algo} is not an supported compression utility'.format(algo=algorithm)
-
-        self.algorithm = algorithm
-        if path.endswith(algorithm):
+        if self.algorithm in ALLOWED_COMPRESSION_ALGORITHMS:
             self.path = path
         else:
             self.path = '{path}.{ext}'.format(path=path, ext=algorithm)
@@ -117,6 +122,10 @@ class CompressedFile(object):
         if not isinstance(data, bytes):
             data = data.encode()
         return self.writers[self.algorithm](data)
+
+
+def get_path(filename):
+    return os.path.join(Config['GLOBAL'].get('cachedir', '.scrapecache'), filename)
 
 
 def maybe_create_cache_dir():
@@ -218,7 +227,7 @@ def get_cached(keyword, search_engine, scrapemode):
 
 @if_caching
 def read_cached_file(path):
-    """Read a zipped or unzipped.
+    """Read a compressed or uncompressed file.
 
     The compressing schema is determined by the file extension. For example
     a file that ends with .gz needs to be gunzipped.
@@ -257,8 +266,8 @@ def read_cached_file(path):
                 # but convenient for the end user.
                 Config.set('GLOBAL', 'compress_cached_files', True)
     elif ext in ALLOWED_COMPRESSION_ALGORITHMS:
-        f = CompressedFile(ext)
-        return f.read(path)
+        f = CompressedFile(path)
+        return f.read()
     else:
         raise InvalidConfigurationFileException('"{path}" is a invalid configuration file.')
 
@@ -285,7 +294,7 @@ def cache_results(data, keyword, search_engine, scrapemode):
 
     if Config['GLOBAL'].getboolean('compress_cached_files'):
         algorithm = Config['GLOBAL'].get('compressing_algorithm', 'gz')
-        f = CompressedFile(algorithm, path)
+        f = CompressedFile(path, algorithm=algorithm)
         f.write(data)
     else:
         with open(path, 'w') as fd:
@@ -373,32 +382,38 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
         fname = os.path.split(path)[1]
         for ext in ALLOWED_COMPRESSION_ALGORITHMS:
             if fname.endswith(ext):
-                fname = fname.rstrip('.' + ext)
-        query = mapping.get(fname, None)
+                clean_filename = fname.rstrip('.' + ext)
+
+        query = mapping.get(clean_filename, None)
+
         if query:
-            # we found a file that contains the keyword, search engine name and
+            # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
             try:
-                serp = session.query(SearchEngineResultsPage).filter(
-                    SearchEngineResultsPage.query == query,
-                    SearchEngineResultsPage.search_engine_name == search_engine,
-                    SearchEngineResultsPage.scrapemethod == scrapemethod).one()
-                scraper_search.serps.append(serp)
+                serp =  session.query(SearchEngineResultsPage).filter(
+                        SearchEngineResultsPage.query == query,
+                        SearchEngineResultsPage.search_engine_name == search_engine,
+                        SearchEngineResultsPage.scrapemethod == scrapemethod).one()
             except NoResultFound as e:
                 # that shouldn't happen
                 # we have a cache file that matches the above identifying information
                 # but it was never stored to the database.
-                logger.error('Never parser file {}. {}'.format(fname, e))
-            mapping.pop(fname)
+                logger.error('No entry for file {} found in database. Will parse again.'.format(clean_filename))
+                serp = parse_serp(
+                    html=read_cached_file(get_path(fname)),
+                    search_engine=search_engine,
+                    scrapemethod=scrapemethod,
+                    current_page=0,
+                    current_keyword=query
+                )
+            finally:
+                scraper_search.serps.append(serp)
 
-        # TODO: support query detection for all supported search engines.
-        # if not query and try_harder:
-        #     m = google_query_needle.search(data)
-        #     if m:
-        #         query = m.group('kw').strip()
-        #         if query in mapping.values():
-        #             logger.debug('The request with the keywords {} was wrongly cached.'.format(query))
+            mapping.pop(clean_filename)
+
+        # TODO: support query detection for all supported search engines
+        # by parsing the keyword, search engine from the raw html
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
     out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(

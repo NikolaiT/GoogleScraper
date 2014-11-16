@@ -7,6 +7,8 @@ import re
 import lxml.html
 import logging
 import pprint
+from GoogleScraper.database import SearchEngineResultsPage, Link
+
 try:
     from cssselect import HTMLTranslator, SelectorError
     from bs4 import UnicodeDammit
@@ -435,6 +437,54 @@ def get_parser_by_search_engine(search_engine):
         return DuckduckgoParser
     else:
         raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
+
+
+def parse_serp(html=None, search_engine=None,
+                    scrapemethod=None, current_page=None, requested_at=None,
+                    requested_by='127.0.0.1', current_keyword=None):
+        """Store the parsed data in the sqlalchemy session.
+
+        Args:
+            TODO: A whole lot
+
+        Returns:
+            The parsed SERP object.
+        """
+
+        parser = get_parser_by_search_engine(search_engine)
+        parser = parser()
+        parser.parse(html)
+
+        num_results = 0
+
+        serp = SearchEngineResultsPage(
+            search_engine_name=search_engine,
+            scrapemethod=scrapemethod,
+            page_number=current_page,
+            requested_at=requested_at,
+            requested_by=requested_by,
+            query=current_keyword,
+            num_results_for_keyword=parser.search_results['num_results'],
+        )
+
+        for key, value in parser.search_results.items():
+            if isinstance(value, list):
+                rank = 1
+                for link in value:
+                    l = Link(
+                        url=link['link'],
+                        snippet=link['snippet'],
+                        title=link['title'],
+                        visible_link=link['visible_link'],
+                        rank=rank,
+                        serp=serp
+                    )
+                    num_results += 1
+                    rank += 1
+
+        serp.num_results = num_results
+
+        return serp
 
 if __name__ == '__main__':
     """Originally part of https://github.com/NikolaiT/GoogleScraper.

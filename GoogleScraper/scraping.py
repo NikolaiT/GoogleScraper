@@ -25,6 +25,7 @@ import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
 from GoogleScraper.database import SearchEngineResultsPage, Link
 from GoogleScraper.config import Config
+from GoogleScraper.log import out
 from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine
 
 logger = logging.getLogger('GoogleScraper')
@@ -78,7 +79,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, keywords=None, session=None, scaper_search=None, db_lock=None, cache_lock=None,
+    def __init__(self, keywords=None, session=None, scraper_search=None, db_lock=None, cache_lock=None,
                  start_page_pos=1, search_engine=None, search_type=None, proxy=None):
         """Instantiate an SearchEngineScrape object.
 
@@ -86,7 +87,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             TODO
         """
         if not search_engine:
-            self.search_engine = Config['SCRAPING'].get('search_engine', 'Google')
+            self.search_engine = Config['SCRAPING'].get('search_engine', 'google')
         else:
             self.search_engine = search_engine
 
@@ -141,7 +142,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.session = session
 
         # the scraper_search object
-        self.scraper_search = scaper_search
+        self.scraper_search = scraper_search
 
         # get the base search url based on the search engine.
         self.base_search_url = Config['SCRAPING'].get('{search_engine}_search_url'.format(search_engine=self.search_engine))
@@ -214,13 +215,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             query=self.current_keyword,
             num_results_for_keyword=self.parser.search_results['num_results'],
         )
+        serp.search = self.scraper_search
 
-        with (yield from self.db_lock):
-            self.scraper_search.serps.append(serp)
-            self.session.add(serp)
-            self.session.add(self.scraper_search)
-            self.session.commit()
-
+        with self.db_lock:
             for key, value in self.parser.search_results.items():
                 if isinstance(value, list):
                     rank = 1
@@ -352,6 +349,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         super().switch_proxy()
 
     def handle_request_denied(self, status_code):
+        super().handle_request_denied()
         raise Exception('Request not allowed')
 
     def build_search(self):
@@ -436,7 +434,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                         params=self.search_params)
                     )
 
-                r = self.requests.get(self.base_search_url, headers=self.headers,
+                request = self.requests.get(self.base_search_url, headers=self.headers,
                                  params=self.search_params, timeout=3.0)
 
             except self.requests.ConnectionError as ce:
@@ -446,19 +444,20 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                 logger.error('Connection timeout {}'.format(te))
                 raise te
 
-            if not r.ok:
-                logger.error('HTTP Error: {}'.format(r.status_code))
-                self.handle_request_denied(r.status_code)
+            if not request.ok:
+                logger.error('HTTP Error: {}'.format(request.status_code))
+                self.handle_request_denied(request.status_code)
                 return False
 
-            html = r.text
+            html = request.text
 
             # cache fresh results
-            cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
+            with self.cache_lock:
+                cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
 
         self.parser.parse(html)
         self.store()
-        print(self.parser)
+        out(str(self.parser), lvl=2)
 
     def run(self):
         args = []
@@ -764,10 +763,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.parser.parse(html)
         self.store()
-        print(self.parser)
+        out(str(self.parser), lvl=2)
 
         # Lock for the sake that two threads write to same file (not probable)
-        with (yield from self.cache_lock):
+        with self.cache_lock:
             cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
 
         self.search_number += 1

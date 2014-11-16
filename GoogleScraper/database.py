@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
 
 """
-Creates a dynamic schema based on the CSS-Selectors from subclasses of
-Parser in parsing.py.
+The database schema of GoogleScraper.
+
+There are three entities:
+
+    ScraperSearch: Represents a call to GoogleScraper. A search job.
+    SearchEngineResultsPage: Represents a SERP result page of a search_engine
+    Link: Represents a LINK on a SERP
+
+Because searches repeat themselves and we avoid doing them again (caching), one SERP page
+can be assigned to more than one ScraperSearch. Therefore we need a n:m relationship.
 """
 
 import datetime
@@ -16,6 +24,11 @@ from sqlalchemy.orm import sessionmaker
 
 Base = declarative_base()
 
+scraper_searches_serps = Table('scraper_searches_serps', Base.metadata,
+    Column('scraper_search_id', Integer, ForeignKey('scraper_search.id')),
+    Column('serp_id', Integer, ForeignKey('serp.id'))
+)
+
 class ScraperSearch(Base):
     __tablename__ = 'scraper_search'
 
@@ -26,6 +39,12 @@ class ScraperSearch(Base):
     number_search_queries = Column(Integer)
     started_searching = Column(DateTime, default=datetime.datetime.utcnow)
     stopped_searching = Column(DateTime)
+
+    serps = relationship(
+        'SearchEngineResultsPage',
+        secondary=scraper_searches_serps,
+        backref=backref('scraper_searches', uselist=True)
+    )
 
     def __str__(self):
         return '<ScraperSearch[{id}] scraped for {number_search_queries} unique keywords. Started scraping: {started_searching} and stopped: {stopped_searching}>'.format(**self.__dict__)
@@ -40,14 +59,11 @@ class SearchEngineResultsPage(Base):
     search_engine_name = Column(String)
     scrapemethod = Column(String)
     page_number = Column(Integer)
-    requested_at = Column(DateTime)
-    requested_by = Column(String)
+    requested_at = Column(DateTime, default=datetime.datetime.utcnow)
+    requested_by = Column(String, default='127.0.0.1')
     num_results = Column(Integer)
     query = Column(String)
     num_results_for_keyword = Column(String)
-
-    scraper_search_id = Column(Integer, ForeignKey('scraper_search.id'))
-    search = relationship(ScraperSearch, backref=backref('serps', uselist=True))
 
     def __str__(self):
         return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(**self.__dict__)
@@ -79,7 +95,7 @@ class Link(Base):
         return self.__str__()
 
 
-def get_engine(create=True):
+def get_engine():
     """Return the sqlalchemy engine.
 
     Returns:
@@ -87,14 +103,13 @@ def get_engine(create=True):
     """
     echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 3) else False
     engine = create_engine('sqlite:///' + Config['GLOBAL'].get('database_name'), echo=echo)
-    if create:
-        Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine)
 
     return engine
 
 
 def get_session(scoped=False, create=False):
-    engine = get_engine(create=create)
+    engine = get_engine()
     session_factory = sessionmaker(
         bind=engine,
         autoflush=True,
