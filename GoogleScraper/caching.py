@@ -66,25 +66,21 @@ class CompressedFile(object):
     >>> assert f2.read() == 'hello world'
     """
 
-    def __init__(self, path, algorithm=None):
+    def __init__(self, path, algorithm='gz'):
         """Create a new compressed file to read and write data to.
-
-        TODO: detect algorithm by extension for reading
 
         Args:
             algorithm: Which algorithm to use.
             path: A valid file path to the file to read/write. Depends
                 on the action called.
         """
-        if algorithm:
-            self.algorithm = algorithm
-            assert algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
-                '{algo} is not an supported compression utility'.format(algo=algorithm)
-        else:
-            assert path.split('.')[-1] in ALLOWED_COMPRESSION_ALGORITHMS, 'Invalid file path {}'.format(path)
-            self.algorithm = path.split('.')[-1]
 
-        if self.algorithm in ALLOWED_COMPRESSION_ALGORITHMS:
+        self.algorithm = algorithm
+
+        assert self.algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
+                '{algo} is not an supported compression algorithm'.format(algo=self.algorithm)
+
+        if path.endswith(self.algorithm):
             self.path = path
         else:
             self.path = '{path}.{ext}'.format(path=path, ext=algorithm)
@@ -380,6 +376,7 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
     for path in files:
         # strip of the extension of the path if it has eny
         fname = os.path.split(path)[1]
+        clean_filename = fname
         for ext in ALLOWED_COMPRESSION_ALGORITHMS:
             if fname.endswith(ext):
                 clean_filename = fname.rstrip('.' + ext)

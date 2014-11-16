@@ -750,14 +750,14 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         try:
             WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
         except TimeoutException as e:
-            raise SeleniumSearchError('Keyword not found in title: {}'.format(e))
-
-        next_url = self._get_next_page_url()
+            logger.error(SeleniumSearchError('Keyword not found in title: {}'.format(e)))
 
         # That's because we sleep explicitly one second, so the site and
         # whatever js loads all shit dynamically has time to update the
         # DOM accordingly.
         time.sleep(1.5)
+
+        next_url = self._get_next_page_url()
 
         html = self.webdriver.page_source
 
