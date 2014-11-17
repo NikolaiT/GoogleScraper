@@ -735,7 +735,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                 self.search_number += 1
 
-                if self.current_page > 1:
+                # Click the next page link not when leaving the loop
+                if self.current_page < self.num_pages_per_keyword + 1:
                     self.next_url = self._goto_next_page()
 
             try:
