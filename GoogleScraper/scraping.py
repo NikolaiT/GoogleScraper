@@ -217,7 +217,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             query=self.current_keyword,
             num_results_for_keyword=self.parser.search_results['num_results'],
         )
-        serp.search = self.scraper_search
+        self.scraper_search.serps.append(serp)
+        self.session.add(self.scraper_search)
+        self.session.commit()
 
         with self.db_lock:
             for key, value in self.parser.search_results.items():

@@ -18,12 +18,12 @@ def get_command_line(static_args=False):
                                                  'browser searches or by using real browsers controlled by the selenium framework. Multithreading support.',
                                      epilog='This program might infringe the Google TOS. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
-    parser.add_argument('scrapemethod', type=str,
+    parser.add_argument('-m', '--scrapemethod', type=str, default='http',
                         help='''The scraping type. There are currently three types: "http", "sel" and "http-async".
                          "Http" scrapes with raw http requests, whereas "sel" uses the selenium framework to remotely control browsers'.
                          "http-async" makes use of gevent and is well suited for extremely fast and explosive scraping jobs.
                          You may search more than 1000 requests per second if you have the necessary number of proxies available.
-                         ''', choices=('http', 'sel'), default='sel')
+                         ''', choices=('http', 'sel', 'http-async'))
 
     parser.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
 
@@ -43,8 +43,8 @@ def get_command_line(static_args=False):
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
 
-    parser.add_argument('-z', '--num-browser-instances', type=int,
-                        action='store',  help='This arguments sets the number of browser instances to use in `sel` mode. In raw mode, this argument is quitely ignored.')
+    parser.add_argument('-z', '--num-workers', type=int, default=1,
+                        action='store',  help='This arguments sets the number of browser instances for selenium mode or the number of worker threads in http mode.')
 
     parser.add_argument('--base-search-url', type=str,
                         action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
@@ -85,7 +85,6 @@ def get_command_line(static_args=False):
                                 in args.__dict__.items() if (key in L and value is not None)])
 
     return {
-        'SCRAPING': make_dict(['search_engine', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file']),
-        'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell']),
-        'SELENIUM': make_dict(['num_browser_instances'])
+        'SCRAPING': make_dict(['search_engine', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
+        'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell'])
     }

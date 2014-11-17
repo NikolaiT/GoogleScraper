@@ -44,16 +44,10 @@ def assign_keywords_to_scrapers(all_keywords):
     """
     mode = Config['SCRAPING'].get('scrapemethod')
 
+    num_workers = Config['SCRAPING'].getint('num_workers', 1)
 
-    if mode == 'sel':
-        num_scrapers = Config['SELENIUM'].getint('num_browser_instances', 1)
-    elif mode == 'http':
-        num_scrapers = Config['HTTP'].getint('num_threads', 1)
-    else:
-        num_scrapers = 0
-
-    if len(all_keywords) > num_scrapers:
-        kwgroups = grouper(all_keywords, len(all_keywords)//num_scrapers, fillvalue=None)
+    if len(all_keywords) > num_workers:
+        kwgroups = grouper(all_keywords, len(all_keywords)//num_workers, fillvalue=None)
     else:
         # thats a little special there :)
         kwgroups = [[kw, ] for kw in all_keywords]
@@ -125,12 +119,12 @@ def main(return_results=True):
 
     kwfile = Config['SCRAPING'].get('keyword_file')
     keyword = Config['SCRAPING'].get('keyword')
-    keywords = set(Config['SCRAPING'].get('keywords', '').split('\n'))
+    keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
     proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
 
     if not (keyword or keywords) and not kwfile:
-        raise InvalidConfigurationException('You must specify a keyword file (separated by newlines, each keyword on a line) with the flag `--keyword-file {filepath}~')
+        raise InvalidConfigurationException('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):
         fix_broken_cache_names()
