@@ -108,15 +108,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # If a SearchEngineScrape receives explicitly keywords,
         # scrape them. otherwise scrape the ones specified in the Config.
         if keywords:
-            self.keywords = set(keywords)
+            self.keywords = keywords
         else:
-            self.keywords = set(Config['SCRAPING'].get('keywords', []))
+            self.keywords = Config['SCRAPING'].get('keywords', [])
 
-        if not isinstance(keywords, list):
-            self.keywords = set([self.keywords])
+        self.keywords = list(set(self.keywords))
         
         # The actual keyword that is to be scraped next
-        self.current_keyword = self.keywords.pop()
+        self.current_keyword = self.keywords[0]
 
         # The parser that should be used to parse the search engine results
         self.parser = get_parser_by_search_engine(self.search_engine)()
@@ -175,7 +174,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         Args:
             callback: A callable with the search functionality.
         """
-        for self.current_keyword in self.keywords():
+        for self.current_keyword in self.keywords:
 
             out('Next Keyword="{kw}" requested by {scraper} and ip {ip}'.format(kw=self.current_keyword, scraper=self.__class__.__name__, ip=self.ip), lvl=2)
 
