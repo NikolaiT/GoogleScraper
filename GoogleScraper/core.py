@@ -21,14 +21,15 @@ def scrape_with_config(config, **kwargs):
     Args:
         config: A configuration dictionary that updates the global configuration.
         kwargs: Further options that cannot be handled by the configuration.
+
     Returns:
-        The result of the main() function. May be void or a sqlite3 connection.
+        The result of the main() function. May be sqlalchemy session.
     """
     if not isinstance(config, dict):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
 
     GoogleScraper.config.update_config(config)
-    return main(return_results=True, force_reload=False, **kwargs)
+    return main(return_results=True, **kwargs)
 
 def assign_keywords_to_scrapers(all_keywords):
     """Scrapers are often threads or asynchronous objects.
@@ -106,7 +107,7 @@ def main(return_results=True):
         return_results: When GoogleScrape is used from within another program, don't print results to stdout,
                         store them in a database instead.
     Returns:
-        A database connection to the results when return_results is True
+        A database session to the results when return_results is True
     """
     parse_cmd_args()
 
@@ -277,3 +278,6 @@ def main(return_results=True):
     scraper_search.stopped_searching = datetime.datetime.utcnow()
     session.add(scraper_search)
     session.commit()
+
+    if return_results:
+        return session

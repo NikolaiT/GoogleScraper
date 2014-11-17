@@ -1,21 +1,18 @@
 ## GoogleScraper - Scraping the Google Search Engine
 
-### News Updated 14th november 2014
+### News 
 
-Please install from source, the current pip version 0.1.3 doesn't work! Within the next 3 days, there should be a new pip release
-How to install from source;
+## Updated README on 17th november 2014
+
+**Thanks for your patience. A more or less stable version (0.1.5) is on pypy available! **
+
+*If you need the latest bug fixes and the most recent version, just install directly from this repo here:*
+
 ```
 virtualenv --python python3 env
 source env/bin/activate
 pip install git+git://github.com/NikolaiT/GoogleScraper/
-
-# Then you can have fun like this:
-# just replace "examples/kw.txt" with your own keyword file :D
-GoogleScraper sel --keyword-file examples/kw.txt --search-engine duckduckgo
 ```
-
-11.11.2014: GoogleScraper will support 5 new search engines very soon. Try it out [on my blog][5]!!.
-
 
 ### Table of Contents
 
@@ -29,50 +26,42 @@ GoogleScraper sel --keyword-file examples/kw.txt --search-engine duckduckgo
 <a name="install" \>
 ### Installation
 
-GoogleScraper is written in Python 3. You should install at least Python 3.3
-Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode (I didn't have to).
+GoogleScraper is written in Python 3. You should install at least Python 3.4
+Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode (I didn't have to). On Ubuntu 14.04
+you certainly have to install the Chrome driver.
 
 From now on (August 2014), you can install GoogleScraper comfortably with pip:
 
 ```
-pip3 install GoogleScraper
+virtualenv --python python3 env
+source env/bin/activate
+pip install GoogleScraper
+
+# then have a look how to use it:
+GoogleScraper -h
 ```
 
-#### Alternatively install from Github:
+#### Alternatively install directly from Github:
 
-First clone and change into the project tree.
-
-Begin with installing the following third party modules:
+Sometimes the newest and most awesome stuff is not available in the cheeseshop (That's how the call
+https://pypi.python.org/pypi/pip). Therefore you maybe want to install the latest source directly from
+the Github repository. You can do so like this:
 
 ```
-selenium
-beautifulsoup4
-cssselect
-requests
-PyMySql
+virtualenv --python python3 env
+source env/bin/activate
+pip install git+git://github.com/NikolaiT/GoogleScraper/
 ```
 
-You can do so with:
+Please note however, that some features and examples might not work as expected. I also don't guarantee that 
+the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a 
+usable version.
 
-`pip3 install module1, module2, ..` or better by `pip install -r requirements.txt`
-
-
-If you don't want to install GoogleScraper system wide, just make a virtual environment (Run all commands in the GoogleScraper.py directory):
-
-```bash
-git clone https://github.com/NikolaiT/GoogleScraper
-cd GoogleScraper
-virtualenv --no-site-packages --python=python3 .venv
-source .venv/bin/activate
-.venv/bin/python setup.py install
-# now you can run GoogleScraper from withing the virtual environment
-./venv/bin/GoogleScraper
-```
 
 <a name="about" />
 ### What does GoogleScraper.py?
 
-GoogleScraper parses Google search engine results easily and in a performant way. It allows you to extract all found
+GoogleScraper parses Google search engine results (and many other search engines *_*) easily and in a fast way. It allows you to extract all found
 links and their titles and descriptions programmatically which enables you to process scraped data further.
 
 There are unlimited *usage scenarios*:
@@ -82,29 +71,30 @@ There are unlimited *usage scenarios*:
 + Discover trends.
 + Compile lists of sites to feed your own database.
 + Many more use cases...
++ quite easily extendable since the code is well documented
 
 First of all you need to understand that GoogleScraper uses **two completely different scraping approaches**:
 + Scraping with low level networking libraries such as `urllib.request` or `requests` modules. This simulates the http packets sent by real browsers.
-+ Scrape by controlling a real browser with Python
++ Scrape by controlling a real browser with the selenium framework
 
-Whereas the later approach was implemented first, the former approach looks much more promising in comparison, because
-Google has no easy way detecting it.
+Whereas the former approach was implemented first, the later approach looks much more promising in comparison, because
+search engines have no easy way detecting it.
 
 GoogleScraper is implemented with the following techniques/software:
 
 + Written in Python 3.4
-+ Uses multithreading/asynchroneous IO. (two possible approaches, currently only multi-threading is implemented)
++ Uses multithreading/asynchronous IO. (two possible approaches, currently only multi-threading is implemented)
 + Supports parallel google scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2] and built in browser proxies:
   * Socks5
   * Socks4
   * HttpProxy
-+ Support for additional google search features like news/image/video search.
++ Support for alternative search modes like news/image/video search.
 
 ### How does GoogleScraper maximize the amount of extracted information per IP address?
 
 Scraping is a critical and highly complex subject. Google and other search engine giants have a strong inclination
-to make the scrapers life as hard as possible. There are several ways for the Google Servers to detect that a robot is using
+to make the scrapers life as hard as possible. There are several ways for the search engine providers to detect that a robot is using
 their search engine:
 
 + The User-Agent is not one of a browser.
@@ -138,12 +128,6 @@ Some interesting technologies/software to do so:
 ### Example Usage
 Here you can learn how to use GoogleScrape from within your own Python scripts.
 
-If you want to play with GoogleScraper programmatically, dig into the ```examples/``` directory in the source tree.
-You will find some examples, including how to enable proxy support.
-
-Keep in mind that the bottom example source uses the not very powerful *http* scrape method. Look [here](#cli-usage) if you
-need to unleash the full power of GoogleScraper.
-
 ```python
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
@@ -153,17 +137,18 @@ Shows how to control GoogleScraper programmatically. Uses selenium mode.
 """
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
+from GoogleScraper.database import ScraperSearch, SERP, Link
 
 if __name__ == '__main__':
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
             'use_own_ip': 'True',
-            'keyword': 'Hello World'
+            'keyword': 'Let\'s go bubbles!',
+            'search_engine': 'yandex'
         },
         'SELENIUM': {
             'sel_browser': 'chrome',
-            'manual_captcha_solving': 'True'
         },
         'GLOBAL': {
             'do_caching': 'True'
@@ -171,173 +156,18 @@ if __name__ == '__main__':
     }
 
     try:
-        # scrape() and scrape_with_config() will reuturn a handle to a sqlite database with the results
-        db = scrape_with_config(config)
-
-        print(db.execute('SELECT * FROM link').fetchall())
-
+        sqlalchemy_session = scrape_with_config(config)
     except GoogleSearchError as e:
         print(e)
-```
 
-### Example Output
+    # let's inspect what we got
 
-This is a example output of the above *use.py*. You can execute it by just firing `python use.py` in the project directory:
+    for search in sqlalchemy_session.query(ScraperSearch).all():
+        for serp in search.serps:
+            print(serp)
+            for link in serp.links:
+                print(link)
 
-```
-[nikolai@niko-arch GoogleScraper]$ python use.py
-http://searchenginewatch.com/article/2303494/21-Best-FREE-SEO-Tools-for-On-Page-Optimization
-http://seo-tools-review.toptenreviews.com/
-http://www.seobook.com/seo-tools-for-2014
-http://moz.com/blog/100-free-seo-tools
-https://blog.kissmetrics.com/6-indispensable-seo-tools/
-http://www.targetinternet.com/seo-tools-comparison-raven-seomoz-buzzstream/
-http://www.hobo-web.co.uk/best-seo-tools/
-http://www.creativebloq.com/netmag/30-best-new-seo-tools-7133746
-http://www.best-seo-tools.net/
-http://www.traffictravis.com/
-http://seotools.scrubtheweb.com/
-http://www.youtube.com/watch?v=WWPzgsojW8w
-https://www.brightlocal.com/
-http://www.wordstream.com/blog/ws/2013/09/18/best-keyword-research-tools
-http://www.matthewwoodward.co.uk/tips/the-best-free-seo-tools-internet-marketing-software/
-http://socialmediatoday.com/amanda-disilvestro/1377151/top-7-must-have-free-seo-tools-beginners
-http://www.poweredbysearch.com/top-10-seo-tools-worth-it/
-http://www.ragesw.com/products/iweb-seo-tool.html
-http://www.searchenginejournal.com/the-best-seo-tools-what-how-and-why/60842/
-http://withnoble.com/10-best-seo-tools-for-keyword-research/
-http://searchengineland.com/moz-2014-industry-survey-google-webmaster-tools-top-ranked-seo-tool-182767
-https://yoast.com/wordpress/plugins/seo/
-https://yoast.com/tools/seo/
-http://www.webceo.com/
-http://www.myseotool.com/
-http://www.smashingmagazine.com/2006/09/22/complete-list-of-best-seo-tools/
-http://www.strategyinternetmarketing.co.uk/best-online-seo-tools/
-http://seoimpression.blogspot.com/2013/02/top-ten-seo-tools-of-2013.html
-http://www.socialable.co.uk/25-best-seo-tools-wordpress-plugins/
-http://vlexo.net/blog-tips-tricks/search/best-seo-tools-resources-youll-need-in-2014/
-https://forums.digitalpoint.com/threads/best-seo-tools-for-2014.2700177/
-http://www.majesticseo.com/
-http://seo-software.findthebest.com/
-http://seometamanager.com/
-https://twitter.com/JohnHen99387191
-http://www.link-assistant.com/
-http://www.techrepublic.com/blog/five-apps/five-seo-tools-that-will-increase-visitors-to-your-website/
-http://www.razorsocial.com/seo-tools-blogging/
-http://www.ibusinesspromoter.com/seo-tools/top-10-seo-software
-http://zoomspring.com/learn-importxml-tutorial/
-http://www.prweb.com/releases/best-seo-tools/seo-in-2014-tips/prweb11381533.htm
-http://seoertools.com/
-http://www.internetmarketingninjas.com/tools/
-http://www.seosuite.com/
-http://www.clickminded.com/free-seo-tools/
-http://www.dreamscapedesign.co.uk/the-best-free-online-seo-tools/
-http://cognitiveseo.com/
-https://support.google.com/webmasters/answer/35291?hl=en
-http://www.wpseotricks.com/best-seo-tools-2013/
-http://www.facebook.com/615013581900538
-http://www.webconfs.com/15-minute-seo.php
-http://www.screamingfrog.co.uk/seo-spider/
-http://www.coconutheadphones.com/search-engine-tools-some-of-the-best-seo-tools-are-free/
-http://zadroweb.com/best-seo-tools-get-site-ranking/
-http://www.seoeffect.com/
-http://www.seoworkers.com/tools/analyzer.html
-http://travisleestreet.com/2013/07/best-seo-tools-for-online-marketers/
-http://2thetopdesign.com/the-4-seo-tools-you-need-to-know/
-http://www.bruceclay.com/seo/search-engine-optimization.htm
-http://www.bestseotool.com/
-http://www.papercutinteractive.com/blog/entry/the-best-seo-tools-for-beginners
-http://rankmondo.com/seo-tools/best-link-building-tools/
-http://blog.dh42.com/best-seo-tools/
-http://www.webseoanalytics.com/
-http://www.seotools.com/
-http://www.3rank.com/top-10-best-seo-tools-for-bloggers-and-webmasters/
-http://www.blogherald.com/2013/11/04/the-best-seo-tools-for-keyword-research/
-https://www.visibilitymagazine.com/buyersguide/best_seo_software
-http://www.localseoguide.com/local-seo-tools/
-http://www.business2community.com/seo/top-emerging-seo-tools-use-2014-0747745
-http://www.benchmarkemail.com/blogs/detail/best-seo-tools
-http://smallbusiness.yahoo.com/advisor/25-best-seo-tools-wordpress-plugins-195102924.html
-http://sourceforge.net/projects/seotoolkit/
-http://seocombine.com/
-http://www.conductor.com/resource-center/presentations/pubcon-new-orleans-2013-brian-mcdowell-best-seo-tools
-http://www.smallbiztechnology.com/archive/2012/06/13-top-seo-tools-for-startups.html/
-http://www.ask.com/question/what-are-the-best-free-online-seo-tools
-http://www.blackhatworld.com/blackhat-seo/f9-black-hat-seo-tools/
-http://www.bestseosuite.com/
-http://www.bestseobot.com/
-http://www.webmaster-talk.com/threads/200470-Which-is-the-best-SEO-tool-for-MAC
-http://blog.jimdo.com/top-5-free-seo-tools/
-http://www.searchenginexperts.com.au/seo-blog/top-10-free-seo-tools
-http://www.theseoace.com/resources/
-http://dashburst.com/top-seo-tools-to-combat-google-panda-and-penguin/
-http://www.atozbuzz.com/2013/02/5-best-seo-tools-for-your-websites.html
-http://www.seoworks.com/seo-tools-tips/best-seo-software-tools/
-http://smallseotools.com/backlink-maker/
-http://www.urlmd.com/seo/best-seo-tool-of-2013/
-http://www.siteopsys.com/
-http://www.trendmx.com/
-http://www.seochat.com/
-http://intechseo.com/seo-tools
-http://vkool.com/11-best-online-seo-tools/
-http://blogsuccessjournal.com/seo-search-engine-optimization/seo-tools/seo-tools-top-free-video/
-http://www.webseotoolbox.com/index.php?/Knowledgebase/List/Index/23/webmaster-tools
-http://www.seocompany.ca/tool/seo-tools.html
-http://www.blackhatprotools.com/
-http://seowebhosting.net/best-seo-tools/
-http://www.grademyseo.com/index.php?do=tools
-http://webmeup.com/seo-tools-review/
-http://seotoolsvps.ca/
-http://extremeseotools.com/signup/knowledgebase.php
-http://sickseo.co.uk/
-http://backlinko.com/white-hat-seo
-http://www.bloggingtips.com/2013/12/28/top-seo-tools-find-targeted-keywords/
-http://www.fatbit.com/fab/tag/best-seo-tool/
-http://seo.venturebeat.com/
-http://www.sheerseo.com/
-http://zwinks.org/blog/general/seo-tools-and-internet-marketing-software-of-choice/
-http://www.clambr.com/link-building-tools/
-http://www.bloggeryard.com/2013/11/best-free-seo-tools.html
-http://my.opera.com/tabreraliboldri/about/
-http://www.seoserviceslosangeles.com/free-seo-tools.php
-https://todaymade.com/blog/google-adwords-seo/
-http://inblurbs.com/blog/the-best-seo-tools-for-keyword-research/
-http://www.webhostingtalk.com/showthread.php?t=1324995
-http://www.hittail.com/
-http://thecreativemomentum.com/blog/2013/12/04/why-blogs-are-one-of-your-best-seo-tools/
-http://www.hubspot.com/products/seo
-http://www.quora.com/SEO-Tools/What-are-the-best-paid-tools-for-link-building
-http://www.getapp.com/seo-sem-software
-http://bestfreeseo.webs.com/
-http://www.seotoolset.com/tools/free_tools.html
-http://www.lakanephotography.co.uk/articles/free-seo-tools
-http://seositecheckup.com/
-http://spydermate.com/
-http://www.best-5.com/seo-tools/
-http://wpvkp.com/best-wordpress-seo-plugins/
-http://www.advancedwebranking.com/
-http://www.linkresearchtools.com/
-http://tripleseo.com/free-seo-tools/
-http://www.linkcollider.com/
-http://nohandsseo.com/
-http://5000best.com/tools/SEO_Tools/
-http://www.tipsandtricks-hq.com/top-10-seo-tools-and-add-ons-for-your-online-business-6510
-http://seotoolonline.com/
-http://www.staples.com/sbd/cre/tech-services/explore-tips-and-advice/tech-articles/optimize-away-top-seo-tools-tricks-to-dominate-google.html
-http://www.blackwoodproductions.com/blackwoodproductions.php?Action=cms&k=rebrand
-http://solutionsbydave.com/best-free-seo-tools-all-on-this-page-seo-expert-tools/
-http://www.bing.com/toolbox/seo-analyzer
-http://www.digitalmillionaires.com/forum/main-category/seo-tools/278-what-is-the-best-seo-tool-this-year
-http://www.quicksprout.com/2013/10/10/are-you-doing-your-seo-wrong/
-http://www.wordtracker.com/
-http://acodez.in/best-free-online-seo-tools-part-3/
-https://monitorbacklinks.com/seo-tools/free-backlink-checker
-http://www.practicalecommerce.com/articles/60622-27-WordPress-SEO-Plugins
-https://swissmademarketing.com/secockpit/
-http://www.seoinpractice.com/seo-software-bundle.html
-http://www.whitespark.ca/
-151
-About 14,100,000 results
 ```
 
 <a name="cli-usage" \>
@@ -346,7 +176,7 @@ About 14,100,000 results
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
 the following:
 ```
-python GoogleScraper.py sel --keyword-file path/to/keywordfile
+python GoogleScraper.py -m sel --keyword-file path/to/keywordfile
 ```
 
 Here *sel* marks the scraping mode as 'selenium'. This means GoogleScraper.py scrapes with real browsers. This is pretty powerful, since
@@ -369,7 +199,7 @@ you want to scrape every keyword. Just use the **-p** parameter as shown below:
 
 ```
 # searches all keywords in the keywordfile on 10 result pages
-python GoogleScraper.py sel --keyword-file path/to/keywordfile -p 10
+python GoogleScraper.py -m sel --keyword-file path/to/keywordfile -p 10
 ```
 
 By now, you have 10 results per page by default (google returns up to 100 results per page), but this will also be configurable in the near future. *http* mode

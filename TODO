@@ -14,15 +14,16 @@
 
 15.11.2014:
   - add shell access with sqlalchemy session [done]
-  - test selenium mode thoroughly
+  - test selenium mode thoroughly [done]
   - double check selectors
   - add alternative selectors
   - Add gevent support
-  - make all modes workable through proxies
-  - update README
+  - make all modes workable through proxies [done for http and sel]
+  - update README [done]
   - write blog post that illustrates usage of GoogleScraper
   - some testing
   - release version 0.2.0 on the cheeseshop
+      - released version 0.1.5 on pypy [done]
 
 
 
