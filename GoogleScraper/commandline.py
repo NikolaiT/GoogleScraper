@@ -63,7 +63,7 @@ def get_command_line(static_args=False):
 
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its rough length will be printed.''')
 
-    parser.add_argument('-v', '--verbosity', type=int, default=1,
+    parser.add_argument('-v', '--verbosity', type=int, default=2,
                         help='The verbosity of GoogleScraper output. 0: no ouput, 1: most necessary info (no results), 2: detailed scraping info (with results), > 2: Degbug info.')
 
     parser.add_argument('--view-config', action='store_true', default=False,

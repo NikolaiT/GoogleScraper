@@ -8,7 +8,7 @@ import bz2
 import re
 import logging
 import functools
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 from GoogleScraper.config import Config
 from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
@@ -246,8 +246,8 @@ def read_cached_file(path):
 
     # The path needs to have an extension in any case.
     # When uncompressed, ext is 'cache', else it is the
-    # compressing scheme file ending like .gz or .zip ...
-    assert ext
+    # compressing scheme file ending like .gz or .bz2 ...
+    assert ext in ALLOWED_COMPRESSION_ALGORITHMS or ext == 'cache', 'Invalid extension: {}'.format(ext)
 
     if ext == 'cache':
         with open(path, 'r') as fd:
@@ -404,6 +404,8 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
                     current_page=0,
                     current_keyword=query
                 )
+            except MultipleResultsFound as e:
+                raise e
             finally:
                 scraper_search.serps.append(serp)
 

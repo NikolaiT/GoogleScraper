@@ -209,7 +209,17 @@ def main(return_results=True):
     else:
         remaining = keywords
 
+    # remove duplicates and empty keywords
+    remaining = [keyword for keyword in set(remaining) if keyword]
+
     kwgroups = assign_keywords_to_scrapers(remaining)
+
+    if Config['SCRAPING'].getboolean('use_own_ip'):
+        proxies.append(None)
+    elif not proxies:
+        raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
+
+    chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
 
     # Create a lock to synchronize database access in the sqlalchemy session
     db_lock = threading.Lock()
@@ -225,12 +235,6 @@ def main(return_results=True):
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
 
-        if Config['SCRAPING'].getboolean('use_own_ip'):
-            proxies.append(None)
-        elif not proxies:
-            raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
-
-        chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
         for i, keyword_group in enumerate(kwgroups):
             scrapejobs.append(
                 SelScrape(
