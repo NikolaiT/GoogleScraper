@@ -1,5 +1,0 @@
-alpha
-beta
-citrus
-domino
-edgard

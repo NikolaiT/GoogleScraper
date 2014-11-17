@@ -347,7 +347,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         super().switch_proxy()
 
     def proxy_check(self):
-        assert self.proxy and self.requests
+        assert self.proxy and self.requests, 'ScraperWorker needs valid proxy instance and requests library to make the proxy check.'
 
         data = self.requests.get(Config['GLOBAL'].get('proxy_check_url')).text
 
@@ -355,6 +355,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
         else:
             logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
+
 
     def handle_request_denied(self, status_code):
         super().handle_request_denied()
@@ -529,7 +530,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
 
     def proxy_check(self):
-        assert self.proxy and self.webdriver
+        assert self.proxy and self.webdriver, 'Scraper instance needs valid webdriver and proxy instance to make the proxy check'
 
         self.webdriver.get(Config['GLOBAL'].get('proxy_check_url'))
 
@@ -660,7 +661,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def build_search(self):
         """Build the search for SelScrapers"""
         assert self.webdriver, 'Webdriver needs to be ready to build the search'
-
 
         # do the proxy check
         if Config['SCRAPING'].getboolean('check_proxies'):
