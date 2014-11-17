@@ -704,8 +704,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def search(self):
         """Search with webdriver.
 
-        Called within the blocking_search search loop.
-
+        Fills out the search form of the search engine for each keyword.
+        Clicks the next link while num_pages_per_keyword is not reached.
         """
         for self.current_keyword in self.keywords:
 
@@ -755,6 +755,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
 
     def run(self):
+        """Run the SelScraper."""
         if not self._get_webdriver():
             raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
 
