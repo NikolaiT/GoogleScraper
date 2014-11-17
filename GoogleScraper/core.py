@@ -161,10 +161,9 @@ def main(return_results=True):
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have:')
         logger.info('Scraped for {} keywords, with {} results a page, in total {} pages for each keyword'.format(
             len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_pages_for_keyword')))
-        parse_all_cached_files(keywords, None)
         logger.info('Used {} distinct proxies in total'.format(len(proxies)))
         if proxies:
-            logger.info('The following proxies are used: {}'.format('\t\t\n'.join(proxies)))
+            logger.info('The following proxies are used: {}'.format('\t\t\n'.join([proxy.host + ':' + proxy.port for proxy in proxies])))
 
         if Config['SCRAPING'].get('scrapemethod') == 'sel':
             mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
@@ -251,14 +250,15 @@ def main(return_results=True):
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http':
         threads = []
-        for group in kwgroups:
+        for i, keyword_group in enumerate(kwgroups):
             threads.append(
                 HttpScrape(
-                    keywords=group,
+                    keywords=keyword_group,
                     session=session,
                     scraper_search=scraper_search,
                     cache_lock=cache_lock,
-                    db_lock=db_lock
+                    db_lock=db_lock,
+                    proxy=proxies[i//chunks_per_proxy]
                 )
             )
 

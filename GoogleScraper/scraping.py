@@ -101,9 +101,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # The number of pages to scrape for each keyword
         self.num_pages_per_keyword = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
         
-        # The proxy to use
-        self.proxy = proxy
-        
         # The keywords that need to be scraped
         # If a SearchEngineScrape receives explicitly keywords,
         # scrape them. otherwise scrape the ones specified in the Config.
@@ -136,7 +133,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.proxy = proxy
         if proxy:
             self.set_proxy()
-            self.ip = self.proxy.host
+            self.ip = self.proxy.host + ':' + self.proxy.port
         else:
             self.ip = '127.0.0.1'
 
