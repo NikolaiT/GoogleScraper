@@ -224,7 +224,7 @@ class GoogleParser(Parser):
     
     search_types = ['normal', 'image']
     
-    num_results_search_selectors = 'div#resultStats'
+    num_results_search_selectors = '#resultStats'
     
     normal_search_selectors = {
         'results': {

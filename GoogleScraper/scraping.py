@@ -156,6 +156,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # init the cache lock
         self.cache_lock = cache_lock
 
+
     @abc.abstractmethod
     def search(self, *args, **kwargs):
         """Send the search request(s) over the transport."""
@@ -190,6 +191,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def switch_proxy(self, proxy):
         """Switch the proxy on the communication channel."""
+
+
+    @abc.abstractmethod
+    def proxy_check(self, proxy):
+        """Check whether the assigned proxy works correctly and react"""
+
         
     @abc.abstractmethod
     def handle_request_denied(self):
@@ -202,8 +209,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         num_results = 0
 
         ip = '127.0.0.1'
-        if self.proxy:
-            ip = self.proxy.ip
 
         serp = SearchEngineResultsPage(
             search_engine_name=self.search_engine,
@@ -312,6 +317,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         # the mode
         self.scrapemethod = 'http'
 
+        # check proxies first before anything
+        if Config['SCRAPING'].getboolean('check_proxies'):
+            self.proxy_check()
+
     def set_proxy(self):
         """Setup a socks connection for the socks module bound to this instance.
 
@@ -336,6 +345,16 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
     def switch_proxy(self, proxy):
         super().switch_proxy()
+
+    def proxy_check(self):
+        assert self.proxy and self.requests
+
+        data = self.requests.get(Config['GLOBAL'].get('proxy_check_url')).text
+
+        if not self.proxy.host in data:
+            logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
+        else:
+            logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
 
     def handle_request_denied(self, status_code):
         super().handle_request_denied()
@@ -508,6 +527,19 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def switch_proxy(self, proxy):
         """Switch the proxy on the communication channel."""
 
+
+    def proxy_check(self):
+        assert self.proxy and self.webdriver
+
+        self.webdriver.get(Config['GLOBAL'].get('proxy_check_url'))
+
+        data = self.webdriver.page_source
+
+        if not self.proxy.host in data:
+            logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
+        else:
+            logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
+
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
 
@@ -628,6 +660,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def build_search(self):
         """Build the search for SelScrapers"""
         assert self.webdriver, 'Webdriver needs to be ready to build the search'
+
+
+        # do the proxy check
+        if Config['SCRAPING'].getboolean('check_proxies'):
+            self.proxy_check()
 
         url_params= {
             'google': 'q={query}',
