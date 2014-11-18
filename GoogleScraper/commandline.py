@@ -19,11 +19,11 @@ def get_command_line(static_args=False):
                                      epilog='This program might infringe the Google TOS. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
     parser.add_argument('-m', '--scrapemethod', type=str, default='http',
-                        help='''The scraping type. There are currently three types: "http", "sel" and "http-async".
-                         "Http" scrapes with raw http requests, whereas "sel" uses the selenium framework to remotely control browsers'.
+                        help='''The scraping type. There are currently three types: "http", "selenium" and "http-async".
+                         "Http" scrapes with raw http requests, whereas "selenium" uses the selenium framework to remotely control browsers'.
                          "http-async" makes use of gevent and is well suited for extremely fast and explosive scraping jobs.
                          You may search more than 1000 requests per second if you have the necessary number of proxies available.
-                         ''', choices=('http', 'sel', 'http-async'))
+                         ''', choices=('http', 'selenium', 'http-async'))
 
     parser.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
 
@@ -38,7 +38,7 @@ def get_command_line(static_args=False):
 
     parser.add_argument('-n', '--num-results-per-page', type=int,
                          action='store', default=50,
-                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for sel mode.')
+                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode.')
 
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')

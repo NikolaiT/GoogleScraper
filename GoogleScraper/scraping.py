@@ -31,6 +31,8 @@ from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, Baidu
 logger = logging.getLogger('GoogleScraper')
 
 
+SEARCH_MODES = ('http', 'selenium', 'http-async')
+
 class GoogleSearchError(Exception):
     pass
 
@@ -45,6 +47,32 @@ class SeleniumMisconfigurationError(Exception):
 
 class SeleniumSearchError(Exception):
     pass
+
+
+def get_base_search_url_by_search_engine(search_engine_name, search_mode):
+    """Retrieves the search engine base url for a specific search_engine.
+
+    This function cascades. So base urls in the SCRAPING section will
+    be overwritten by search_engine urls in the specific mode sections.
+    On the other side, if a search engine has no special url in it' corresponding
+    mode, the default one from the SCRAPING config section will be loaded.
+
+    Args:
+        search_engine_name The name of the search engine
+        search_mode: The search mode that is used
+
+    Returns:
+        The base search url.
+    """
+    assert search_mode in SEARCH_MODES, 'search mode "{}" is not available'.format(search_mode)
+
+    specific_base_url = Config[search_mode.upper()].get('{}_search_url'.format(search_engine_name), None)
+
+    if not specific_base_url:
+        return Config['SCRAPING'].get('{}_search_url'.format(search_engine_name), None)
+    else:
+        return specific_base_url
+
     
 class SearchEngineScrape(metaclass=abc.ABCMeta):
     """Abstract base class that represents a search engine scrape.
@@ -142,9 +170,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         # the scraper_search object
         self.scraper_search = scraper_search
-
-        # get the base search url based on the search engine.
-        self.base_search_url = Config['SCRAPING'].get('{search_engine}_search_url'.format(search_engine=self.search_engine))
         
         # the scrape mode
         # to be set by subclasses
@@ -316,6 +341,9 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         # the mode
         self.scrapemethod = 'http'
+
+        # get the base search url based on the search engine.
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
 
         # check proxies first before anything
         if Config['SCRAPING'].getboolean('check_proxies'):
@@ -501,7 +529,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.captcha_lock = captcha_lock
         self.ip = '127.0.0.1'
         self.search_number = 0
-        self.scrapemethod = 'sel'
+        self.scrapemethod = 'selenium'
+
+        # get the base search url based on the search engine.
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
 
         # How long to sleep (ins seconds) after every n-th request
         self.sleeping_ranges = dict()

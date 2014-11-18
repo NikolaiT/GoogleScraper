@@ -18,7 +18,7 @@ setup(name='GoogleScraper',
       author='Nikolai Tschacher',
       author_email='admin@incolumitas.com',
       url='http://incolumitas.com',
-      py_modules=['use'],
+      py_modules=['usage'],
       packages=['GoogleScraper'],
       entry_points={'console_scripts': ['GoogleScraper = GoogleScraper.core:main']},
       package_data={

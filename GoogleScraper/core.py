@@ -96,7 +96,7 @@ def start_python_console(namespace=None, noipython=False, banner=''):
 
 
 
-def main(return_results=True):
+def main(return_results=False):
     """Runs the GoogleScraper application as determined by the various configuration points.
 
     The main() function encompasses the core functionality of GoogleScraper. But it
@@ -125,7 +125,8 @@ def main(return_results=True):
     proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
 
     if not (keyword or keywords) and not kwfile:
-        raise InvalidConfigurationException('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
+        logger.error('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
+        return
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):
         fix_broken_cache_names()
@@ -166,7 +167,7 @@ def main(return_results=True):
         if proxies:
             logger.info('The following proxies are used: {}'.format('\t\t\n'.join([proxy.host + ':' + proxy.port for proxy in proxies])))
 
-        if Config['SCRAPING'].get('scrapemethod') == 'sel':
+        if Config['SCRAPING'].get('scrapemethod') == 'selenium':
             mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
         else:
             mode = 'http mode'
@@ -222,7 +223,7 @@ def main(return_results=True):
     cache_lock = threading.Lock()
 
     # Let the games begin
-    if Config['SCRAPING'].get('scrapemethod', 'http') == 'sel':
+    if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
         # A lock to prevent multiple threads from solving captcha.
         lock = threading.Lock()
 
