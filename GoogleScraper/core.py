@@ -29,7 +29,7 @@ def scrape_with_config(config, **kwargs):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
 
     GoogleScraper.config.update_config(config)
-    return main(return_results=True, **kwargs)
+    return main(return_results=True, parse_cmd_line=False, **kwargs)
 
 def assign_keywords_to_scrapers(all_keywords):
     """Scrapers are often threads or asynchronous objects.
@@ -96,7 +96,7 @@ def start_python_console(namespace=None, noipython=False, banner=''):
 
 
 
-def main(return_results=False):
+def main(return_results=False, parse_cmd_line=True):
     """Runs the GoogleScraper application as determined by the various configuration points.
 
     The main() function encompasses the core functionality of GoogleScraper. But it
@@ -109,7 +109,8 @@ def main(return_results=False):
     Returns:
         A database session to the results when return_results is True
     """
-    parse_cmd_args()
+    if parse_cmd_line:
+        parse_cmd_args()
 
     if Config['GLOBAL'].getboolean('view_config'):
         from GoogleScraper.config import CONFIG_FILE

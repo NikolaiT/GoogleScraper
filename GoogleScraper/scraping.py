@@ -697,18 +697,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if Config['SCRAPING'].getboolean('check_proxies'):
             self.proxy_check()
 
-        url_params= {
-            'google': 'q={query}',
-            'yandex': 'text={query}',
-            'bing': 'q={query}',
-            'yahoo': 'p={query}',
-            'baidu': 'wd={query}',
-            'duckduckgo': 'q={query}'
+        starting_point = {
+            'google': 'https://www.google.com/',
+            'yandex': 'http://www.yandex.ru/',
+            'bing': 'http://www.bing.com/',
+            'yahoo': 'https://yahoo.com/',
+            'baidu': 'http://baidu.com/',
+            'duckduckgo': 'https://duckduckgo.com/'
         }[self.search_engine]
 
-        url_params = url_params.format(query=self.current_keyword)
-
-        self.starting_point = self.base_search_url +  url_params
+        self.starting_point = starting_point
 
         self.webdriver.get(self.starting_point)
 
@@ -774,6 +772,20 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """
         for self.current_keyword in self.keywords:
 
+            try:
+                self.search_input = WebDriverWait(self.webdriver, 5).until(
+                    EC.presence_of_element_located(self._get_search_input_field()))
+            except TimeoutException as e:
+                logger.error(e)
+                if not self.handle_request_denied():
+                    open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
+                    raise GoogleSearchError('search input field cannot be found.')
+
+            if self.search_input:
+                self.search_input.clear()
+                time.sleep(.25)
+                self.search_input.send_keys(self.current_keyword + Keys.ENTER)
+
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
                 # match the largest sleep range
                 sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
@@ -806,20 +818,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                     if not self.next_url:
                         break
-
-            try:
-                self.search_input = WebDriverWait(self.webdriver, 5).until(
-                    EC.presence_of_element_located(self._get_search_input_field()))
-            except TimeoutException as e:
-                logger.error(e)
-                if not self.handle_request_denied():
-                    open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
-                    raise GoogleSearchError('search input field cannot be found.')
-
-            if self.search_input:
-                self.search_input.clear()
-                time.sleep(.25)
-                self.search_input.send_keys(self.current_keyword + Keys.ENTER)
 
 
     def run(self):

@@ -14,13 +14,14 @@ if __name__ == '__main__':
         'SCRAPING': {
             'use_own_ip': 'True',
             'keyword': 'Let\'s go bubbles!',
-            'search_engine': 'yandex'
+            'search_engine': 'yandex',
+            'num_pages_for_keyword': 1
         },
         'SELENIUM': {
             'sel_browser': 'chrome',
         },
         'GLOBAL': {
-            'do_caching': 'True'
+            'do_caching': 'False'
         }
     }
 
