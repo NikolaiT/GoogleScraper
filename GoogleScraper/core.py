@@ -124,6 +124,20 @@ def main(return_results=False):
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
     proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
 
+    if Config['GLOBAL'].getboolean('shell', False):
+        namespace = {}
+        namespace['session'] = get_session(scoped=False, create=False)
+        namespace['ScraperSearch'] = ScraperSearch
+        namespace['SERP'] = SERP
+        namespace['Link'] = Link
+        print('Available objects:')
+        print('session - A sqlalchemy session of the results database')
+        print('ScraperSearch - Search/Scrape job instances')
+        print('SERP - A search engine results page')
+        print('Link - A single link belonging to a SERP')
+        start_python_console(namespace)
+        return
+
     if not (keyword or keywords) and not kwfile:
         logger.error('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
         return
@@ -172,20 +186,6 @@ def main(return_results=False):
         else:
             mode = 'http mode'
         logger.info('By using scrapemethod: {}'.format(mode))
-        return
-
-    if Config['GLOBAL'].getboolean('shell', False):
-        namespace = {}
-        namespace['session'] = get_session(scoped=False, create=False)
-        namespace['ScraperSearch'] = ScraperSearch
-        namespace['SERP'] = SERP
-        namespace['Link'] = Link
-        print('Available objects:')
-        print('session - A sqlalchemy session of the results database')
-        print('ScraperSearch - Search/Scrape job instances')
-        print('SERP - A search engine results page')
-        print('Link - A single link belonging to a SERP')
-        start_python_console(namespace)
         return
 
     # get a scoped sqlalchemy session

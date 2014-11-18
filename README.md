@@ -1,10 +1,8 @@
-## GoogleScraper - Scraping the Google Search Engine
+# GoogleScraper - Scraping search engines professionally
 
-### News 
+### Updated README on 17th november 2014
 
-## Updated README on 17th november 2014
-
-**Thanks for your patience. A more or less stable version (0.1.5) is on pypy available! **
+**Thanks for your patience. A more or less stable version (0.1.6) is on pypy available! **
 
 *If you need the latest bug fixes and the most recent version, just install directly from this repo here:*
 
@@ -24,7 +22,7 @@ pip install git+git://github.com/NikolaiT/GoogleScraper/
 
 
 <a name="install" \>
-### Installation
+## Installation
 
 GoogleScraper is written in Python 3. You should install at least Python 3.4
 Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode (I didn't have to). On Ubuntu 14.04
@@ -59,7 +57,7 @@ usable version.
 
 
 <a name="about" />
-### What does GoogleScraper.py?
+## What does GoogleScraper.py?
 
 GoogleScraper parses Google search engine results (and many other search engines *_*) easily and in a fast way. It allows you to extract all found
 links and their titles and descriptions programmatically which enables you to process scraped data further.
@@ -90,6 +88,14 @@ GoogleScraper is implemented with the following techniques/software:
   * Socks4
   * HttpProxy
 + Support for alternative search modes like news/image/video search.
+
+### What search engines are suppported ?
+Currently the following search engines are supported:
++ Google
++ Bing
++ Qandex
++ Baidu
++ Duckduckgo
 
 ### How does GoogleScraper maximize the amount of extracted information per IP address?
 
@@ -125,7 +131,7 @@ Some interesting technologies/software to do so:
 
 
 <a name="usage" \>
-### Example Usage
+## Example Usage
 Here you can learn how to use GoogleScrape from within your own Python scripts.
 
 ```python
@@ -171,17 +177,19 @@ if __name__ == '__main__':
 ```
 
 <a name="cli-usage" \>
-### Direct command line usage
+## Direct command line usage
 
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
 the following:
 ```
-python GoogleScraper.py -m sel --keyword-file path/to/keywordfile
+GoogleScraper --keyword-file /tmp/keywords --search-engine bing --num-pages-for-keyword 3 --scrapemethod selenium
 ```
 
 Here *sel* marks the scraping mode as 'selenium'. This means GoogleScraper.py scrapes with real browsers. This is pretty powerful, since
 you can scrape long and a lot of sites (Google has a hard time blocking real browsers). The argument of the flag `--keyword-file` must be a file with keywords separated by
 newlines. So: For every google query one line. Easy, isnt' it?
+
+Furthermore, the option `--num-pages-for-keyword` means that GoogleScraper will fetch 3 consecutive pages for each keyword.
 
 Example keyword-file:
 ```
@@ -194,19 +202,10 @@ intitle:"admin config"
 Best brothels in atlanta
 ```
 
-By default, *sel* mode only requests the first 10 results for each keyword. But you can specify on how many Google result pages
-you want to scrape every keyword. Just use the **-p** parameter as shown below:
-
+After the scraping you'll automatically have a new sqlite3 database in the named `google_scraper.db` in the same directory. You can open and inspect the database with the command:
 ```
-# searches all keywords in the keywordfile on 10 result pages
-python GoogleScraper.py -m sel --keyword-file path/to/keywordfile -p 10
+GoogleScraper --shell
 ```
-
-By now, you have 10 results per page by default (google returns up to 100 results per page), but this will also be configurable in the near future. *http* mode
-supports up to 100 results per page.
-
-After the scraping you'll automatically have a new sqlite3 database in the ```google_scraper_results``` directory (with a date time string as file name). You can open the database with any sqlite3 command
-line tool or other software.
 
 It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
 bit higher (in the top of the script file).
@@ -223,16 +222,13 @@ socks5 127.0.0.1:1080 blabla:12345
 socks4 77.66.55.44:9999 elite:js@fkVA3(Va3)
 ```
 
-That's basically all for the *sel* modeHave fun.
-
 In case you want to use GoogleScraper.py in *http* mode (which means that raw http headers are sent), use it as follows:
 
 ```
-python GoogleScraper.py http -p 1 -n 25 -q "keywords separated by whitespaces"
+GoogleScraper -m http -p 1 -n 25 -q "white light"
 ```
-
 <a name="contact" \>
-### Contact
+## Contact
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
 
