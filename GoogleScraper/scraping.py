@@ -804,6 +804,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 if self.current_page < self.num_pages_per_keyword + 1:
                     self.next_url = self._goto_next_page()
 
+                    if not self.next_url:
+                        break
+
             try:
                 self.search_input = WebDriverWait(self.webdriver, 5).until(
                     EC.presence_of_element_located(self._get_search_input_field()))
