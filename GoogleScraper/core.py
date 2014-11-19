@@ -172,6 +172,11 @@ def main(return_results=False, parse_cmd_line=True):
     elif proxy_file:
         proxies = parse_proxy_file(proxy_file)
 
+    if Config['SCRAPING'].getboolean('use_own_ip'):
+        proxies.append(None)
+    elif not proxies:
+        raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
+
     valid_search_types = ('normal', 'video', 'news', 'image')
     if Config['SCRAPING'].get('search_type') not in valid_search_types:
         InvalidConfigurationException('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
@@ -181,15 +186,15 @@ def main(return_results=False, parse_cmd_line=True):
         logger.info('If GoogleScraper would have been run without the --simulate flag, it would have:')
         logger.info('Scraped for {} keywords, with {} results a page, in total {} pages for each keyword'.format(
             len(keywords), Config['SCRAPING'].getint('num_results_per_page', 0), Config['SCRAPING'].getint('num_pages_for_keyword')))
-        logger.info('Used {} distinct proxies in total'.format(len(proxies)))
-        if proxies:
-            logger.info('The following proxies are used: {}'.format('\t\t\n'.join([proxy.host + ':' + proxy.port for proxy in proxies])))
-
-        if Config['SCRAPING'].get('scrapemethod') == 'selenium':
-            mode = 'selenium mode with {} browser instances'.format(Config['SELENIUM'].getint('num_browser_instances'))
+        if None in proxies:
+            logger.info('Also using own ip address to scrape.')
         else:
-            mode = 'http mode'
-        logger.info('By using scrapemethod: {}'.format(mode))
+            logger.info('Not scraping with own ip address.')
+        logger.info('Used {} unique ip addresses in total'.format(len(proxies)))
+        if proxies:
+            logger.info('The following proxies are used: \n\t\t{}'.format('\n\t\t'.join([proxy.host + ':' + proxy.port for proxy in proxies if proxy])))
+
+        logger.info('By using {} mode with {} worker instances'.format(Config['SCRAPING'].get('scrapemethod'), Config['SCRAPING'].getint('num_workers')))
         return
 
     # get a scoped sqlalchemy session
@@ -212,12 +217,6 @@ def main(return_results=False, parse_cmd_line=True):
     remaining = [keyword for keyword in set(remaining) if keyword]
 
     kwgroups = assign_keywords_to_scrapers(remaining)
-
-    if Config['SCRAPING'].getboolean('use_own_ip'):
-        proxies.append(None)
-    elif not proxies:
-        raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
-
     chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
 
     # Create a lock to synchronize database access in the sqlalchemy session
@@ -241,6 +240,7 @@ def main(return_results=False, parse_cmd_line=True):
 
         for k, search_engine in enumerate(search_engines):
             for i, keyword_group in enumerate(kwgroups):
+                proxy_to_use = proxies[i//chunks_per_proxy]
                 if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
                     scrapejobs.append(
                         SelScrape(
@@ -252,7 +252,7 @@ def main(return_results=False, parse_cmd_line=True):
                             scraper_search=scraper_search,
                             captcha_lock=captcha_lock,
                             browser_num=i,
-                            proxy=proxies[i//chunks_per_proxy]
+                            proxy=proxy_to_use
                         )
                     )
                 elif Config['SCRAPING'].get('scrapemethod') == 'http':
@@ -263,7 +263,7 @@ def main(return_results=False, parse_cmd_line=True):
                             scraper_search=scraper_search,
                             cache_lock=cache_lock,
                             db_lock=db_lock,
-                            proxy=proxies[i//chunks_per_proxy]
+                            proxy=proxy_to_use
                         )
                     )
 

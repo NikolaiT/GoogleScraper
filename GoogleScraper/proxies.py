@@ -35,17 +35,18 @@ def parse_proxy_file(fname):
     if os.path.exists(path):
         with open(path, 'r') as pf:
             for line in pf.readlines():
-                tokens = line.replace('\n', '').split(' ')
-                try:
-                    proto = tokens[0]
-                    host, port = tokens[1].split(':')
-                except:
-                    raise Exception('Invalid proxy file. Should have the following format: {}'.format(parse_proxy_file.__doc__))
-                if len(tokens) == 3:
-                    username, password = tokens[2].split(':')
-                    proxies.append(Proxy(proto=proto, host=host, port=port, username=username, password=password))
-                else:
-                    proxies.append(Proxy(proto=proto, host=host, port=port, username='', password=''))
+                if not (line.strip().startswith('#') or line.strip().startswith('//')):
+                    tokens = line.replace('\n', '').split(' ')
+                    try:
+                        proto = tokens[0]
+                        host, port = tokens[1].split(':')
+                    except:
+                        raise Exception('Invalid proxy file. Should have the following format: {}'.format(parse_proxy_file.__doc__))
+                    if len(tokens) == 3:
+                        username, password = tokens[2].split(':')
+                        proxies.append(Proxy(proto=proto, host=host, port=port, username=username, password=password))
+                    else:
+                        proxies.append(Proxy(proto=proto, host=host, port=port, username='', password=''))
         return proxies
     else:
         raise ValueError('No such file/directory')

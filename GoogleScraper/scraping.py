@@ -347,6 +347,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         if Config['SCRAPING'].getboolean('check_proxies'):
             self.proxy_check()
 
+        out('[+] HttpScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}'.format(
+            self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+
+
     def set_proxy(self):
         """Setup a socks connection for the socks module bound to this instance.
 
@@ -462,12 +466,12 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         if not html:
             try:
-                if Config['GLOBAL'].getint('verbosity', 0) > 1:
-                    logger.info('[HTTP] Base_url: {base_url}, headers={headers}, params={params}'.format(
-                        base_url=self.base_search_url,
-                        headers=self.headers,
-                        params=self.search_params)
-                    )
+                out('[HTTP - {proxy}] Base_url: {base_url}, headers={headers}, params={params}'.format(
+                    proxy=self.proxy,
+                    base_url=self.base_search_url,
+                    headers=self.headers,
+                    params=self.search_params),
+                lvl=3)
 
                 request = self.requests.get(self.base_search_url, headers=self.headers,
                                  params=self.search_params, timeout=3.0)
@@ -539,7 +543,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             key, value = line.split(';')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
-        out('[+] SelScraper[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword, self.name), lvl=2)
+        out('[+] SelScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(
+            self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword, self.name), lvl=1)
 
     def _largest_sleep_range(self, search_number):
         assert search_number >= 0
