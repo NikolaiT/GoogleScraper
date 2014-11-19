@@ -151,7 +151,7 @@ def maybe_clean_cache():
     if os.path.exists(cachedir):
         for fname in os.listdir(cachedir):
             path = os.path.join(cachedir, fname)
-            if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after', 12)):
+            if time.time() > os.path.getmtime(path) + (60 * 60 * Config['GLOBAL'].getint('clean_cache_after', 48)):
                 # Remove the whole directory if necessary
                 if os.path.isdir(path):
                     import shutil
@@ -212,7 +212,7 @@ def get_cached(keyword, search_engine, scrapemode):
         except FileNotFoundError as err:
             return False
 
-        if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after', 12):
+        if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after', 48):
             return False
 
         path = os.path.join(cdir, fname)
@@ -344,7 +344,7 @@ def _caching_is_one_to_one(keywords, search_engine, scrapemode):
         return True
 
 
-def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
+def parse_all_cached_files(keywords, search_engines, session, scraper_search, try_harder=False):
     """Walk recursively through the cachedir (as given by the Config) and parse all cached files.
 
     Args:
@@ -359,19 +359,19 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
     google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
     files = _get_all_cache_files()
     mapping = {}
-    search_engine = Config['SCRAPING'].get('search_engines')
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
     for kw in keywords:
-        key = cached_file_name(kw, search_engine, scrapemethod)
+        for search_engine in search_engines:
+            key = cached_file_name(kw, search_engine, scrapemethod)
 
-        out('Params(keyword="{kw}", search_engine="{se}", scrapemethod="{sm}" yields {hash}'.format(
-                kw=kw,
-                se=search_engine,
-                sm=scrapemethod,
-                hash=key
-            ), lvl=5)
+            out('Params(keyword="{kw}", search_engine="{se}", scrapemethod="{sm}" yields {hash}'.format(
+                    kw=kw,
+                    se=search_engine,
+                    sm=scrapemethod,
+                    hash=key
+                ), lvl=5)
 
-        mapping[key] = kw
+            mapping[key] = kw
 
     for path in files:
         # strip of the extension of the path if it has eny
@@ -388,7 +388,7 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
             try:
-                serp =  session.query(SearchEngineResultsPage).filter(
+                serp = session.query(SearchEngineResultsPage).filter(
                         SearchEngineResultsPage.query == query,
                         SearchEngineResultsPage.search_engine_name == search_engine,
                         SearchEngineResultsPage.scrapemethod == scrapemethod).one()
@@ -397,6 +397,7 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
                 # we have a cache file that matches the above identifying information
                 # but it was never stored to the database.
                 logger.error('No entry for file {} found in database. Will parse again.'.format(clean_filename))
+                start = time.clock()
                 serp = parse_serp(
                     html=read_cached_file(get_path(fname)),
                     search_engine=search_engine,
@@ -404,15 +405,14 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
                     current_page=0,
                     current_keyword=query
                 )
+                stop = time.clock()
+                print('elapsed: {}'.format(stop-start))
             except MultipleResultsFound as e:
                 raise e
             finally:
                 scraper_search.serps.append(serp)
 
             mapping.pop(clean_filename)
-
-        # TODO: support query detection for all supported search engines
-        # by parsing the keyword, search engine from the raw html
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
     out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(

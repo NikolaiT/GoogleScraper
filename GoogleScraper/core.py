@@ -204,7 +204,7 @@ def main(return_results=False, parse_cmd_line=True):
 
     # First of all, lets see how many keywords remain to scrape after parsing the cache
     if Config['GLOBAL'].getboolean('do_caching'):
-        remaining = parse_all_cached_files(keywords, session, scraper_search)
+        remaining = parse_all_cached_files(keywords, search_engines, session, scraper_search)
     else:
         remaining = keywords
 

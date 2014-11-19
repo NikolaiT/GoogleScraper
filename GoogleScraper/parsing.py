@@ -119,57 +119,61 @@ class Parser():
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
         self.search_results['num_results'] = ''
-        if num_results_selector:
-            try:
-                self.search_results['num_results'] = self.dom.xpath(css_to_xpath(num_results_selector))[0].text_content()
-            except IndexError as e:
-                logger.warning('Cannot parse num_results from serp page')
+        if isinstance(num_results_selector, list) and num_results_selector:
+            for selector in num_results_selector:
+                try:
+                    self.search_results['num_results'] = self.dom.xpath(css_to_xpath(selector))[0].text_content()
+                except IndexError as e:
+                    logger.warning('Cannot parse num_results from serp page with selector {}'.format(selector))
+                else: # leave when first selector grabbed something
+                    break
 
         if not selector_dict:
             raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
             
-        for result_type, selectors in selector_dict.items():
-            self.search_results[result_type] = []
-            
-            results = self.dom.xpath(
-                css_to_xpath('{container} {result_container}'.format(**selectors))
-            )
-            
-            to_extract = set(selectors.keys()) - {'container', 'result_container'}                
-            selectors_to_use = dict(((key, selectors[key]) for key in to_extract if key in selectors.keys()))
-            
-            for index, result in enumerate(results):
-                # Let's add primitive support for CSS3 pseudo selectors
-                # We just need two of them
-                # ::text
-                # ::attr(someattribute)
-                
-                # You say we should use xpath expresssions instead?
-                # Maybe you're right, but they are complicated when it comes to classes,
-                # have a look here: http://doc.scrapy.org/en/latest/topics/selectors.html
-                serp_result = {}
-                for key, selector in selectors_to_use.items():
-                    value = None
-                    if selector.endswith('::text'):
-                        try:
-                            value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].text_content()
-                        except IndexError as e:
-                            pass
-                    else:
-                        attr = re.search(r'::attr\((?P<attr>.*)\)$', selector).group('attr')
-                        if attr:
+        for result_type, selector_class in selector_dict.items():
+            for selector_specific, selectors in selector_class.items():
+                self.search_results[result_type] = []
+
+                results = self.dom.xpath(
+                    css_to_xpath('{container} {result_container}'.format(**selectors))
+                )
+
+                to_extract = set(selectors.keys()) - {'container', 'result_container'}
+                selectors_to_use = dict(((key, selectors[key]) for key in to_extract if key in selectors.keys()))
+
+                for index, result in enumerate(results):
+                    # Let's add primitive support for CSS3 pseudo selectors
+                    # We just need two of them
+                    # ::text
+                    # ::attr(someattribute)
+
+                    # You say we should use xpath expresssions instead?
+                    # Maybe you're right, but they are complicated when it comes to classes,
+                    # have a look here: http://doc.scrapy.org/en/latest/topics/selectors.html
+                    serp_result = {}
+                    for key, selector in selectors_to_use.items():
+                        value = None
+                        if selector.endswith('::text'):
                             try:
-                                value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].get(attr)
+                                value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].text_content()
                             except IndexError as e:
                                 pass
                         else:
-                            try:
-                                value = result.xpath(css_to_xpath(selector))[0].text_content()
-                            except IndexError as e:
-                                pass
-                    serp_result[key] = value
-                if serp_result:
-                    self.search_results[result_type].append(serp_result)
+                            attr = re.search(r'::attr\((?P<attr>.*)\)$', selector).group('attr')
+                            if attr:
+                                try:
+                                    value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].get(attr)
+                                except IndexError as e:
+                                    pass
+                            else:
+                                try:
+                                    value = result.xpath(css_to_xpath(selector))[0].text_content()
+                                except IndexError as e:
+                                    pass
+                        serp_result[key] = value
+                    if serp_result:
+                        self.search_results[result_type].append(serp_result)
 
     def clean_html(self, html):
         """Clean the html from any bloated data that is of no interest.
@@ -216,6 +220,14 @@ then you're adding a new search type with the name finance.
 
 Each class needs a attribute called num_results_search_selectors, that
 extracts the number of searches that were found by the keyword.
+
+Please note:
+The actual selectors are wrapped in a dictionary to clarify with which IP
+they were requested. The key to the wrapper div allows to specify distinct
+criteria to whatever settings you used when you requested the page. So you
+might add your own selectors for different User-Agents, distinct HTTP headers, what-
+ever you may imagine. This allows the most dynamic parsing behaviour and makes
+it very easy to grab all data the site has to offer.
 """
 
 
@@ -224,24 +236,47 @@ class GoogleParser(Parser):
     
     search_types = ['normal', 'image']
     
-    num_results_search_selectors = '#resultStats'
+    num_results_search_selectors = ['#resultStats']
     
     normal_search_selectors = {
         'results': {
-            'container': '#center_col',
-            'result_container': 'li.g ',
-            'link': 'h3.r > a:first-child::attr(href)',
-            'snippet': 'div.s span.st::text',
-            'title': 'h3.r > a:first-child::text',
-            'visible_link': 'cite::text'
+            'us_ip': {
+                'container': '#center_col',
+                'result_container': 'li.g ',
+                'link': 'h3.r > a:first-child::attr(href)',
+                'snippet': 'div.s span.st::text',
+                'title': 'h3.r > a:first-child::text',
+                'visible_link': 'cite::text'
+            },
+            'de_ip': {
+                'container': '#center_col',
+                'result_container': 'li.g ',
+                'link': 'h3.r > a:first-child::attr(href)',
+                'snippet': 'div.s span.st::text',
+                'title': 'h3.r > a:first-child::text',
+                'visible_link': 'cite::text'
+            }
         },
-        'ads_main' : {
-            'container': '#center_col',
-            'result_container': 'li.ads-ad',
-            'link': 'h3.r > a:first-child::attr(href)',
-            'snippet': 'div.s span.st::text',
-            'title': 'h3.r > a:first-child::text',
-            'visible_link': '.ads-visurl cite::text',
+        'ads_main': {
+            'us_ip': {
+                'container': '#center_col',
+                'result_container': 'li.ads-ad',
+                'link': 'h3.r > a:first-child::attr(href)',
+                'snippet': 'div.s span.st::text',
+                'title': 'h3.r > a:first-child::text',
+                'visible_link': '.ads-visurl cite::text',
+            },
+            'de_ip': {
+                'container': '#center_col',
+                'result_container': '.ads-ad',
+                'link': 'h3 > a:first-child::attr(href)',
+                'snippet': '.ads-creative::text',
+                'title': 'h3 > a:first-child::text',
+                'visible_link': '.ads-visurl cite::text',
+            }
+        },
+        'ads_aside': {
+
         }
     }
     
@@ -280,17 +315,19 @@ class YandexParser(Parser):
 
     search_types = ['normal']
     
-    num_results_search_selectors = None
+    num_results_search_selectors = []
     
     normal_search_selectors = {
         'results': {
-            'container': 'div.serp-list',
-            'result_container': 'div.serp-item__wrap ',
-            'link': 'a.serp-item__title-link::attr(href)',
-            'snippet': 'div.serp-item__text::text',
-            'title': 'a.serp-item__title-link::text',
-            'visible_link': 'a.serp-url__link::attr(href)'
-        },
+            'de_ip': {
+                'container': 'div.serp-list',
+                'result_container': 'div.serp-item__wrap ',
+                'link': 'a.serp-item__title-link::attr(href)',
+                'snippet': 'div.serp-item__text::text',
+                'title': 'a.serp-item__title-link::text',
+                'visible_link': 'a.serp-url__link::attr(href)'
+            }
+        }
     }
     
     
@@ -299,24 +336,44 @@ class BingParser(Parser):
     
     search_types = ['normal']
     
-    num_results_search_selectors = '.sb_count'
+    num_results_search_selectors = ['.sb_count']
     
     normal_search_selectors = {
         'results': {
-            'container': '#b_results',
-            'result_container': '.b_algo',
-            'link': 'h2 > a::attr(href)',
-            'snippet': '.b_caption > .b_attribution > p::text',
-            'title': 'h2::text',
-            'visible_link': 'cite::text'
+            'us_ip': {
+                'container': '#b_results',
+                'result_container': '.b_algo',
+                'link': 'h2 > a::attr(href)',
+                'snippet': '.b_caption > .b_attribution > p::text',
+                'title': 'h2::text',
+                'visible_link': 'cite::text'
+            },
+            'de_ip': {
+                'container': '#b_results',
+                'result_container': '.b_algo',
+                'link': 'h2 > a::attr(href)',
+                'snippet': '.b_caption > p::text',
+                'title': 'h2::text',
+                'visible_link': 'cite::text'
+            }
         },
-        'ads_main' : {
-            'container': 'ol#b_results',
-            'result_container': 'li.b_ad',
-            'link': '.sb_add > h2 > a::attr(href)',
-            'snippet': '.b_caption::text',
-            'title': '.sb_add > h2 > a::text',
-            'visible_link': 'cite::text'
+        'ads_main': {
+            'us_ip': {
+                'container': '#b_results .b_ad',
+                'result_container': '.sb_add',
+                'link': 'h2 > a::attr(href)',
+                'snippet': '.sb_addesc::text',
+                'title': 'h2 > a::text',
+                'visible_link': 'cite::text'
+            },
+            'de_ip': {
+                'container': '#b_results .b_ad',
+                'result_container': '.sb_add',
+                'link': 'h2 > a::attr(href)',
+                'snippet': '.b_caption > p::text',
+                'title': 'h2 > a::text',
+                'visible_link': 'cite::text'
+            }
         }
     }
 
@@ -326,16 +383,18 @@ class YahooParser(Parser):
     
     search_types = ['normal']
     
-    num_results_search_selectors = '#pg > span:last-child'
+    num_results_search_selectors = ['#pg > span:last-child']
     
     normal_search_selectors = {
         'results': {
-            'container': '#main',
-            'result_container': '.res',
-            'link': 'div > h3 > a::attr(href)',
-            'snippet': 'div.abstr::text',
-            'title': 'div > h3 > a::text',
-            'visible_link': 'span.url::text'
+            'de_ip': {
+                'container': '#main',
+                'result_container': '.res',
+                'link': 'div > h3 > a::attr(href)',
+                'snippet': 'div.abstr::text',
+                'title': 'div > h3 > a::text',
+                'visible_link': 'span.url::text'
+            }
         },
     }
     
@@ -345,16 +404,18 @@ class BaiduParser(Parser):
     
     search_types = ['normal']
     
-    num_results_search_selectors = '#container .nums'
+    num_results_search_selectors = ['#container .nums']
     
     normal_search_selectors = {
         'results': {
-            'container': '#content_left',
-            'result_container': '.result-op',
-            'link': 'h3 > a.t::attr(href)',
-            'snippet': '.c-abstract::text',
-            'title': 'h3 > a.t::text',
-            'visible_link': 'span.c-showurl::text'
+            'de_ip': {
+                'container': '#content_left',
+                'result_container': '.result-op',
+                'link': 'h3 > a.t::attr(href)',
+                'snippet': '.c-abstract::text',
+                'title': 'h3 > a.t::text',
+                'visible_link': 'span.c-showurl::text'
+            }
         },
     }
 
@@ -364,16 +425,18 @@ class DuckduckgoParser(Parser):
     
     search_types = ['normal']
     
-    num_results_search_selectors = None
+    num_results_search_selectors = []
     
     normal_search_selectors = {
         'results': {
-            'container': '#links',
-            'result_container': '.result',
-            'link': '.result__title > a::attr(href)',
-            'snippet': 'result__snippet::text',
-            'title': '.result__title > a::text',
-            'visible_link': '.result__url__domain::text'
+            'de_ip': {
+                'container': '#links',
+                'result_container': '.result',
+                'link': '.result__title > a::attr(href)',
+                'snippet': 'result__snippet::text',
+                'title': '.result__title > a::text',
+                'visible_link': '.result__url__domain::text'
+            }
         },
     }
 

@@ -17,27 +17,20 @@ Config = {
         'scrapemethod': 'http'
     },
     'GLOBAL': {
-        # The database name, with a timestamp as fmt
-        'db': 'results_{asctime}.db',
         # The directory path for cached google results
         'do_caching': True,
         # If set, then compress/decompress files
         'compress_cached_files': True,
         # If set, use this compressing algorithm, else just use zip
-        'compressing_algorithm': 'zip',
+        'compressing_algorithm': 'gz',
         # Whether caching shall be enabled
         'cachedir': '.scrapecache/',
         # After how many hours should the cache be cleaned
-        'clean_cache_after': 24,
-        # Commit changes to db every N requests per GET/POST request
-        'commit_interval': 10,
-        # unique identifier that is sent to signal that a queue has
-        # processed all inputs
-        'all_processed_sig': 'kLQ#vG*jatBv$32JKlAvcK90DsvGskAkVfBr',
+        'clean_cache_after': 48,
     },
     'SELENIUM': {
         # The maximal amount of selenium browser windows running in parallel
-        'num_browser_instances': 8,
+        'num_browser_instances': 4,
         # The base Google URL for SelScraper objects
         'sel_scraper_base_url': 'http://www.google.com/ncr',
         # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
