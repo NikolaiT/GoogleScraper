@@ -361,6 +361,8 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
     files = _get_all_cache_files()
     mapping = {}
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
+    num_cached = 0
+
     for kw in keywords:
         for search_engine in search_engines:
             key = cached_file_name(kw, search_engine, scrapemethod)
@@ -381,7 +383,6 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
         for ext in ALLOWED_COMPRESSION_ALGORITHMS:
             if fname.endswith(ext):
                 clean_filename = fname.rstrip('.' + ext)
-
 
         query = search_engine = None
         val = mapping.get(clean_filename, None)
@@ -417,15 +418,16 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
                 scraper_search.serps.append(serp)
 
             mapping.pop(clean_filename)
+            num_cached += 1
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
     out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
-        len(keywords) - len(mapping), len(keywords), len(mapping)), lvl=1)
+        num_cached, len(keywords), len(keywords) - num_cached), lvl=1)
 
     session.add(scraper_search)
     session.commit()
     # return the remaining keywords to scrape
-    return mapping.values()
+    return [e[0] for e in mapping.values()]
 
 
 def fix_broken_cache_names(url, search_engine, scrapemode):
