@@ -72,8 +72,8 @@ def get_command_line(static_args=False):
     parser.add_argument('--mysql-proxy-db', action='store',
                         help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
 
-    parser.add_argument('--search-engine', action='store',
-                        help='What search engine to use. Supported search engines: google, yandex, bing, yahoo, baidu, duckduckgo')
+    parser.add_argument('--search-engines', action='store',
+                        help='What search engines to use. Supported search engines: google, yandex, bing, yahoo, baidu, duckduckgo. If you want to use more than one concurrently, just separate with commatas: "google, bing, yandex"')
 
 
     if static_args:
@@ -85,6 +85,6 @@ def get_command_line(static_args=False):
                                 in args.__dict__.items() if (key in L and value is not None)])
 
     return {
-        'SCRAPING': make_dict(['search_engine', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
+        'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
         'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell'])
     }

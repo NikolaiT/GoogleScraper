@@ -114,10 +114,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         Args:
             TODO
         """
-        if not search_engine:
-            self.search_engine = Config['SCRAPING'].get('search_engine', 'google')
-        else:
-            self.search_engine = search_engine
+        self.search_engine = search_engine
+        assert self.search_engine, 'You need to specify an search_engine'
 
         self.search_engine = self.search_engine.lower()
 
@@ -798,7 +796,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
                 except TimeoutException as e:
                     logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
-
 
                 html = self.webdriver.page_source
 

@@ -359,7 +359,7 @@ def parse_all_cached_files(keywords, session, scraper_search, try_harder=False):
     google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
     files = _get_all_cache_files()
     mapping = {}
-    search_engine = Config['SCRAPING'].get('search_engine')
+    search_engine = Config['SCRAPING'].get('search_engines')
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
     for kw in keywords:
         key = cached_file_name(kw, search_engine, scrapemethod)

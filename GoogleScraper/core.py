@@ -156,6 +156,9 @@ def main(return_results=False, parse_cmd_line=True):
             # Clean the keywords of duplicates right in the beginning
             keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
 
+    search_engines = list({search_engine for search_engine in Config['SCRAPING'].get('search_engines', 'google').split(',') if search_engine})
+    assert search_engines, 'No search engine specified'
+
     if Config['GLOBAL'].getboolean('check_oto', False):
         _caching_is_one_to_one(keyword)
 
@@ -223,53 +226,52 @@ def main(return_results=False, parse_cmd_line=True):
     # create a lock to cache results
     cache_lock = threading.Lock()
 
+    # final check before going into the loop
+    num_workers_to_allocate = len(kwgroups) * len(search_engines) > Config['SCRAPING'].getint('maximum_workers')
+    if (len(kwgroups) * len(search_engines))  > Config['SCRAPING'].getint('maximum_workers'):
+        logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
+
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
         # A lock to prevent multiple threads from solving captcha.
-        lock = threading.Lock()
+        captcha_lock = threading.Lock()
 
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
 
-        for i, keyword_group in enumerate(kwgroups):
-            scrapejobs.append(
-                SelScrape(
-                    keywords=keyword_group,
-                    db_lock=db_lock,
-                    cache_lock=cache_lock,
-                    session=session,
-                    scraper_search=scraper_search,
-                    captcha_lock=lock,
-                    browser_num=i,
-                    proxy=proxies[i//chunks_per_proxy]
-                )
-            )
+        for search_engine in search_engines:
+            for i, keyword_group in enumerate(kwgroups):
+                if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
+                    scrapejobs.append(
+                        SelScrape(
+                            search_engine=search_engine,
+                            keywords=keyword_group,
+                            db_lock=db_lock,
+                            cache_lock=cache_lock,
+                            session=session,
+                            scraper_search=scraper_search,
+                            captcha_lock=captcha_lock,
+                            browser_num=i,
+                            proxy=proxies[i//chunks_per_proxy]
+                        )
+                    )
+                elif Config['SCRAPING'].get('scrapemethod') == 'http':
+                    scrapejobs.append(
+                        HttpScrape(
+                            keywords=keyword_group,
+                            session=session,
+                            scraper_search=scraper_search,
+                            cache_lock=cache_lock,
+                            db_lock=db_lock,
+                            proxy=proxies[i//chunks_per_proxy]
+                        )
+                    )
 
         for t in scrapejobs:
             t.start()
 
         for t in scrapejobs:
             t.join()
-
-    elif Config['SCRAPING'].get('scrapemethod') == 'http':
-        threads = []
-        for i, keyword_group in enumerate(kwgroups):
-            threads.append(
-                HttpScrape(
-                    keywords=keyword_group,
-                    session=session,
-                    scraper_search=scraper_search,
-                    cache_lock=cache_lock,
-                    db_lock=db_lock,
-                    proxy=proxies[i//chunks_per_proxy]
-                )
-            )
-
-        for thread in threads:
-            thread.start()
-
-        for thread in threads:
-            thread.join()
 
     elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
         raise NotImplemented('soon my dear friends :)')
