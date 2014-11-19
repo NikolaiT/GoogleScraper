@@ -372,7 +372,7 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
                     hash=key
                 ), lvl=5)
 
-            mapping[key] = kw
+            mapping[key] = (kw, search_engine)
 
     for path in files:
         # strip of the extension of the path if it has eny
@@ -382,9 +382,13 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
             if fname.endswith(ext):
                 clean_filename = fname.rstrip('.' + ext)
 
-        query = mapping.get(clean_filename, None)
 
-        if query:
+        query = search_engine = None
+        val = mapping.get(clean_filename, None)
+        if val:
+            query, search_engine = val
+
+        if query and search_engine:
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
