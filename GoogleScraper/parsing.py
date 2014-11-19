@@ -303,11 +303,11 @@ class BingParser(Parser):
     
     normal_search_selectors = {
         'results': {
-            'container': 'ol#b_results',
-            'result_container': 'li.b_algo',
-            'link': '.b_title > h2 > a::attr(href)',
-            'snippet': '.b_snippet > p::text',
-            'title': '.b_title > h2 > a::text',
+            'container': '#b_results',
+            'result_container': '.b_algo',
+            'link': 'h2 > a::attr(href)',
+            'snippet': '.b_caption > .b_attribution > p::text',
+            'title': 'h2::text',
             'visible_link': 'cite::text'
         },
         'ads_main' : {

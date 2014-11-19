@@ -239,7 +239,7 @@ def main(return_results=False, parse_cmd_line=True):
         # Distribute the proxies evenly on the keywords to search for
         scrapejobs = []
 
-        for search_engine in search_engines:
+        for k, search_engine in enumerate(search_engines):
             for i, keyword_group in enumerate(kwgroups):
                 if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
                     scrapejobs.append(

@@ -785,17 +785,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_input.send_keys(self.current_keyword + Keys.ENTER)
 
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
-                # match the largest sleep range
-                sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
-
-                time.sleep(sleep_time)
-
                 # Waiting until the keyword appears in the title may
                 # not be enough. The content may still be from the old page.
                 try:
                     WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
                 except TimeoutException as e:
                     logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
+
+                # match the largest sleep range
+                sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
+                time.sleep(sleep_time)
 
                 html = self.webdriver.page_source
 
