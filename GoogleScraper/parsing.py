@@ -8,13 +8,7 @@ import lxml.html
 import logging
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
-
-try:
-    from cssselect import HTMLTranslator, SelectorError
-    from bs4 import UnicodeDammit
-except ImportError as ie:
-    if hasattr(ie, 'name') and ie.name == 'bs4' or hasattr(ie, 'args') and 'bs4' in str(ie):
-        sys.exit('Install bs4 with the command "sudo pip3 install beautifulsoup4"')
+from cssselect import HTMLTranslator, SelectorError
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -76,6 +70,7 @@ class Parser():
         self.searchtype = searchtype
         self.dom = None
         self.search_results = {}
+        self.search_results['num_results'] = ''
         
         if self.html:
             self.parse()
@@ -94,9 +89,6 @@ class Parser():
         # Apply subclass specific behaviour after parsing has happened
         self.after_parsing()
 
-        # push the data to the database
-
-
     def _parse(self):
         """Internal parse the dom according to the provided css selectors.
         
@@ -104,21 +96,25 @@ class Parser():
         """
         
         # Try to parse the provided HTML string using lxml
-        doc = UnicodeDammit(self.html, is_html=True)
-        parser = lxml.html.HTMLParser(encoding=doc.declared_html_encoding)
-        self.dom = lxml.html.document_fromstring(self.html, parser=parser)
-        self.dom.resolve_base_href()
+        try:
+            parser = lxml.html.HTMLParser(encoding='utf-8')
+            self.dom = lxml.html.document_fromstring(self.html, parser=parser)
+            self.dom.resolve_base_href()
+        except Exception as e:
+            # maybe wrong encoding
+            logger.error(e)
         
         # try to parse the number of results.
         attr_name = self.searchtype + '_search_selectors'
         selector_dict = getattr(self, attr_name, None)
-        
+
         # short alias because we use it so extensively
         css_to_xpath = HTMLTranslator().css_to_xpath
-        
+
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
         self.search_results['num_results'] = ''
+
         if isinstance(num_results_selector, list) and num_results_selector:
             for selector in num_results_selector:
                 try:
@@ -128,19 +124,21 @@ class Parser():
                 else: # leave when first selector grabbed something
                     break
 
-        if not selector_dict:
+        if not selector_dict and not isinstance(selector_dict, dict):
             raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
-            
+
         for result_type, selector_class in selector_dict.items():
+
+            self.search_results[result_type] = []
+
             for selector_specific, selectors in selector_class.items():
-                self.search_results[result_type] = []
 
                 results = self.dom.xpath(
                     css_to_xpath('{container} {result_container}'.format(**selectors))
                 )
 
                 to_extract = set(selectors.keys()) - {'container', 'result_container'}
-                selectors_to_use = dict(((key, selectors[key]) for key in to_extract if key in selectors.keys()))
+                selectors_to_use = {key: selectors[key] for key in to_extract if key in selectors.keys()}
 
                 for index, result in enumerate(results):
                     # Let's add primitive support for CSS3 pseudo selectors

@@ -357,6 +357,7 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
         A list of keywords that couldn't be parsed and which need to be scraped anew.
     """
     google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
+
     files = _get_all_cache_files()
     mapping = {}
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
@@ -397,19 +398,18 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
                 # we have a cache file that matches the above identifying information
                 # but it was never stored to the database.
                 logger.error('No entry for file {} found in database. Will parse again.'.format(clean_filename))
-                start = time.clock()
+                html = read_cached_file(get_path(fname))
                 serp = parse_serp(
-                    html=read_cached_file(get_path(fname)),
+                    html=html,
                     search_engine=search_engine,
                     scrapemethod=scrapemethod,
                     current_page=0,
                     current_keyword=query
                 )
-                stop = time.clock()
-                print('elapsed: {}'.format(stop-start))
             except MultipleResultsFound as e:
                 raise e
-            finally:
+
+            if serp:
                 scraper_search.serps.append(serp)
 
             mapping.pop(clean_filename)
