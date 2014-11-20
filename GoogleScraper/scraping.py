@@ -23,7 +23,7 @@ except ImportError as ie:
 
 import GoogleScraper.socks as socks
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
-from GoogleScraper.database import SearchEngineResultsPage, Link
+from GoogleScraper.database import SearchEngineResultsPage, Link, get_session
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine
@@ -107,7 +107,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
-    def __init__(self, keywords=None, session=None, scraper_search=None, db_lock=None, cache_lock=None,
+    def __init__(self, keywords=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
                  start_page_pos=1, search_engine=None, search_type=None, proxy=None):
         """Instantiate an SearchEngineScrape object.
 
@@ -163,9 +163,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         else:
             self.ip = '127.0.0.1'
 
-        # set the database scoped session
-        self.session = session
-
         # the scraper_search object
         self.scraper_search = scraper_search
         
@@ -178,6 +175,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         # init the cache lock
         self.cache_lock = cache_lock
+
+        # set the session
+        self.session = session
 
 
     @abc.abstractmethod
@@ -227,26 +227,22 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def store(self):
         """Store the parsed data in the sqlalchemy scoped session."""
-        assert self.session, 'You need to pass a sqlalchemy scoped session to SearchEngineScrape instances'
-
-        num_results = 0
-
-        ip = '127.0.0.1'
-
-        serp = SearchEngineResultsPage(
-            search_engine_name=self.search_engine,
-            scrapemethod=self.scrapemethod,
-            page_number=self.current_page,
-            requested_at=datetime.datetime.utcnow(),
-            requested_by=ip,
-            query=self.current_keyword,
-            num_results_for_keyword=self.parser.search_results['num_results'],
-        )
-        self.scraper_search.serps.append(serp)
-        self.session.add(self.scraper_search)
-        self.session.commit()
+        assert self.session, 'No database session. Turning down.'
 
         with self.db_lock:
+            num_results = 0
+
+            serp = SearchEngineResultsPage(
+                search_engine_name=self.search_engine,
+                scrapemethod=self.scrapemethod,
+                page_number=self.current_page,
+                requested_at=datetime.datetime.utcnow(),
+                requested_by=self.ip,
+                query=self.current_keyword,
+                num_results_for_keyword=self.parser.search_results['num_results'],
+            )
+            self.scraper_search.serps.append(serp)
+
             for key, value in self.parser.search_results.items():
                 if isinstance(value, list):
                     rank = 1
@@ -529,7 +525,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
-        self.ip = '127.0.0.1'
         self.search_number = 0
         self.scrapemethod = 'selenium'
 

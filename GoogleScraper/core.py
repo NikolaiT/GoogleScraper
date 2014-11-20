@@ -127,7 +127,8 @@ def main(return_results=False, parse_cmd_line=True):
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
-        namespace['session'] = get_session(scoped=False, create=False)
+        Session = get_session(scoped=False, create=False)
+        namespace['session'] = Session()
         namespace['ScraperSearch'] = ScraperSearch
         namespace['SERP'] = SERP
         namespace['Link'] = Link
@@ -198,7 +199,8 @@ def main(return_results=False, parse_cmd_line=True):
         return
 
     # get a scoped sqlalchemy session
-    session = get_session(scoped=False, create=True)
+    Session = get_session(scoped=False, create=True)
+    session = Session()
 
     scraper_search = ScraperSearch(
         number_search_engines_used=1,
@@ -245,10 +247,10 @@ def main(return_results=False, parse_cmd_line=True):
                     scrapejobs.append(
                         SelScrape(
                             search_engine=search_engine,
+                            session=session,
                             keywords=keyword_group,
                             db_lock=db_lock,
                             cache_lock=cache_lock,
-                            session=session,
                             scraper_search=scraper_search,
                             captcha_lock=captcha_lock,
                             browser_num=i,

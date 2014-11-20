@@ -117,8 +117,6 @@ def get_session(scoped=False, create=False):
     )
     if scoped:
         ScopedSession = scoped_session(session_factory)
-        session = ScopedSession()
+        return ScopedSession
     else:
-        session = session_factory()
-
-    return session
+        return session_factory
