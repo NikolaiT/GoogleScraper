@@ -536,11 +536,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
 
-        # How long to sleep (ins seconds) after every n-th request
+        # How long to sleep (in seconds) after every n-th request
         self.sleeping_ranges = dict()
         for line in Config['SELENIUM'].get('sleeping_ranges').split('\n'):
-            assert line.count(';') == 1
-            key, value = line.split(';')
+            assert line.count(':') == 1, 'Invalid sleep range format.'
+            key, value = line.split(':')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
         out('[+] SelScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(
