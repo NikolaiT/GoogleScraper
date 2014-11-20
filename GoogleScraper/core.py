@@ -233,7 +233,7 @@ def main(return_results=False, parse_cmd_line=True):
         logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
 
     # Let the games begin
-    if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
+    if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
         # A lock to prevent multiple threads from solving captcha.
         captcha_lock = threading.Lock()
 
@@ -260,6 +260,7 @@ def main(return_results=False, parse_cmd_line=True):
                 elif Config['SCRAPING'].get('scrapemethod') == 'http':
                     scrapejobs.append(
                         HttpScrape(
+                            search_engine=search_engine,
                             keywords=keyword_group,
                             session=session,
                             scraper_search=scraper_search,
@@ -275,7 +276,7 @@ def main(return_results=False, parse_cmd_line=True):
         for t in scrapejobs:
             t.join()
 
-    elif Config['SCRAPING'].get('scrapemethod') == 'http_async':
+    elif Config['SCRAPING'].get('scrapemethod') == 'http-async':
         raise NotImplemented('soon my dear friends :)')
 
     else:

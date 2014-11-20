@@ -344,7 +344,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.proxy_check()
 
         out('[+] HttpScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}'.format(
-            self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+            self.ip, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
 
 
     def set_proxy(self):
