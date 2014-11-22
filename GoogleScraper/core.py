@@ -32,7 +32,7 @@ def scrape_with_config(config, **kwargs):
     return main(return_results=True, parse_cmd_line=False, **kwargs)
 
 def assign_keywords_to_scrapers(all_keywords):
-    """Scrapers are often threads or asynchronous objects.
+    """Scrapers are threads or asynchronous objects.
 
     Splitting the keywords equally on the workers is crucial
     for maximal performance.
@@ -41,7 +41,7 @@ def assign_keywords_to_scrapers(all_keywords):
         all_keywords: All keywords to scrape
 
     Returns:
-        A list of list. The inner list should be assigned to individual scrapers.
+        A list of list. The elements of the inner list should be assigned to individual scraper instances, e. g. threads.
     """
     mode = Config['SCRAPING'].get('scrapemethod')
 
@@ -229,7 +229,7 @@ def main(return_results=False, parse_cmd_line=True):
 
     # final check before going into the loop
     num_workers_to_allocate = len(kwgroups) * len(search_engines) > Config['SCRAPING'].getint('maximum_workers')
-    if (len(kwgroups) * len(search_engines))  > Config['SCRAPING'].getint('maximum_workers'):
+    if (len(kwgroups) * len(search_engines)) > Config['SCRAPING'].getint('maximum_workers'):
         logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
 
     # Let the games begin

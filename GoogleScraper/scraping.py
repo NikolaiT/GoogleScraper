@@ -136,6 +136,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.keywords = Config['SCRAPING'].get('keywords', [])
 
         self.keywords = list(set(self.keywords))
+
+        # the number of keywords
+        self.num_keywords = len(self.keywords)
         
         # The actual keyword that is to be scraped next
         self.current_keyword = self.keywords[0]
@@ -266,6 +269,18 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
         self.start_page_pos += 1
+
+    def next_keyword_info(self, pos_current_keyword):
+        """Print a short summary where we are in the scrape and what's the next keyword."""
+        out('[{thread_name}][{search_engine} with ip {ip} next keyword: "{keyword}" with {num_pages} pages. {done}/{all} already scraped.'.format(
+            thread_name=self.name,
+            search_engine=self.search_engine,
+            ip=self.ip,
+            keyword=self.current_keyword,
+            num_pages=self.num_pages_per_keyword,
+            done=pos_current_keyword,
+            all=self.num_keywords
+        ), lvl=1)
 
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
@@ -458,46 +473,48 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         if rand:
             self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
 
-        html = get_cached(self.current_keyword, self.search_engine, 'http')
+        try:
+            out('[HTTP - {proxy}] Base_url: {base_url}, headers={headers}, params={params}'.format(
+                proxy=self.proxy,
+                base_url=self.base_search_url,
+                headers=self.headers,
+                params=self.search_params),
+            lvl=3)
 
-        if not html:
-            try:
-                out('[HTTP - {proxy}] Base_url: {base_url}, headers={headers}, params={params}'.format(
-                    proxy=self.proxy,
-                    base_url=self.base_search_url,
-                    headers=self.headers,
-                    params=self.search_params),
-                lvl=3)
+            super().next_keyword_info(self.n)
 
-                request = self.requests.get(self.base_search_url, headers=self.headers,
-                                 params=self.search_params, timeout=3.0)
+            request = self.requests.get(self.base_search_url, headers=self.headers,
+                             params=self.search_params, timeout=3.0)
 
-            except self.requests.ConnectionError as ce:
-                logger.error('Network problem occurred {}'.format(ce))
-                raise ce
-            except self.requests.Timeout as te:
-                logger.error('Connection timeout {}'.format(te))
-                raise te
+        except self.requests.ConnectionError as ce:
+            logger.error('Network problem occurred {}'.format(ce))
+            raise ce
+        except self.requests.Timeout as te:
+            logger.error('Connection timeout {}'.format(te))
+            raise te
 
-            if not request.ok:
-                logger.error('HTTP Error: {}'.format(request.status_code))
-                self.handle_request_denied(request.status_code)
-                return False
+        if not request.ok:
+            logger.error('HTTP Error: {}'.format(request.status_code))
+            self.handle_request_denied(request.status_code)
+            return False
 
-            html = request.text
+        html = request.text
 
-            # cache fresh results
-            with self.cache_lock:
-                cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
+        # cache fresh results
+        with self.cache_lock:
+            cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
 
         self.parser.parse(html)
         self.store()
         out(str(self.parser), lvl=2)
 
+        self.n += 1
+
     def run(self):
         args = []
         kwargs = {}
         kwargs['rand'] = False
+        self.n = 0
         SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
         
 class AsyncHttpScrape(SearchEngineScrape):
@@ -654,38 +671,51 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """Checks whether Google detected a potentially harmful request.
 
         Whenever such potential abuse is detected, Google shows an captcha.
+        This method just blocks as long as someone entered the captcha in the browser window.
+        When the window is not visible (For example when using PhantomJS), this method
+        makes a png from the html code and shows it to the user, which should enter it in a command
+        line.
 
         Returns:
-            True If the issue could be resolved.
+            The search input field.
 
         Raises:
             MaliciousRequestDetected when there was not way to stp Google From denying our requests.
         """
-        if Config['SELENIUM'].getboolean('manual_captcha_solving'):
-            if '/sorry/' in self.webdriver.current_url \
-                    and 'detected unusual traffic' in self.webdriver.page_source:
-                if Config['SELENIUM'].get('manual_captcha_solving', False):
-                    with self.captcha_lock:
-                        import tempfile
-                        tf = tempfile.NamedTemporaryFile('wb')
-                        tf.write(self.webdriver.get_screenshot_as_png())
-                        import webbrowser
-                        webbrowser.open('file://{}'.format(tf.name))
-                        solution = input('enter the captcha please...')
-                        self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
-                        try:
-                            self.search_input = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.NAME, "q")))
-                        except TimeoutException as e:
-                            raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
-                        tf.close()
-                        return True
-            elif 'is not an HTTP Proxy' in self.webdriver.page_source:
-                raise GoogleSearchError('Inavlid TOR usage. Specify the proxy protocol as socks5')
-            else:
-                return False
-        else:
-            raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
+        malicious_request_needles = {
+            'google': {
+                'inurl': '/sorry/',
+                'inhtml': 'detected unusual traffic'
+            }
+        }
 
+        needles = malicious_request_needles[self.search_engine]
+
+        if needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
+
+            if Config['SELENIUM'].getboolean('manual_captcha_solving', False):
+                with self.captcha_lock:
+                    import tempfile
+                    tf = tempfile.NamedTemporaryFile('wb')
+                    tf.write(self.webdriver.get_screenshot_as_png())
+                    import webbrowser
+                    webbrowser.open('file://{}'.format(tf.name))
+                    solution = input('enter the captcha please...')
+                    self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
+                    try:
+                        self.search_input = WebDriverWait(self.webdriver, 5).until(self._get_search_input_field())
+                    except TimeoutException as e:
+                        raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
+                    tf.close()
+
+            else:
+                # Just wait until the user solves the captcha in the browser window
+                # 10 hours if needed :D
+                out('Waiting for user to solve captcha', lvl=1)
+                return self._wait_until_search_input_field_appears(10*60*60)
+
+        elif 'is not an HTTP Proxy' in self.webdriver.page_source:
+            raise GoogleSearchError('Inavlid TOR usage. Specify the proxy protocol as socks5')
 
     def build_search(self):
         """Build the search for SelScrapers"""
@@ -726,6 +756,21 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         return input_field_selectors[self.search_engine]
 
+    def _wait_until_search_input_field_appears(self, max_wait=5):
+        """Waits until the search input field can be located for the current search engine
+
+        Args:
+            max_wait: How long to wait maximally before returning False.
+
+        Returns: False if the search input field could not be located within the time
+                or the handle to the search input field.
+        """
+        try:
+            search_input = WebDriverWait(self.webdriver, max_wait).until(
+                EC.visibility_of_element_located(self._get_search_input_field()))
+            return search_input
+        except TimeoutException as e:
+            return False
 
     def _goto_next_page(self):
         """Finds the url that locates the next page for any search_engine.
@@ -768,21 +813,23 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Fills out the search form of the search engine for each keyword.
         Clicks the next link while num_pages_per_keyword is not reached.
         """
+        n = 0
+
         for self.current_keyword in self.keywords:
 
-            try:
-                self.search_input = WebDriverWait(self.webdriver, 5).until(
-                    EC.presence_of_element_located(self._get_search_input_field()))
-            except TimeoutException as e:
-                logger.error(e)
-                if not self.handle_request_denied():
-                    open('/tmp/out.png', 'wb').write(self.webdriver.get_screenshot_as_png())
-                    raise GoogleSearchError('search input field cannot be found.')
+            super().next_keyword_info(n)
+
+            self.search_input = self._wait_until_search_input_field_appears()
+
+            if self.search_input is False:
+                self.search_input = self.handle_request_denied()
 
             if self.search_input:
                 self.search_input.clear()
                 time.sleep(.25)
                 self.search_input.send_keys(self.current_keyword + Keys.ENTER)
+            else:
+                raise GoogleSearchError('Cannot get handle to the input form!')
 
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
                 # Waiting until the keyword appears in the title may
@@ -791,6 +838,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
                 except TimeoutException as e:
                     logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
+                    break
 
                 # match the largest sleep range
                 sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
@@ -814,6 +862,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                     if not self.next_url:
                         break
+
+            n += 1
 
 
     def run(self):
