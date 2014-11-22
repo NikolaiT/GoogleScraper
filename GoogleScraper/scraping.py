@@ -26,7 +26,7 @@ from GoogleScraper.caching import get_cached, cache_results, cached_file_name, c
 from GoogleScraper.database import SearchEngineResultsPage, Link, get_session
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
-from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine
+from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine, parse_serp
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -246,23 +246,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             )
             self.scraper_search.serps.append(serp)
 
-            for key, value in self.parser.search_results.items():
-                if isinstance(value, list):
-                    rank = 1
-                    for link in value:
-                        l = Link(
-                            url=link['link'],
-                            snippet=link['snippet'],
-                            title=link['title'],
-                            visible_link=link['visible_link'],
-                            rank=rank,
-                            serp=serp
-                        )
-                        self.session.add(l)
-                        num_results += 1
-                        rank += 1
-
-            serp.num_results = num_results
+            parse_serp(serp=serp, parser=self.parser)
             self.session.add(serp)
             self.session.commit()
 

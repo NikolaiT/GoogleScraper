@@ -415,7 +415,9 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
                 raise e
 
             if serp:
-                scraper_search.serps.append(serp)
+                serp.scraper_searches.append(scraper_search)
+                session.add(serp)
+                session.commit()
 
             mapping.pop(clean_filename)
             num_cached += 1

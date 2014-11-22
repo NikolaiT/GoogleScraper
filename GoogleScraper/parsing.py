@@ -6,6 +6,7 @@ import sys
 import re
 import lxml.html
 import logging
+from urllib.parse import urlparse
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
 from cssselect import HTMLTranslator, SelectorError
@@ -502,7 +503,7 @@ def get_parser_by_search_engine(search_engine):
 
 def parse_serp(html=None, search_engine=None,
                     scrapemethod=None, current_page=None, requested_at=None,
-                    requested_by='127.0.0.1', current_keyword=None):
+                    requested_by='127.0.0.1', current_keyword=None, parser=None, serp=None):
         """Store the parsed data in the sqlalchemy session.
 
         Args:
@@ -512,31 +513,35 @@ def parse_serp(html=None, search_engine=None,
             The parsed SERP object.
         """
 
-        parser = get_parser_by_search_engine(search_engine)
-        parser = parser()
-        parser.parse(html)
+        if not parser:
+            parser = get_parser_by_search_engine(search_engine)
+            parser = parser()
+            parser.parse(html)
 
         num_results = 0
 
-        serp = SearchEngineResultsPage(
-            search_engine_name=search_engine,
-            scrapemethod=scrapemethod,
-            page_number=current_page,
-            requested_at=requested_at,
-            requested_by=requested_by,
-            query=current_keyword,
-            num_results_for_keyword=parser.search_results['num_results'],
-        )
+        if not serp:
+            serp = SearchEngineResultsPage(
+                search_engine_name=search_engine,
+                scrapemethod=scrapemethod,
+                page_number=current_page,
+                requested_at=requested_at,
+                requested_by=requested_by,
+                query=current_keyword,
+                num_results_for_keyword=parser.search_results['num_results'],
+            )
 
         for key, value in parser.search_results.items():
             if isinstance(value, list):
                 rank = 1
                 for link in value:
+                    parsed = urlparse(link['link'])
                     l = Link(
-                        url=link['link'],
+                        link=link['link'],
                         snippet=link['snippet'],
                         title=link['title'],
                         visible_link=link['visible_link'],
+                        domain=parsed.netloc,
                         rank=rank,
                         serp=serp
                     )
