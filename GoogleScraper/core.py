@@ -9,7 +9,7 @@ from GoogleScraper.utils import grouper
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
-from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files
+from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config
 import GoogleScraper.config
 
@@ -159,6 +159,10 @@ def main(return_results=False, parse_cmd_line=True):
 
     search_engines = list({search_engine for search_engine in Config['SCRAPING'].get('search_engines', 'google').split(',') if search_engine})
     assert search_engines, 'No search engine specified'
+
+    if Config['GLOBAL'].getboolean('clean_cache_files', False):
+        clean_cachefiles()
+        return
 
     if Config['GLOBAL'].getboolean('check_oto', False):
         _caching_is_one_to_one(keyword)

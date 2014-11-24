@@ -5,6 +5,7 @@
 import sys
 import re
 import lxml.html
+from lxml.html.clean import Cleaner
 import logging
 from urllib.parse import urlparse
 import pprint
@@ -97,9 +98,16 @@ class Parser():
         """
         
         # Try to parse the provided HTML string using lxml
+        # strip all unnecessary information to save space
+        cleaner = Cleaner()
+        cleaner.scripts = True
+        cleaner.javascript = True
+        cleaner.style = True
+
         try:
             parser = lxml.html.HTMLParser(encoding='utf-8')
             self.dom = lxml.html.document_fromstring(self.html, parser=parser)
+            self.dom = cleaner.clean_html(self.dom)
             self.dom.resolve_base_href()
         except Exception as e:
             # maybe wrong encoding
@@ -173,25 +181,6 @@ class Parser():
                         serp_result[key] = value
                     if serp_result:
                         self.search_results[result_type].append(serp_result)
-
-    def clean_html(self, html):
-        """Clean the html from any bloated data that is of no interest.
-
-        For example in Google SERP html pages, most data is lots of
-        javascript code that tells os nothing about the results. When
-        stripping it away and then caching, we save a lot of disk space.
-
-        Args:
-            html: The html to clean.
-
-        Returns:
-            The cleaned html.
-        """
-        parsed = lxml.html.fromstring(html)
-        for bad in parsed.xpath('//script|//style'):
-            bad.getparent().remove(bad)
-
-        return lxml.html.tostring(parsed)
                     
     def after_parsing(self):
         """Subclass specific behaviour after parsing happened.
@@ -203,6 +192,11 @@ class Parser():
     def __str__(self):
         """Return a nicely formated overview of the results."""
         return pprint.pformat(self.search_results)
+
+    @property
+    def cleaned_html(self):
+        assert self.dom, 'The html needs to be parsed to get the cleaned html'
+        return lxml.html.tostring(self.dom)
                 
 """
 Here follow the different classes that provide CSS selectors 

@@ -268,6 +268,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         ), lvl=1)
 
 
+    def cache_results(self):
+        """Caches the html for the current request."""
+        with self.cache_lock:
+            cache_results(self.parser.cleaned_html, self.current_keyword, self.search_engine, self.scrapemethod)
+
+
 class HttpScrape(SearchEngineScrape, threading.Timer):
     """Offers a fast way to query any search engine using raw HTTP requests.
 
@@ -484,14 +490,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             return False
 
         html = request.text
-
-        # cache fresh results
-        with self.cache_lock:
-            cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
-
         self.parser.parse(html)
         self.store()
         out(str(self.parser), lvl=2)
+        super().cache_results()
 
         self.n += 1
 
@@ -830,14 +832,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 time.sleep(sleep_time)
 
                 html = self.webdriver.page_source
-
                 self.parser.parse(html)
                 self.store()
                 out(str(self.parser), lvl=2)
-
-                # Lock for the sake that two threads write to same file (not probable)
-                with self.cache_lock:
-                    cache_results(html, self.current_keyword, self.search_engine, self.scrapemethod)
+                super().cache_results()
 
                 self.search_number += 1
 

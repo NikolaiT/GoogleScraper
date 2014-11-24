@@ -344,14 +344,11 @@ def _caching_is_one_to_one(keywords, search_engine, scrapemode):
         return True
 
 
-def parse_all_cached_files(keywords, search_engines, session, scraper_search, try_harder=False):
+def parse_all_cached_files(keywords, search_engines, session, scraper_search):
     """Walk recursively through the cachedir (as given by the Config) and parse all cached files.
 
     Args:
-        identifying_list: A list of list with elements that identify the result. The consist of the keyword, search_engine, scrapemode.
         session: An sql alchemy session to add the entities
-        try_harder: If there is a cache file that cannot be mapped to a keyword, read it and try it again and try to
-                    extract the search query from the html.
 
     Returns:
         A list of keywords that couldn't be parsed and which need to be scraped anew.
@@ -362,6 +359,8 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
     mapping = {}
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
     num_cached = 0
+    # a keyword is requested once for each search engine
+    num_total_keywords = len(keywords) * len(search_engines)
 
     for kw in keywords:
         for search_engine in search_engines:
@@ -397,7 +396,7 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
                 serp = session.query(SearchEngineResultsPage).filter(
                         SearchEngineResultsPage.query == query,
                         SearchEngineResultsPage.search_engine_name == search_engine,
-                        SearchEngineResultsPage.scrapemethod == scrapemethod).one()
+                        SearchEngineResultsPage.scrapemethod == scrapemethod).first()
             except NoResultFound as e:
                 # that shouldn't happen
                 # we have a cache file that matches the above identifying information
@@ -424,13 +423,29 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search, tr
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
     out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
-        num_cached, len(keywords), len(keywords) - num_cached), lvl=1)
+        num_cached, num_total_keywords, num_total_keywords - num_cached), lvl=1)
 
     session.add(scraper_search)
     session.commit()
     # return the remaining keywords to scrape
     return [e[0] for e in mapping.values()]
 
+
+def clean_cachefiles():
+    """Clean silly html from all cachefiles in the cachdir"""
+    if input('Do you really want to strip all cache files from bloating tags such as <script> and <style>? ').startswith('y'):
+        import lxml.html
+        from lxml.html.clean import Cleaner
+        cleaner = Cleaner()
+        cleaner.style = True
+        cleaner.scripts = True
+        cleaner.javascript = True
+        for file in _get_all_cache_files():
+            cfile = CompressedFile(file)
+            data = cfile.read()
+            cleaned = lxml.html.tostring(cleaner.clean_html(lxml.html.fromstring(data)))
+            cfile.write(cleaned)
+            logger.info('Cleaned {}. Size before: {}, after {}'.format(file, len(data), len(cleaned)))
 
 def fix_broken_cache_names(url, search_engine, scrapemode):
     """Fix broken cache names.

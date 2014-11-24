@@ -20,7 +20,8 @@ def grouper(iterable, n, fillvalue=None):
     groups = zip_longest(*args, fillvalue=fillvalue)
     return [list(filter(None.__ne__, list(group))) for group in groups]
 
-
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+
+

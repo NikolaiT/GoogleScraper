@@ -96,26 +96,30 @@ class Link(Base):
         return self.__str__()
 
 
-def get_engine():
+def get_engine(path=None):
     """Return the sqlalchemy engine.
 
     Returns:
         The sqlalchemy engine.
     """
+    db_path = path if path else Config['GLOBAL'].get('database_name')
     echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 3) else False
-    engine = create_engine('sqlite:///' + Config['GLOBAL'].get('database_name'), echo=echo)
+    engine = create_engine('sqlite:///' + db_path, echo=echo)
     Base.metadata.create_all(engine)
 
     return engine
 
 
-def get_session(scoped=False, create=False):
-    engine = get_engine()
+def get_session(scoped=False, create=False, engine=None, path=None):
+    if not engine:
+        engine = get_engine(path=path)
+
     session_factory = sessionmaker(
         bind=engine,
         autoflush=True,
         autocommit=False,
     )
+
     if scoped:
         ScopedSession = scoped_session(session_factory)
         return ScopedSession
