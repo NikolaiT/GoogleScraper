@@ -175,7 +175,8 @@ def main(return_results=False, parse_cmd_line=True):
 
     if Config['SCRAPING'].getboolean('use_own_ip'):
         proxies.append(None)
-    elif not proxies:
+        
+    if not proxies:
         raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
 
     valid_search_types = ('normal', 'video', 'news', 'image')
@@ -219,7 +220,6 @@ def main(return_results=False, parse_cmd_line=True):
     remaining = [keyword for keyword in set(remaining) if keyword]
 
     kwgroups = assign_keywords_to_scrapers(remaining)
-    chunks_per_proxy = math.ceil(len(kwgroups)/len(proxies))
 
     # Create a lock to synchronize database access in the sqlalchemy session
     db_lock = threading.Lock()
@@ -242,7 +242,9 @@ def main(return_results=False, parse_cmd_line=True):
 
         for k, search_engine in enumerate(search_engines):
             for i, keyword_group in enumerate(kwgroups):
-                proxy_to_use = proxies[i//chunks_per_proxy]
+                
+                proxy_to_use = proxies[i % len(proxies)]
+                
                 if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
                     scrapejobs.append(
                         SelScrape(

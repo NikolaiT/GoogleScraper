@@ -22,6 +22,7 @@ except ImportError as ie:
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
 import GoogleScraper.socks as socks
+from GoogleScraper.proxies import Proxy
 from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
 from GoogleScraper.database import SearchEngineResultsPage, Link, get_session
 from GoogleScraper.config import Config
@@ -160,11 +161,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         
         # Install the proxy if one was provided
         self.proxy = proxy
-        if proxy:
+        if isinstance(proxy, Proxy):
             self.set_proxy()
             self.ip = self.proxy.host + ':' + self.proxy.port
         else:
-            self.ip = '127.0.0.1'
+            self.ip = 'localhost'
 
         # the scraper_search object
         self.scraper_search = scraper_search
