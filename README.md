@@ -1,8 +1,6 @@
-# GoogleScraper - Scraping search engines professionally
+## GoogleScraper - Scraping search engines professionally
 
-### Updated README on 17th november 2014
-
-**Thanks for your patience. A more or less stable version (0.1.6) is on pypy available! **
+**You want to see GoogleScrape in action?! Look at this [video on vimeo](https://vimeo.com/112801073)**
 
 *If you need the latest bug fixes and the most recent version, just install directly from this repo here:*
 
@@ -15,10 +13,11 @@ pip install git+git://github.com/NikolaiT/GoogleScraper/
 ### Table of Contents
 
 1. [Installation](#install)
-2. [About](#about)
-3. [Usage with Python](#usage)
-4. [Command line usage (read this!)](#cli-usage)
-5. [Contact](#contact)
+2. [Quick Start](#quick)
+3. [About](#about)
+4. [Usage with Python](#usage)
+5. [Command line usage (read this!)](#cli-usage)
+6. [Contact](#contact)
 
 
 <a name="install" \>
@@ -34,9 +33,6 @@ From now on (August 2014), you can install GoogleScraper comfortably with pip:
 virtualenv --python python3 env
 source env/bin/activate
 pip install GoogleScraper
-
-# then have a look how to use it:
-GoogleScraper -h
 ```
 
 #### Alternatively install directly from Github:
@@ -55,6 +51,39 @@ Please note however, that some features and examples might not work as expected.
 the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a 
 usable version.
 
+<a name="quick" />
+## Quick Start
+
+Install as described above.
+
+See all options
+```
+GoogleScraper -h
+```
+
+Scrape the single keyword "apple" with http mode:
+```
+GoogleScraper -m http --keyword "apple"
+```
+
+Scrape all keywords that are in keywords.txt in selenium mode (with real browsers):
+```
+GoogleScraper -m selenium --keyword-file keywords.txt
+```
+
+Scrape all keywords that are in 
++ keywords.txt
++ with http mode
++ using 10 threads
++ scrape in the search engines google, bing and yahoo
++ store the output in a JSON file
++ increase verbosity
++ and use a proxy file named "proxies.txt"
+```
+GoogleScraper -m http --keyword-file keywords.txt --num-workers 10 --proxy-file proxies.txt --search-engines "google,bing,yahoo" --output-format json --output-filename output -v 2
+```
+
+Have fun :D
 
 <a name="about" />
 ## What does GoogleScraper.py?
