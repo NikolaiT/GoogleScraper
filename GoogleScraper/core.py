@@ -117,6 +117,11 @@ def main(return_results=False, parse_cmd_line=True):
         print(open(CONFIG_FILE).read())
         return
 
+    if Config['GLOBAL'].getboolean('version'):
+        from GoogleScraper.version import __version__
+        print(__version__)
+        return
+
     maybe_clean_cache()
 
     kwfile = Config['SCRAPING'].get('keyword_file')

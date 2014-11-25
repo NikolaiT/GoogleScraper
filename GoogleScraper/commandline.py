@@ -14,9 +14,9 @@ def get_command_line(static_args=False):
     """
 
     parser = argparse.ArgumentParser(prog='GoogleScraper',
-                                     description='Scrapes the Google search engine by forging http requests that imitate '
+                                     description='Scrapes the Google, Yandex, Bing and many other  search engines by forging http requests that imitate '
                                                  'browser searches or by using real browsers controlled by the selenium framework. Multithreading support.',
-                                     epilog='This program might infringe the Google TOS. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
+                                     epilog='This program might infringe the TOS of the search engines. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
 
     parser.add_argument('-m', '--scrapemethod', type=str, default='http',
                         help='''The scraping type. There are currently three types: "http", "selenium" and "http-async".
@@ -30,9 +30,12 @@ def get_command_line(static_args=False):
     parser.add_argument('--keyword-file', type=str, action='store',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
 
-    parser.add_argument('--output-format', type=str, action='store', default='None', choices=['stdout', 'json', 'csv'],
+    parser.add_argument('-f', '--output-format', type=str, action='store', default='stdout', choices=['stdout', 'json', 'csv'],
                         help='''How to save the output of the scrape. The results are always saved in the database. But for '
-                             the purpose of immediate exploration, the results may also saved as JSON and CSV files.''')
+                             the purpose of immediate exploration, the results may be also saved as JSON and CSV files.''')
+
+    parser.add_argument('-o-', '--output-filename', type=str, action='store', default='google_scraper',
+                        help='The name of the output file. Depends on the output format. Sqlite3 files will have a .db suffix, json results a .json ending and csv output a .csv ending.')
 
     parser.add_argument('--shell', action='store_true', default=False, help='Fire up a shell with a loaded sqlalchemy session.')
 
@@ -63,11 +66,14 @@ def get_command_line(static_args=False):
 
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its rough length will be printed.''')
 
-    parser.add_argument('-v', '--verbosity', type=int, default=2,
+    parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help='The verbosity of GoogleScraper output. 0: no ouput, 1: most necessary info (no results), 2: detailed scraping info (with results), > 2: Degbug info.')
 
     parser.add_argument('--view-config', action='store_true', default=False,
                         help="Print the current configuration to stdout. You may use it to create and tweak your own config file from it.")
+
+    parser.add_argument('--version', action='store_true', default=False,
+                        help='Prints the version of GoogleScraper')
 
     parser.add_argument('--mysql-proxy-db', action='store',
                         help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
@@ -86,5 +92,5 @@ def get_command_line(static_args=False):
 
     return {
         'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
-        'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell'])
+        'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
     }

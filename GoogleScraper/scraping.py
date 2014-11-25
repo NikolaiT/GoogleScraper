@@ -3,6 +3,8 @@
 import threading
 import datetime
 import random
+import json
+import csv
 import math
 import logging
 import sys
@@ -183,6 +185,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # set the session
         self.session = session
 
+        # the current request time
+        self.current_request_time = None
+
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
@@ -200,8 +205,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             callback: A callable with the search functionality.
         """
         for self.current_keyword in self.keywords:
-
-            out('Next Keyword="{kw}" requested by {scraper} and ip {ip}'.format(kw=self.current_keyword, scraper=self.__class__.__name__, ip=self.ip), lvl=2)
 
             self.current_page = self.start_page_pos
 
@@ -240,7 +243,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 search_engine_name=self.search_engine,
                 scrapemethod=self.scrapemethod,
                 page_number=self.current_page,
-                requested_at=datetime.datetime.utcnow(),
+                requested_at=self.current_request_time,
                 requested_by=self.ip,
                 query=self.current_keyword,
                 num_results_for_keyword=self.parser.search_results['num_results'],
@@ -250,6 +253,50 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             parse_serp(serp=serp, parser=self.parser)
             self.session.add(serp)
             self.session.commit()
+
+        output_format = Config['GLOBAL'].get('output_format', 'stdout')
+        output_file = Config['GLOBAL'].get('output_filename', 'google_scraper')
+
+        if output_format == 'stdout':
+            out(self.parser, lvl=2)
+        elif output_format == 'json':
+            if not hasattr(self, 'json_outfile'):
+                self.json_outfile = open(output_file + '.json', 'a')
+
+            obj = self._get_serp_obj()
+            json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
+
+        elif output_format == 'csv':
+            if not hasattr(self, 'csv_outfile'):
+                self.csv_outfile = csv.DictWriter(open(output_file + '.csv', 'a'),
+                        fieldnames=('link', 'title', 'snippet', 'visible_link', 'num_results',
+                                    'query', 'search_engine_name', 'requested_by',
+                                    'scrapemethod', 'page_number', 'requested_at'))
+                self.csv_outfile.writeheader()
+
+            rows = []
+            for result_type, value in self.parser.search_results.items():
+                if isinstance(value, list):
+                    for link in value:
+                        rows.append(link)
+
+            obj = self._get_serp_obj()
+            obj['num_results'] = self.parser.search_results['num_results']
+            for row in rows:
+                row.update(obj)
+                self.csv_outfile.writerow(row)
+
+
+    def _get_serp_obj(self):
+        """Little helper that returns a serp object for various output formats."""
+        obj = {}
+        obj['query'] = self.current_keyword
+        obj['search_engine_name'] = self.search_engine
+        obj['requested_by'] = self.ip
+        obj['scrapemethod'] = self.scrapemethod
+        obj['page_number'] = self.current_page
+        obj['requested_at'] = self.current_request_time
+        return obj
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -270,8 +317,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def cache_results(self):
         """Caches the html for the current request."""
-        with self.cache_lock:
-            cache_results(self.parser.cleaned_html, self.current_keyword, self.search_engine, self.scrapemethod)
+        if Config['GLOBAL'].getboolean('do_caching', False):
+            with self.cache_lock:
+                cache_results(self.parser.cleaned_html, self.current_keyword, self.search_engine, self.scrapemethod)
 
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
@@ -477,6 +525,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             request = self.requests.get(self.base_search_url, headers=self.headers,
                              params=self.search_params, timeout=3.0)
 
+            self.current_request_time = datetime.datetime.utcnow()
+
         except self.requests.ConnectionError as ce:
             logger.error('Network problem occurred {}'.format(ce))
             raise ce
@@ -492,7 +542,6 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         html = request.text
         self.parser.parse(html)
         self.store()
-        out(str(self.parser), lvl=2)
         super().cache_results()
 
         self.n += 1
@@ -785,6 +834,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             element = self.webdriver.find_element_by_css_selector(selector)
             next_url = element.get_attribute('href')
             element.click()
+            self.current_request_time = datetime.datetime.utcnow()
         except TimeoutException as te:
             logger.warning('Cannot locate next page element: {}'.format(te))
             return False
@@ -815,6 +865,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_input.clear()
                 time.sleep(.25)
                 self.search_input.send_keys(self.current_keyword + Keys.ENTER)
+                self.current_request_time = datetime.datetime.utcnow()
             else:
                 raise GoogleSearchError('Cannot get handle to the input form!')
 
@@ -834,7 +885,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 html = self.webdriver.page_source
                 self.parser.parse(html)
                 self.store()
-                out(str(self.parser), lvl=2)
                 super().cache_results()
 
                 self.search_number += 1
