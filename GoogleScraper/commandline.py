@@ -52,8 +52,7 @@ def get_command_line(static_args=False):
     parser.add_argument('--base-search-url', type=str,
                         action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
 
-    parser.add_argument('-t', '--search-type', type=str, dest='searchtype', action='store',
-                        default='normal',
+    parser.add_argument('-t', '--search-type', type=str, action='store', default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
 
     parser.add_argument('--proxy-file', type=str, dest='proxy_file', action='store',

@@ -314,6 +314,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             all=self.num_keywords
         ), lvl=1)
 
+    def instance_creation_info(self, scraper_name):
+        """Debug message whenever a scraping worker is created"""
+        out('[+] {}[{}][search-type:{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}'.format(
+            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+
 
     def cache_results(self):
         """Caches the html for the current request."""
@@ -397,8 +402,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         if Config['SCRAPING'].getboolean('check_proxies'):
             self.proxy_check()
 
-        out('[+] HttpScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}'.format(
-            self.ip, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+        super().instance_creation_info(self.__class__.__name__)
 
 
     def set_proxy(self):
@@ -591,8 +595,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             key, value = line.split(':')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
-        out('[+] SelScrape[{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}, browser_num={}'.format(
-            self.search_engine, self.browser_type, len(self.keywords), self.proxy, self.num_pages_per_keyword, self.name), lvl=1)
+        super().instance_creation_info(self.__class__.__name__)
 
     def _largest_sleep_range(self, search_number):
         assert search_number >= 0

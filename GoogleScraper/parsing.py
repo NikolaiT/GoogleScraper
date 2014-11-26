@@ -274,10 +274,12 @@ class GoogleParser(Parser):
     }
     
     image_search_selectors = {
-        'results': {
-            'container': 'li#isr_mc',
-            'result_container': 'div.rg_di',
-            'imgurl': 'a.rg_l::attr(href)'
+        'de_ip': {
+            'results': {
+                'container': 'li#isr_mc',
+                'result_container': 'div.rg_di',
+                'imgurl': 'a.rg_l::attr(href)'
+            }
         }
     }
     
