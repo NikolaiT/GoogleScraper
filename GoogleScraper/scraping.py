@@ -264,6 +264,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 self.json_outfile = open(output_file + '.json', 'a')
 
             obj = self._get_serp_obj()
+            obj['requested_at'] = obj['requested_at'].isoformat()
             json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
 
         elif output_format == 'csv':
