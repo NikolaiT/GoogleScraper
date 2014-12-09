@@ -264,7 +264,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 self.json_outfile = open(output_file + '.json', 'a')
 
             obj = self._get_serp_obj()
-            obj['requested_at'] = obj['requested_at'].isoformat()
             json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
 
         elif output_format == 'csv':
@@ -296,7 +295,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         obj['requested_by'] = self.ip
         obj['scrapemethod'] = self.scrapemethod
         obj['page_number'] = self.current_page
-        obj['requested_at'] = self.current_request_time
+        obj['requested_at'] = self.current_request_time.isoformat()
         return obj
 
     def next_page(self):
@@ -528,7 +527,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             super().next_keyword_info(self.n)
 
             request = self.requests.get(self.base_search_url, headers=self.headers,
-                             params=self.search_params, timeout=3.0)
+                             params=self.search_params, timeout=5)
 
             self.current_request_time = datetime.datetime.utcnow()
 
@@ -643,10 +642,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         elif self.browser_type == 'phantomjs':
             return self._get_PhantomJS()
 
-        # if the config remains silent, try to get Chrome, else Firefox
-        if not self._get_Chrome():
-            self._get_Firefox()
-
         return False
 
     def _get_Chrome(self):
@@ -704,8 +699,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     )
 
             self.webdriver = webdriver.PhantomJS(service_args=service_args)
+            return True
         except WebDriverException as e:
             logger.error(e)
+        return False
 
     def handle_request_denied(self):
         """Checks whether Google detected a potentially harmful request.

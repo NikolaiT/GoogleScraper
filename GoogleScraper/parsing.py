@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# TODO: Implement alternate selectors for different SERP formats (just use a list in the CSS selector datatypes)
-
 import sys
 import re
 import lxml.html
@@ -10,7 +8,7 @@ import logging
 from urllib.parse import urlparse
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
-from cssselect import HTMLTranslator, SelectorError
+from cssselect import HTMLTranslator
 
 logger = logging.getLogger('GoogleScraper')
 
