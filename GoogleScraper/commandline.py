@@ -35,22 +35,19 @@ def get_command_line(static_args=False):
                              the purpose of immediate exploration, the results may be also saved as JSON and CSV files.''')
 
     parser.add_argument('-o-', '--output-filename', type=str, action='store', default='google_scraper',
-                        help='The name of the output file. Depends on the output format. Sqlite3 files will have a .db suffix, json results a .json ending and csv output a .csv ending.')
+                        help='The name of the output file. Depends on the output format. Sqlite3 files will have a .db suffix, json results a .json ending and csv output a .csv ending. This means: Do not provide your own suffix!')
 
     parser.add_argument('--shell', action='store_true', default=False, help='Fire up a shell with a loaded sqlalchemy session.')
 
     parser.add_argument('-n', '--num-results-per-page', type=int,
                          action='store', default=50,
-                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode.')
+                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode. Some search engines do not support this.')
 
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
 
     parser.add_argument('-z', '--num-workers', type=int, default=1,
                         action='store',  help='This arguments sets the number of browser instances for selenium mode or the number of worker threads in http mode.')
-
-    parser.add_argument('--base-search-url', type=str,
-                        action='store',  help='This argument sets the search url for all searches. The defautl is `http://google.com/ncr`')
 
     parser.add_argument('-t', '--search-type', type=str, action='store', default='normal',
                         help='The searchtype to launch. May be normal web search, image search, news search or video search.')
@@ -66,7 +63,7 @@ def get_command_line(static_args=False):
     parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its rough length will be printed.''')
 
     parser.add_argument('-v', '--verbosity', type=int, default=1,
-                        help='The verbosity of GoogleScraper output. 0: no ouput, 1: most necessary info (no results), 2: detailed scraping info (with results), > 2: Degbug info.')
+                        help='The verbosity of GoogleScraper output. 0: no ouput, 1: most necessary info, summary (no results), 2: detailed scraping info (still without results), 3: show parsed results:, > 3:  Degbug info.')
 
     parser.add_argument('--view-config', action='store_true', default=False,
                         help="Print the current configuration to stdout. You may use it to create and tweak your own config file from it.")
@@ -91,5 +88,5 @@ def get_command_line(static_args=False):
 
     return {
         'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
-        'GLOBAL':  make_dict(['base_search_url', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
+        'GLOBAL':  make_dict(['debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
     }

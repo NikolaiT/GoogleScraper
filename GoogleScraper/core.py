@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 
-import math
+
+import queue
 import threading
 import datetime
 import os
 import logging
-from GoogleScraper.utils import grouper
+from GoogleScraper.utils import chunk_it
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
 from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config
+from GoogleScraper.log import out
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -48,7 +50,7 @@ def assign_keywords_to_scrapers(all_keywords):
     num_workers = Config['SCRAPING'].getint('num_workers', 1)
 
     if len(all_keywords) > num_workers:
-        kwgroups = grouper(all_keywords, len(all_keywords)//num_workers, fillvalue=None)
+        kwgroups = chunk_it(all_keywords, num_workers)
     else:
         # thats a little special there :)
         kwgroups = [[kw, ] for kw in all_keywords]
@@ -94,6 +96,31 @@ def start_python_console(namespace=None, noipython=False, banner=''):
     except SystemExit: # raised when using exit() in python code.interact
         pass
 
+
+class ShowProgressQueue(threading.Thread):
+    """Prints the number of keywords scraped already to show the user the progress of the scraping process.
+
+    In order to achieve this, we need to update the status whenever a new keyword is scraped.
+    """
+    def __init__(self, queue, num_keywords):
+        """Create a ShowProgressQueue thread instance.
+
+        Args:
+            queue: A queue.Queue instance to share among the worker threads.
+            num_keywords: The number of total keywords that need to be scraped.
+
+        """
+        super().__init__()
+        self.queue = queue
+        self.num_keywords = num_keywords
+        self.num_already_processed = 0
+
+    def run(self):
+        while self.num_already_processed < self.num_keywords:
+            e = self.queue.get()
+            self.num_already_processed += 1
+            print('{}/{} keywords processed.'.format(self.num_already_processed, self.num_keywords), end='\r')
+            self.queue.task_done()
 
 
 def main(return_results=False, parse_cmd_line=True):
@@ -241,6 +268,20 @@ def main(return_results=False, parse_cmd_line=True):
     if (len(kwgroups) * len(search_engines)) > Config['SCRAPING'].getint('maximum_workers'):
         logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
 
+
+    out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
+        num_keywords=len(remaining),
+        num_proxies=len(proxies),
+        num_threads=Config['SCRAPING'].getint('num_workers', 1)
+    ), lvl=1)
+
+    # Show the progress of the scraping
+    q = None
+    if Config['GLOBAL'].getint('verbosity', 1) == 1:
+        q = queue.Queue()
+        progress_thread = ShowProgressQueue(q, len(remaining))
+        progress_thread.start()
+
     # Let the games begin
     if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
         # A lock to prevent multiple threads from solving captcha.
@@ -265,7 +306,8 @@ def main(return_results=False, parse_cmd_line=True):
                             scraper_search=scraper_search,
                             captcha_lock=captcha_lock,
                             browser_num=i,
-                            proxy=proxy_to_use
+                            proxy=proxy_to_use,
+                            progress_queue=q,
                         )
                     )
                 elif Config['SCRAPING'].get('scrapemethod') == 'http':
@@ -277,7 +319,8 @@ def main(return_results=False, parse_cmd_line=True):
                             scraper_search=scraper_search,
                             cache_lock=cache_lock,
                             db_lock=db_lock,
-                            proxy=proxy_to_use
+                            proxy=proxy_to_use,
+                            progress_queue=q,
                         )
                     )
 
@@ -296,6 +339,9 @@ def main(return_results=False, parse_cmd_line=True):
     scraper_search.stopped_searching = datetime.datetime.utcnow()
     session.add(scraper_search)
     session.commit()
+
+    if Config['GLOBAL'].getint('verbosity', 1) == 1:
+        progress_thread.join()
 
     if return_results:
         return session

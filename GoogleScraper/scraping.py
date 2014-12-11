@@ -111,7 +111,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     """
 
     def __init__(self, keywords=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
-                 start_page_pos=1, search_engine=None, search_type=None, proxy=None):
+                 start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
         """Instantiate an SearchEngineScrape object.
 
         Args:
@@ -145,6 +145,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         
         # The actual keyword that is to be scraped next
         self.current_keyword = self.keywords[0]
+
+        # The number that shows how many searches have been done by the worker
+        self.search_number = 1
 
         # The parser that should be used to parse the search engine results
         self.parser = get_parser_by_search_engine(self.search_engine)()
@@ -182,12 +185,38 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # init the cache lock
         self.cache_lock = cache_lock
 
+        # a queue to put an element in whenever a new keyword is scraped.
+        # to visualize the progress
+        self.progress_queue = progress_queue
+
         # set the session
         self.session = session
 
         # the current request time
         self.current_request_time = None
 
+        # How long to sleep (in seconds) after every n-th request
+        self.sleeping_ranges = dict()
+        for line in Config['GLOBAL'].get('sleeping_ranges').split('\n'):
+            assert line.count(':') == 1, 'Invalid sleep range format.'
+            key, value = line.split(':')
+            self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
+
+        # the output files. Either CSV or JSON
+        # It's little bit tricky to write the JSON output file, since we need to
+        # create the array of the most outer results ourselves because we write
+        # results as soon as we get them (it's impossible to hold the whole search in memory).
+        self.output_format = Config['GLOBAL'].get('output_format', 'stdout')
+        self.output_file = Config['GLOBAL'].get('output_filename', 'google_scraper')
+        if self.output_format == 'json':
+            self.json_outfile = open(self.output_file + '.json', 'a')
+            self.json_outfile.write('[')
+        elif self.output_format == 'csv':
+            self.csv_outfile = csv.DictWriter(open(self.output_file + '.csv', 'a'),
+                    fieldnames=('link', 'title', 'snippet', 'visible_link', 'num_results',
+                                'query', 'search_engine_name', 'requested_by',
+                                'scrapemethod', 'page_number', 'requested_at'))
+            self.csv_outfile.writeheader()
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
@@ -257,32 +286,25 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         output_format = Config['GLOBAL'].get('output_format', 'stdout')
         output_file = Config['GLOBAL'].get('output_filename', 'google_scraper')
 
-        if output_format == 'stdout':
-            out(self.parser, lvl=2)
-        elif output_format == 'json':
-            if not hasattr(self, 'json_outfile'):
-                self.json_outfile = open(output_file + '.json', 'a')
-
-            obj = self._get_serp_obj()
-            json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
-
-        elif output_format == 'csv':
-            if not hasattr(self, 'csv_outfile'):
-                self.csv_outfile = csv.DictWriter(open(output_file + '.csv', 'a'),
-                        fieldnames=('link', 'title', 'snippet', 'visible_link', 'num_results',
-                                    'query', 'search_engine_name', 'requested_by',
-                                    'scrapemethod', 'page_number', 'requested_at'))
-                self.csv_outfile.writeheader()
-
+        def results():
             rows = []
             for result_type, value in self.parser.search_results.items():
                 if isinstance(value, list):
                     for link in value:
                         rows.append(link)
+            return rows
 
+        if output_format == 'stdout':
+            out(self.parser, lvl=2)
+        elif output_format == 'json':
             obj = self._get_serp_obj()
-            obj['num_results'] = self.parser.search_results['num_results']
-            for row in rows:
+            obj['results'] = results()
+            json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
+            self.json_outfile.write(',')
+
+        elif output_format == 'csv':
+            obj = self._get_serp_obj()
+            for row in results():
                 row.update(obj)
                 self.csv_outfile.writerow(row)
 
@@ -296,28 +318,30 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         obj['scrapemethod'] = self.scrapemethod
         obj['page_number'] = self.current_page
         obj['requested_at'] = self.current_request_time.isoformat()
+        obj['num_results'] = self.parser.search_results['num_results']
         return obj
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
         self.start_page_pos += 1
 
-    def next_keyword_info(self, pos_current_keyword):
+    def keyword_info(self):
         """Print a short summary where we are in the scrape and what's the next keyword."""
-        out('[{thread_name}][{search_engine} with ip {ip} next keyword: "{keyword}" with {num_pages} pages. {done}/{all} already scraped.'.format(
+        out('[{thread_name}][{ip}][{search_engine}]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before scraping. {done}/{all} already scraped.'.format(
             thread_name=self.name,
             search_engine=self.search_engine,
             ip=self.ip,
             keyword=self.current_keyword,
             num_pages=self.num_pages_per_keyword,
-            done=pos_current_keyword,
+            delay=self.current_delay,
+            done=self.search_number,
             all=self.num_keywords
-        ), lvl=1)
+        ), lvl=2)
 
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
-        out('[+] {}[{}][search-type:{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages={}'.format(
-            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+        out('[+] {}[{}][search-type:{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages per keyword={}'.format(
+            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=2)
 
 
     def cache_results(self):
@@ -325,6 +349,53 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         if Config['GLOBAL'].getboolean('do_caching', False):
             with self.cache_lock:
                 cache_results(self.parser.cleaned_html, self.current_keyword, self.search_engine, self.scrapemethod)
+
+
+    def _largest_sleep_range(self, search_number):
+        """Sleep a given amount of time dependent on the number of searches done.
+
+        Args:
+            search_number: How many searches the worker has done yet.
+
+        Returns:
+            A range tuple which defines in which range the worker should sleep.
+        """
+
+        assert search_number >= 0
+        if search_number != 0:
+            s = sorted(self.sleeping_ranges.keys(), reverse=True)
+            for n in s:
+                if search_number % n == 0:
+                    return self.sleeping_ranges[n]
+        # sleep one second
+        return (1, 2)
+
+    def detection_prevention_sleep(self):
+        # match the largest sleep range
+        self.current_delay = random.randrange(*self._largest_sleep_range(self.search_number))
+        time.sleep(self.current_delay)
+
+    def after_search(self, html):
+        """Store the results and parse em.
+
+        Notify the progress queue if necessary.
+
+        Args:
+            html: The scraped html.
+        """
+        self.parser.parse(html)
+        self.store()
+        if self.progress_queue:
+            self.progress_queue.put(1)
+        self.cache_results()
+        self.search_number += 1
+
+
+
+    def __del__(self):
+        """Close the json array if necessary."""
+        if self.output_format == 'json':
+            self.json_outfile.write(']')
 
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
@@ -524,7 +595,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                 params=self.search_params),
             lvl=3)
 
-            super().next_keyword_info(self.n)
+            super().detection_prevention_sleep()
+            super().keyword_info()
 
             request = self.requests.get(self.base_search_url, headers=self.headers,
                              params=self.search_params, timeout=5)
@@ -543,22 +615,18 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.handle_request_denied(request.status_code)
             return False
 
-        html = request.text
-        self.parser.parse(html)
-        self.store()
-        super().cache_results()
-
-        self.n += 1
+        super().after_search(request.text)
 
     def run(self):
         args = []
         kwargs = {}
         kwargs['rand'] = False
-        self.n = 0
         SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
-        
+
+
 class AsyncHttpScrape(SearchEngineScrape):
     pass
+
 
 class SelScrape(SearchEngineScrape, threading.Thread):
     """Instances of this class make use of selenium browser objects to query Google.
@@ -582,30 +650,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
-        self.search_number = 0
         self.scrapemethod = 'selenium'
 
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
-
-        # How long to sleep (in seconds) after every n-th request
-        self.sleeping_ranges = dict()
-        for line in Config['SELENIUM'].get('sleeping_ranges').split('\n'):
-            assert line.count(':') == 1, 'Invalid sleep range format.'
-            key, value = line.split(':')
-            self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
-
         super().instance_creation_info(self.__class__.__name__)
-
-    def _largest_sleep_range(self, search_number):
-        assert search_number >= 0
-        if search_number != 0:
-            s = sorted(self.sleeping_ranges.keys(), reverse=True)
-            for n in s:
-                if search_number % n == 0:
-                    return self.sleeping_ranges[n]
-        # sleep one second
-        return (1, 2)
 
     def set_proxy(self):
         """Install a proxy on the communication channel."""
@@ -855,12 +904,13 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         for self.current_keyword in self.keywords:
 
-            super().next_keyword_info(n)
-
             self.search_input = self._wait_until_search_input_field_appears()
 
             if self.search_input is False:
                 self.search_input = self.handle_request_denied()
+
+            super().detection_prevention_sleep()
+            super().keyword_info()
 
             if self.search_input:
                 self.search_input.clear()
@@ -879,16 +929,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
                     break
 
-                # match the largest sleep range
-                sleep_time = random.randrange(*self._largest_sleep_range(self.search_number))
-                time.sleep(sleep_time)
-
-                html = self.webdriver.page_source
-                self.parser.parse(html)
-                self.store()
-                super().cache_results()
-
-                self.search_number += 1
+                super().after_search(self.webdriver.page_source)
 
                 # Click the next page link not when leaving the loop
                 if self.current_page < self.num_pages_per_keyword + 1:

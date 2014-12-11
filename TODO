@@ -25,6 +25,13 @@
   - release version 0.2.0 on the cheeseshop
       - released version 0.1.5 on pypy [done]
 
+11.12.2014
+  - JSON output is still slightly corrupt
+  - CSV output probably also not ideal.
+  - Improve documentation after Google style guide
+  - Maybe add other search engines!
+  - finally implement async mode!!!
+
 
 
 
