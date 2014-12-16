@@ -14,7 +14,7 @@ if __name__ == '__main__':
         'SCRAPING': {
             'use_own_ip': 'True',
             'keyword': 'Let\'s go bubbles!',
-            'search_engine': 'yandex',
+            'search_engines': 'yandex',
             'num_pages_for_keyword': 1
         },
         'SELENIUM': {

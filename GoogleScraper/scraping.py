@@ -932,7 +932,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 super().after_search(self.webdriver.page_source)
 
                 # Click the next page link not when leaving the loop
-                if self.current_page < self.num_pages_per_keyword + 1:
+                if self.current_page < self.num_pages_per_keyword:
                     self.next_url = self._goto_next_page()
 
                     if not self.next_url:

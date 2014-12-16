@@ -2,6 +2,7 @@
 
 import sys
 import re
+import hashlib
 import lxml.html
 from lxml.html.clean import Cleaner
 import logging
@@ -151,12 +152,14 @@ class Parser():
                     # Let's add primitive support for CSS3 pseudo selectors
                     # We just need two of them
                     # ::text
-                    # ::attr(someattribute)
+                    # ::attr(attribute)
 
-                    # You say we should use xpath expresssions instead?
+                    # You say we should use xpath expressions instead?
                     # Maybe you're right, but they are complicated when it comes to classes,
                     # have a look here: http://doc.scrapy.org/en/latest/topics/selectors.html
                     serp_result = {}
+                    # key are for example 'link', 'snippet', 'snippet', ...
+                    # selector is the selector to grab these items
                     for key, selector in selectors_to_use.items():
                         value = None
                         if selector.endswith('::text'):
@@ -176,9 +179,36 @@ class Parser():
                                     value = result.xpath(css_to_xpath(selector))[0].text_content()
                                 except IndexError as e:
                                     pass
+
                         serp_result[key] = value
-                    if serp_result:
+
+                    # only add the parsed item if we haven't done so beforehand. We always add an id that
+                    # consist of an hash of the parsed elements to each item.
+                    # Reason for duplicate handling:
+                    # There are multiple selectors (to differentiate between html layout for distinct request parameters, like IP address)
+                    # that might produce duplicate parsing results.
+                    args = list(serp_result.values())
+                    id = self.result_id(args)
+                    serp_result['id'] = id
+
+                    if not [e for e in self.search_results[result_type] if e['id'] == id]:
                         self.search_results[result_type].append(serp_result)
+
+    def result_id(self, args):
+        """Gets an unique id for the args.
+
+        Args:
+            args: A number of arguments that constitute the uniqueness of the result.
+
+        Returns:
+            An hash of the concatenated arguments.
+        """
+        hasher = hashlib.md5()
+        for arg in args:
+            if arg:
+                hasher.update(arg.encode())
+
+        return hasher.hexdigest()
                     
     def after_parsing(self):
         """Subclass specific behaviour after parsing happened.

@@ -90,7 +90,7 @@ class Link(Base):
     serp = relationship(SearchEngineResultsPage, backref=backref('links', uselist=True))
 
     def __str__(self):
-        return '<Link at rank {rank} has url: {url}>'.format(**self.__dict__)
+        return '<Link at rank {rank} has url: {link}>'.format(**self.__dict__)
 
     def __repr__(self):
         return self.__str__()
