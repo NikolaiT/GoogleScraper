@@ -182,16 +182,11 @@ class Parser():
 
                         serp_result[key] = value
 
-                    # only add the parsed item if we haven't done so beforehand. We always add an id that
-                    # consist of an hash of the parsed elements to each item.
-                    # Reason for duplicate handling:
-                    # There are multiple selectors (to differentiate between html layout for distinct request parameters, like IP address)
-                    # that might produce duplicate parsing results.
-                    args = list(serp_result.values())
-                    id = self.result_id(args)
-                    serp_result['id'] = id
-
-                    if not [e for e in self.search_results[result_type] if e['id'] == id]:
+                    # only add items that have not None links.
+                    # Avoid duplicates. Detect them by the link.
+                    # If statement below: Lazy evaluation. The more probable case first.
+                    if serp_result['link'] is not None and \
+                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
 
     def result_id(self, args):
