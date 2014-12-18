@@ -9,11 +9,13 @@ import logging
 from urllib.parse import urlparse
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
+from GoogleScraper.config import Config
+from GoogleScraper.log import out
 from cssselect import HTMLTranslator
 
 logger = logging.getLogger('GoogleScraper')
 
-class InvalidSearchTypeExcpetion(Exception):
+class InvalidSearchTypeException(Exception):
     pass
 
 
@@ -53,7 +55,7 @@ class Parser():
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
 
-    def __init__(self, html=None, searchtype='normal'):
+    def __init__(self, html=None):
         """Create new Parser instance and parse all information.
 
         Args:
@@ -65,10 +67,10 @@ class Parser():
             Assertion error if the subclassed
             specific parser cannot handle the the settings.
         """
-        assert searchtype in self.search_types
+        self.searchtype = Config['SCRAPING'].get('search_type', 'normal')
+        assert self.searchtype in self.search_types, 'search type "{}" is not supported in {}'.format(self.searchtype, self.__class__.__name__)
         
         self.html = html
-        self.searchtype = searchtype
         self.dom = None
         self.search_results = {}
         self.search_results['num_results'] = ''
@@ -88,6 +90,8 @@ class Parser():
         self._parse()
         
         # Apply subclass specific behaviour after parsing has happened
+        # This is needed because different parsers need to clean/modify
+        # the parsed data uniquely.
         self.after_parsing()
 
     def _parse(self):
@@ -133,7 +137,7 @@ class Parser():
                     break
 
         if not selector_dict and not isinstance(selector_dict, dict):
-            raise InvalidSearchTypeExcpetion('There is no such attribute: {}. No selectors found'.format(attr_name))
+            raise InvalidSearchTypeException('There is no such attribute: {}. No selectors found'.format(attr_name))
 
         for result_type, selector_class in selector_dict.items():
 
@@ -144,7 +148,6 @@ class Parser():
                 results = self.dom.xpath(
                     css_to_xpath('{container} {result_container}'.format(**selectors))
                 )
-
                 to_extract = set(selectors.keys()) - {'container', 'result_container'}
                 selectors_to_use = {key: selectors[key] for key in to_extract if key in selectors.keys()}
 
@@ -181,13 +184,13 @@ class Parser():
                                     pass
 
                         serp_result[key] = value
-
                     # only add items that have not None links.
                     # Avoid duplicates. Detect them by the link.
                     # If statement below: Lazy evaluation. The more probable case first.
-                    if serp_result['link'] is not None and \
-                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
+                    if 'link' in serp_result and serp_result['link'] and \
+                            not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
+
 
     def result_id(self, args):
         """Gets an unique id for the args.
@@ -213,7 +216,7 @@ class Parser():
         """
                 
     def __str__(self):
-        """Return a nicely formated overview of the results."""
+        """Return a nicely formatted overview of the results."""
         return pprint.pformat(self.search_results)
 
     @property
@@ -297,11 +300,17 @@ class GoogleParser(Parser):
     }
     
     image_search_selectors = {
-        'de_ip': {
-            'results': {
+        'results': {
+            'de_ip': {
                 'container': 'li#isr_mc',
                 'result_container': 'div.rg_di',
-                'imgurl': 'a.rg_l::attr(href)'
+                'link': 'a.rg_l::attr(href)'
+            },
+            'de_ip_raw': {
+                'container': '.images_table',
+                'result_container': 'tr td',
+                'link': 'a::attr(href)',
+                'visible_link': 'cite::text',
             }
         }
     }
@@ -331,7 +340,7 @@ class GoogleParser(Parser):
 class YandexParser(Parser):
     """Parses SERP pages of the Yandex search engine."""
 
-    search_types = ['normal']
+    search_types = ['normal', 'image']
     
     num_results_search_selectors = []
     
@@ -347,12 +356,57 @@ class YandexParser(Parser):
             }
         }
     }
+
+    image_search_selectors = {
+        'results': {
+            'de_ip': {
+                'container': '.page-layout__content-wrapper',
+                'result_container': '.serp-item__preview',
+                'imgurl': '.serp-item__preview .serp-item__link::attr(onmousedown)'
+            },
+            'de_ip_raw': {
+                'container': '.page-layout__content-wrapper',
+                'result_container': '.serp-item__preview',
+                'link': '.serp-item__preview .serp-item__link::attr(href)'
+            }
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def after_parsing(self):
+        """Clean the urls.
+
+        Normally Yandex image search store the image url in the onmousedown attribute in a json object. Its
+        pretty messsy. This method grabs the link with a quick regex.
+
+        c.hit({"dtype":"iweb","path":"8.228.471.241.184.141","pos":69,"reqid":"1418919408668565-676535248248925882431999-ws35-986-IMG-p2"}, {"href":"http://www.thewallpapers.org/wallpapers/3/382/thumb/600_winter-snow-nature002.jpg"});
+
+        Sometimes the img url is also stored in the href attribute (when requesting with raw http packets).
+        href="/images/search?text=snow&img_url=http%3A%2F%2Fwww.proza.ru%2Fpics%2F2009%2F12%2F07%2F1290.jpg&pos=2&rpt=simage&pin=1">
+        """
+        super().after_parsing()
+
+        if self.searchtype == 'image':
+            for key, value in self.search_results.items():
+                if isinstance(value, list):
+                    for i, item in enumerate(value):
+                        if isinstance(item, dict) and item['link']:
+                            for regex in (
+                                r'\{"href"\s*:\s*"(?P<url>.*?)"\}',
+                                r'img_url=(?P<url>.*?)&'
+                            ):
+                                result = re.search(regex, item['link'])
+                                if result:
+                                    self.search_results[key][i]['link'] = result.group('url')
+                                    break
     
     
 class BingParser(Parser):
     """Parses SERP pages of the Bing search engine."""
     
-    search_types = ['normal']
+    search_types = ['normal', 'image']
     
     num_results_search_selectors = ['.sb_count']
     
@@ -399,7 +453,7 @@ class BingParser(Parser):
 class YahooParser(Parser):
     """Parses SERP pages of the Yahoo search engine."""
     
-    search_types = ['normal']
+    search_types = ['normal', 'image']
     
     num_results_search_selectors = ['#pg > span:last-child']
     
@@ -420,7 +474,7 @@ class YahooParser(Parser):
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""
     
-    search_types = ['normal']
+    search_types = ['normal', 'image']
     
     num_results_search_selectors = ['#container .nums']
     
@@ -441,7 +495,7 @@ class BaiduParser(Parser):
 class DuckduckgoParser(Parser):
     """Parses SERP pages of the Duckduckgo search engine."""
     
-    search_types = ['normal']
+    search_types = ['normal', 'image']
     
     num_results_search_selectors = []
     
@@ -537,6 +591,7 @@ def parse_serp(html=None, search_engine=None,
             parser = parser()
             parser.parse(html)
 
+        out(parser, lvl=2)
         num_results = 0
 
         if not serp:
@@ -555,6 +610,10 @@ def parse_serp(html=None, search_engine=None,
                 rank = 1
                 for link in value:
                     parsed = urlparse(link['link'])
+
+                    # fill with nones to prevent key errors
+                    [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
+
                     l = Link(
                         link=link['link'],
                         snippet=link['snippet'],

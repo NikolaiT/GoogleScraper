@@ -392,31 +392,14 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            try:
-                serp = session.query(SearchEngineResultsPage).filter(
-                        SearchEngineResultsPage.query == query,
-                        SearchEngineResultsPage.search_engine_name == search_engine,
-                        SearchEngineResultsPage.scrapemethod == scrapemethod).first()
-            except NoResultFound as e:
-                # that shouldn't happen
-                # we have a cache file that matches the above identifying information
-                # but it was never stored to the database.
-                logger.error('No entry for file {} found in database. Will parse again.'.format(clean_filename))
-                html = read_cached_file(get_path(fname))
-                serp = parse_serp(
-                    html=html,
-                    search_engine=search_engine,
-                    scrapemethod=scrapemethod,
-                    current_page=0,
-                    current_keyword=query
-                )
-            except MultipleResultsFound as e:
-                raise e
+            serp = None #get_serp_from_database(session, query, search_engine, scrapemethod)
 
-            if serp:
-                serp.scraper_searches.append(scraper_search)
-                session.add(serp)
-                session.commit()
+            if not serp:
+                serp = parse_again(fname, search_engine, scrapemethod, query)
+
+            serp.scraper_searches.append(scraper_search)
+            session.add(serp)
+            session.commit()
 
             mapping.pop(clean_filename)
             num_cached += 1
@@ -429,6 +412,37 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
     session.commit()
     # return the remaining keywords to scrape
     return [e[0] for e in mapping.values()]
+
+
+def parse_again(fname, search_engine, scrapemethod, query):
+    html = read_cached_file(get_path(fname))
+    serp = parse_serp(
+        html=html,
+        search_engine=search_engine,
+        scrapemethod=scrapemethod,
+        current_page=0,
+        current_keyword=query
+    )
+    return serp
+
+
+def get_serp_from_database(session, query, search_engine, scrapemethod):
+    try:
+        serp = session.query(SearchEngineResultsPage).filter(
+                SearchEngineResultsPage.query == query,
+                SearchEngineResultsPage.search_engine_name == search_engine,
+                SearchEngineResultsPage.scrapemethod == scrapemethod).first()
+        out(serp.links, lvl=2)
+        return serp
+    except NoResultFound as e:
+        # that shouldn't happen
+        # we have a cache file that matches the above identifying information
+        # but it was never stored to the database.
+        return False
+    except MultipleResultsFound as e:
+        raise e
+
+    return False
 
 
 def clean_cachefiles():

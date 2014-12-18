@@ -103,7 +103,7 @@ def get_engine(path=None):
         The sqlalchemy engine.
     """
     db_path = path if path else Config['GLOBAL'].get('output_filename', 'google_scraper') + '.db'
-    echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 3) else False
+    echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 4) else False
     engine = create_engine('sqlite:///' + db_path, echo=echo)
     Base.metadata.create_all(engine)
 

@@ -391,7 +391,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.search_number += 1
 
 
-
     def __del__(self):
         """Close the json array if necessary."""
         if self.output_format == 'json':
@@ -525,7 +524,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         start_search_position = None if self.current_page == 1 else str(int(self.num_results_per_page) * int(self.current_page))
         
         if self.search_engine == 'google':
-            self.parser = GoogleParser(searchtype=self.search_type)
+            self.parser = GoogleParser()
             self.search_params['q'] = self.current_keyword
             self.search_params['num'] = str(self.num_results_per_page)
             self.search_params['start'] = start_search_position
@@ -554,29 +553,33 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                     'source': 'lnms',
                     'sa': 'X'
                 })
+
         elif self.search_engine == 'yandex':
-            self.parser = YandexParser(searchtype=self.search_type)
+            self.parser = YandexParser()
             self.search_params['text'] = self.current_keyword
             self.search_params['p'] = start_search_position
+
+            if self.search_type == 'image':
+                self.base_search_url = 'http://yandex.ru/images/search?'
         
         elif self.search_engine == 'bing':
-            self.parser = BingParser(searchtype=self.search_type)
+            self.parser = BingParser()
             self.search_params['q'] = self.current_keyword
             self.search_params['first'] = start_search_position
             
         elif self.search_engine == 'yahoo':
-            self.parser = YahooParser(searchtype=self.search_type)
+            self.parser = YahooParser()
             self.search_params['p'] = self.current_keyword
             self.search_params['b'] = start_search_position
             self.search_params['ei'] = 'UTF-8'
             
         elif self.search_engine == 'baidu':
-            self.parser = BaiduParser(searchtype=self.search_type)
+            self.parser = BaiduParser()
             self.search_params['wd'] = self.current_keyword
             self.search_params['pn'] = start_search_position
             self.search_params['ie'] = 'utf-8'
         elif self.search_engine == 'duckduckgo':
-            self.parser = DuckduckgoParser(searchtype=self.search_type)
+            self.parser = DuckduckgoParser()
             self.search_params['q'] = self.current_keyword
             
     def search(self, *args, rand=False, **kwargs):
@@ -811,18 +814,33 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if Config['SCRAPING'].getboolean('check_proxies'):
             self.proxy_check()
 
-        starting_point = {
+        normal_search_locations = {
             'google': 'https://www.google.com/',
             'yandex': 'http://www.yandex.ru/',
             'bing': 'http://www.bing.com/',
             'yahoo': 'https://yahoo.com/',
             'baidu': 'http://baidu.com/',
             'duckduckgo': 'https://duckduckgo.com/'
-        }[self.search_engine]
+        }
 
-        self.starting_point = starting_point
+        image_search_locations = {
+            'google': 'https://www.google.com/imghp',
+            'yandex': 'http://yandex.ru/images/',
+            'bing': 'www.bing.com/?scope=images',
+            'yahoo': 'http://images.yahoo.com/',
+            'baidu': 'http://image.baidu.com/',
+            'duckduckgo': None # duckduckgo doesnt't support direct image search
+        }
+
+        self.starting_point = None
+
+        if Config['SCRAPING'].get('search_type', 'normal') == 'image':
+            self.starting_point = image_search_locations[self.search_engine]
+        else:
+            self.starting_point = normal_search_locations[self.search_engine]
 
         self.webdriver.get(self.starting_point)
+
 
     def _get_search_input_field(self):
         """Get the search input field for the current search_engine.
