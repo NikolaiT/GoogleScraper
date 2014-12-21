@@ -74,7 +74,7 @@ def get_command_line(static_args=False):
     parser.add_argument('--mysql-proxy-db', action='store',
                         help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
 
-    parser.add_argument('--search-engines', action='store',
+    parser.add_argument('-s', '--search-engines', action='store',
                         help='What search engines to use. Supported search engines: google, yandex, bing, yahoo, baidu, duckduckgo. If you want to use more than one concurrently, just separate with commatas: "google, bing, yandex"')
 
 

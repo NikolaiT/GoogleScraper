@@ -826,7 +826,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         image_search_locations = {
             'google': 'https://www.google.com/imghp',
             'yandex': 'http://yandex.ru/images/',
-            'bing': 'www.bing.com/?scope=images',
+            'bing': 'https://www.bing.com/?scope=images',
             'yahoo': 'http://images.yahoo.com/',
             'baidu': 'http://image.baidu.com/',
             'duckduckgo': None # duckduckgo doesnt't support direct image search

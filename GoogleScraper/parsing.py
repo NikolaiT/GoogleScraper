@@ -161,7 +161,7 @@ class Parser():
                     # Maybe you're right, but they are complicated when it comes to classes,
                     # have a look here: http://doc.scrapy.org/en/latest/topics/selectors.html
                     serp_result = {}
-                    # key are for example 'link', 'snippet', 'snippet', ...
+                    # key are for example 'link', 'snippet', 'visible-url', ...
                     # selector is the selector to grab these items
                     for key, selector in selectors_to_use.items():
                         value = None
@@ -221,7 +221,7 @@ class Parser():
 
     @property
     def cleaned_html(self):
-        assert self.dom, 'The html needs to be parsed to get the cleaned html'
+        assert len(self.dom), 'The html needs to be parsed to get the cleaned html'
         return lxml.html.tostring(self.dom)
                 
 """
@@ -328,14 +328,23 @@ class GoogleParser(Parser):
         Clean with a short regex.
         """
         super().after_parsing()
+
+        clean_regexes = {
+            'normal': r'/url\?q=(?P<url>.*?)&sa=U&ei=',
+            'image': r'imgres\?imgurl=(?P<url>.*?)&'
+        }
+
         for key, value in self.search_results.items():
             if isinstance(value, list):
                 for i, item in enumerate(value):
                     if isinstance(item, dict) and item['link']:
-                        result = re.search(r'/url\?q=(?P<url>.*?)&sa=U&ei=', item['link'])
+                        result = re.search(
+                            clean_regexes[self.searchtype],
+                            item['link']
+                        )
                         if result:
                             self.search_results[key][i]['link'] = result.group('url')
-                            
+
 
 class YandexParser(Parser):
     """Parses SERP pages of the Yandex search engine."""
@@ -362,7 +371,7 @@ class YandexParser(Parser):
             'de_ip': {
                 'container': '.page-layout__content-wrapper',
                 'result_container': '.serp-item__preview',
-                'imgurl': '.serp-item__preview .serp-item__link::attr(onmousedown)'
+                'link': '.serp-item__preview .serp-item__link::attr(onmousedown)'
             },
             'de_ip_raw': {
                 'container': '.page-layout__content-wrapper',
@@ -449,6 +458,44 @@ class BingParser(Parser):
         }
     }
 
+    image_search_selectors = {
+        'results': {
+            'ch_ip': {
+                'container': '#dg_c .imgres',
+                'result_container': '.dg_u',
+                'link': 'a.dv_i::attr(m)'
+            },
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+    def after_parsing(self):
+        """Clean the urls.
+
+        The image url data is in the m attribute.
+
+        m={ns:"images.1_4",k:"5018",mid:"46CE8A1D71B04B408784F0219B488A5AE91F972E",
+        surl:"http://berlin-germany.ca/",imgurl:"http://berlin-germany.ca/images/berlin250.jpg",
+        oh:"184",tft:"45",oi:"http://berlin-germany.ca/images/berlin250.jpg"}
+        """
+        super().after_parsing()
+
+        if self.searchtype == 'image':
+            for key, value in self.search_results.items():
+                if isinstance(value, list):
+                    for i, item in enumerate(value):
+                        if isinstance(item, dict) and item['link']:
+                            for regex in (
+                                r'imgurl:"(?P<url>.*?)"',
+                            ):
+                                result = re.search(regex, item['link'])
+                                if result:
+                                    self.search_results[key][i]['link'] = result.group('url')
+                                    break
+
 
 class YahooParser(Parser):
     """Parses SERP pages of the Yahoo search engine."""
@@ -469,7 +516,6 @@ class YahooParser(Parser):
             }
         },
     }
-    
 
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""

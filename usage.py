@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Shows how to control GoogleScraper programmatically. Uses selenium mode.
+Shows how to control GoogleScraper programmatically.
 """
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
@@ -49,10 +49,10 @@ def image_search():
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
-            'keyword': 'snow nature',
-            'search_engines': 'yandex,google,bing,duckduckgo,yahoo,baidu',
+            'keyword': 'berlin new year',
+            'search_engines': 'yandex,google', # ,bing,duckduckgo,yahoo,baidu
             'search_type': 'image',
-            'scrapemethod': 'http'
+            'scrapemethod': 'selenium'
         }
     }
 
@@ -69,7 +69,7 @@ def image_search():
             [link.link for link in serp.links]
         )
 
-    import threading,requests, os
+    import threading, requests, os, urllib
 
     class FetchResource(threading.Thread):
         """Grabs a web resource and stores it in the target directory"""
@@ -80,12 +80,20 @@ def image_search():
 
         def run(self):
             for url in self.urls:
+                url = urllib.parse.unquote(url)
                 with open(os.path.join(self.target, url.split('/')[-1]), 'wb') as f:
-                    f.write(requests.get(url).content)
-
+                    try:
+                        content = requests.get(url).content
+                        f.write(content)
+                    except Exception as e:
+                        pass
+                    print('[+] Fetched {}'.format(url))
 
     # make a directory for the results
-    os.mkdir('images')
+    try:
+        os.mkdir('images')
+    except FileExistsError:
+        pass
 
     # fire up 100 threads to get the images
     num_threads = 100
@@ -94,7 +102,10 @@ def image_search():
 
     while image_urls:
         for t in threads:
-            t.urls.append(image_urls.pop())
+            try:
+                t.urls.append(image_urls.pop())
+            except IndexError as e:
+                break
 
     threads = [t for t in threads if t.urls]
 
@@ -102,7 +113,7 @@ def image_search():
         t.start()
 
     for t in threads:
-        t.stop()
+        t.join()
 
     # that's it :)
 
