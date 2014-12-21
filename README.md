@@ -122,7 +122,7 @@ GoogleScraper is implemented with the following techniques/software:
 Currently the following search engines are supported:
 + Google
 + Bing
-+ Qandex
++ Yandex
 + Baidu
 + Duckduckgo
 
