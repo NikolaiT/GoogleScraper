@@ -46,11 +46,13 @@ def basic_usage():
 # simulating a image search for all search engines that support image search
 # then download all found images :)
 def image_search():
+    target_directory = 'images/'
+
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
-            'keyword': 'berlin new year',
-            'search_engines': 'yandex,google', # ,bing,duckduckgo,yahoo,baidu
+            'keyword': 'sexy girl', # :D hehe have fun my dear friends
+            'search_engines': 'yandex,google,bing,baidu,yahoo', # duckduckgo not supported
             'search_type': 'image',
             'scrapemethod': 'selenium'
         }
@@ -69,7 +71,12 @@ def image_search():
             [link.link for link in serp.links]
         )
 
-    import threading, requests, os, urllib
+    print('[i] Going to scrape {num} images and saving them in "{dir}"'.format(
+        num=len(image_urls),
+        dir=target_directory
+    ))
+
+    import threading,requests, os, urllib
 
     class FetchResource(threading.Thread):
         """Grabs a web resource and stores it in the target directory"""
@@ -91,7 +98,7 @@ def image_search():
 
     # make a directory for the results
     try:
-        os.mkdir('images')
+        os.mkdir(target_directory)
     except FileExistsError:
         pass
 
@@ -120,10 +127,7 @@ def image_search():
 ### MAIN FUNCTION ###
 
 if __name__ == '__main__':
-    # See in the config.cfg file for possible values
-
     # basic_usage()
-
     image_search()
 
 

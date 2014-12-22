@@ -294,20 +294,16 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                         rows.append(link)
             return rows
 
-        if output_format == 'stdout':
-            out(self.parser, lvl=2)
-        elif output_format == 'json':
+        if output_format == 'json':
             obj = self._get_serp_obj()
             obj['results'] = results()
             json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
             self.json_outfile.write(',')
-
         elif output_format == 'csv':
             obj = self._get_serp_obj()
             for row in results():
                 row.update(obj)
                 self.csv_outfile.writerow(row)
-
 
     def _get_serp_obj(self):
         """Little helper that returns a serp object for various output formats."""
@@ -775,12 +771,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             'google': {
                 'inurl': '/sorry/',
                 'inhtml': 'detected unusual traffic'
-            }
+            },
+            'bing': {},
+            'yahoo': {},
+            'baidu': {},
+            'yandex': {},
         }
 
         needles = malicious_request_needles[self.search_engine]
 
-        if needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
+        if needles and needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
 
             if Config['SELENIUM'].getboolean('manual_captcha_solving', False):
                 with self.captcha_lock:
@@ -927,9 +927,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             if self.search_input is False:
                 self.search_input = self.handle_request_denied()
 
-            super().detection_prevention_sleep()
-            super().keyword_info()
-
             if self.search_input:
                 self.search_input.clear()
                 time.sleep(.25)
@@ -937,6 +934,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.current_request_time = datetime.datetime.utcnow()
             else:
                 raise GoogleSearchError('Cannot get handle to the input form!')
+
+            super().detection_prevention_sleep()
+            super().keyword_info()
 
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
                 # Waiting until the keyword appears in the title may

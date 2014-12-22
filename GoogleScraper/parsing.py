@@ -6,7 +6,7 @@ import hashlib
 import lxml.html
 from lxml.html.clean import Cleaner
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
 from GoogleScraper.config import Config
@@ -94,27 +94,23 @@ class Parser():
         # the parsed data uniquely.
         self.after_parsing()
 
-    def _parse(self):
-        """Internal parse the dom according to the provided css selectors.
-        
-        Raises: InvalidSearchTypeExcpetion if no css selectors for the searchtype could be found.
-        """
-        
-        # Try to parse the provided HTML string using lxml
-        # strip all unnecessary information to save space
-        cleaner = Cleaner()
-        cleaner.scripts = True
-        cleaner.javascript = True
-        cleaner.style = True
-
+    def _parse_lxml(self, cleaner=None):
         try:
             parser = lxml.html.HTMLParser(encoding='utf-8')
+            if cleaner:
+                self.dom = cleaner.clean_html(self.dom)
             self.dom = lxml.html.document_fromstring(self.html, parser=parser)
-            self.dom = cleaner.clean_html(self.dom)
             self.dom.resolve_base_href()
         except Exception as e:
             # maybe wrong encoding
             logger.error(e)
+
+    def _parse(self, cleaner=None):
+        """Internal parse the dom according to the provided css selectors.
+        
+        Raises: InvalidSearchTypeExcpetion if no css selectors for the searchtype could be found.
+        """
+        self._parse_lxml(cleaner)
         
         # try to parse the number of results.
         attr_name = self.searchtype + '_search_selectors'
@@ -191,7 +187,6 @@ class Parser():
                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
 
-
     def result_id(self, args):
         """Gets an unique id for the args.
 
@@ -221,6 +216,14 @@ class Parser():
 
     @property
     def cleaned_html(self):
+        # Try to parse the provided HTML string using lxml
+        # strip all unnecessary information to save space
+        cleaner = Cleaner()
+        cleaner.scripts = True
+        cleaner.javascript = True
+        cleaner.comments = True
+        cleaner.style = True
+        self.dom = cleaner.clean_html(self.dom)
         assert len(self.dom), 'The html needs to be parsed to get the cleaned html'
         return lxml.html.tostring(self.dom)
                 
@@ -343,7 +346,7 @@ class GoogleParser(Parser):
                             item['link']
                         )
                         if result:
-                            self.search_results[key][i]['link'] = result.group('url')
+                            self.search_results[key][i]['link'] = unquote(result.group('url'))
 
 
 class YandexParser(Parser):
@@ -517,6 +520,49 @@ class YahooParser(Parser):
         },
     }
 
+    image_search_selectors = {
+        'results': {
+            'ch_ip': {
+                'container': '#results',
+                'result_container': '#sres > li',
+                'link': 'a::attr(href)'
+            },
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+    def after_parsing(self):
+        """Clean the urls.
+
+        The url is in the href attribute and the &imgurl= parameter.
+
+        <a id="yui_3_5_1_1_1419284335995_1635" aria-label="<b>Matterhorn</b> sunrise"
+        href="/images/view;_ylt=AwrB8phvj5hU7moAFzOJzbkF;_ylu=X3oDMTIyc3ZrZ3RwBHNlYwNzcgRzbGsDaW1nBG9pZANmNTgyY2MyYTY4ZmVjYTI5YmYwNWZlM2E3ZTc1YzkyMARncG9zAzEEaXQDYmluZw--?
+        .origin=&back=https%3A%2F%2Fimages.search.yahoo.com%2Fsearch%2Fimages%3Fp%3Dmatterhorn%26fr%3Dyfp-t-901%26fr2%3Dpiv-web%26tab%3Dorganic%26ri%3D1&w=4592&h=3056&
+        imgurl=www.summitpost.org%2Fimages%2Foriginal%2F699696.JPG&rurl=http%3A%2F%2Fwww.summitpost.org%2Fmatterhorn-sunrise%2F699696&size=5088.0KB&
+        name=%3Cb%3EMatterhorn%3C%2Fb%3E+sunrise&p=matterhorn&oid=f582cc2a68feca29bf05fe3a7e75c920&fr2=piv-web&
+        fr=yfp-t-901&tt=%3Cb%3EMatterhorn%3C%2Fb%3E+sunrise&b=0&ni=21&no=1&ts=&tab=organic&
+        sigr=11j056ue0&sigb=134sbn4gc&sigi=11df3qlvm&sigt=10pd8j49h&sign=10pd8j49h&.crumb=qAIpMoHvtm1&fr=yfp-t-901&fr2=piv-web">
+        """
+        super().after_parsing()
+
+        if self.searchtype == 'image':
+            for key, value in self.search_results.items():
+                if isinstance(value, list):
+                    for i, item in enumerate(value):
+                        if isinstance(item, dict) and item['link']:
+                            for regex in (
+                                r'&imgurl=(?P<url>.*?)&',
+                            ):
+                                result = re.search(regex, item['link'])
+                                if result:
+                                    # TODO: Fix this manual protocol adding by parsing "rurl"
+                                    self.search_results[key][i]['link'] = 'http://' + unquote(result.group('url'))
+                                    break
+
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""
     
@@ -536,6 +582,43 @@ class BaiduParser(Parser):
             }
         },
     }
+
+    image_search_selectors = {
+        'results': {
+            'ch_ip': {
+                'container': '#imgContainer',
+                'result_container': '.pageCon > li',
+                'link': '.imgShow a::attr(href)'
+            },
+        }
+    }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+    def after_parsing(self):
+        """Clean the urls.
+
+        href="/i?ct=503316480&z=&tn=baiduimagedetail&ipn=d&word=matterhorn&step_word=&ie=utf-8&in=9250&
+        cl=2&lm=-1&st=&cs=3326243323,1574167845&os=1495729451,4260959385&pn=0&rn=1&di=69455168860&ln=1285&
+        fr=&&fmq=1419285032955_R&ic=&s=&se=&sme=0&tab=&width=&height=&face=&is=&istype=&ist=&jit=&
+        objurl=http%3A%2F%2Fa669.phobos.apple.com%2Fus%2Fr1000%2F077%2FPurple%2Fv4%2F2a%2Fc6%2F15%2F2ac6156c-e23e-62fd-86ee-7a25c29a6c72%2Fmzl.otpvmwuj.1024x1024-65.jpg&adpicid=0"
+        """
+        super().after_parsing()
+
+        if self.searchtype == 'image':
+            for key, value in self.search_results.items():
+                if isinstance(value, list):
+                    for i, item in enumerate(value):
+                        if isinstance(item, dict) and item['link']:
+                            for regex in (
+                                r'&objurl=(?P<url>.*?)&',
+                            ):
+                                result = re.search(regex, item['link'])
+                                if result:
+                                    self.search_results[key][i]['link'] = unquote(result.group('url'))
+                                    break
 
 
 class DuckduckgoParser(Parser):
