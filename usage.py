@@ -51,7 +51,7 @@ def image_search():
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
-            'keyword': 'sexy girl', # :D hehe have fun my dear friends
+            'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
             'search_engines': 'yandex,google,bing,baidu,yahoo', # duckduckgo not supported
             'search_type': 'image',
             'scrapemethod': 'selenium'

@@ -3,8 +3,6 @@
 import threading
 import datetime
 import random
-import json
-import csv
 import math
 import logging
 import sys
@@ -29,6 +27,7 @@ from GoogleScraper.caching import get_cached, cache_results, cached_file_name, c
 from GoogleScraper.database import SearchEngineResultsPage, Link, get_session
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
+from GoogleScraper.output_converter import store_serp_result, end, dict_from_scraping_object
 from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine, parse_serp
 
 logger = logging.getLogger('GoogleScraper')
@@ -202,21 +201,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             key, value = line.split(':')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
-        # the output files. Either CSV or JSON
-        # It's little bit tricky to write the JSON output file, since we need to
-        # create the array of the most outer results ourselves because we write
-        # results as soon as we get them (it's impossible to hold the whole search in memory).
-        self.output_format = Config['GLOBAL'].get('output_format', 'stdout')
-        self.output_file = Config['GLOBAL'].get('output_filename', 'google_scraper')
-        if self.output_format == 'json':
-            self.json_outfile = open(self.output_file + '.json', 'a')
-            self.json_outfile.write('[')
-        elif self.output_format == 'csv':
-            self.csv_outfile = csv.DictWriter(open(self.output_file + '.csv', 'a'),
-                    fieldnames=('link', 'title', 'snippet', 'visible_link', 'num_results',
-                                'query', 'search_engine_name', 'requested_by',
-                                'scrapemethod', 'page_number', 'requested_at'))
-            self.csv_outfile.writeheader()
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
@@ -279,43 +263,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             )
             self.scraper_search.serps.append(serp)
 
-            parse_serp(serp=serp, parser=self.parser)
+            serp, parser = parse_serp(serp=serp, parser=self.parser)
             self.session.add(serp)
             self.session.commit()
 
-        output_format = Config['GLOBAL'].get('output_format', 'stdout')
-        output_file = Config['GLOBAL'].get('output_filename', 'google_scraper')
-
-        def results():
-            rows = []
-            for result_type, value in self.parser.search_results.items():
-                if isinstance(value, list):
-                    for link in value:
-                        rows.append(link)
-            return rows
-
-        if output_format == 'json':
-            obj = self._get_serp_obj()
-            obj['results'] = results()
-            json.dump(obj, self.json_outfile, indent=2, sort_keys=True)
-            self.json_outfile.write(',')
-        elif output_format == 'csv':
-            obj = self._get_serp_obj()
-            for row in results():
-                row.update(obj)
-                self.csv_outfile.writerow(row)
-
-    def _get_serp_obj(self):
-        """Little helper that returns a serp object for various output formats."""
-        obj = {}
-        obj['query'] = self.current_keyword
-        obj['search_engine_name'] = self.search_engine
-        obj['requested_by'] = self.ip
-        obj['scrapemethod'] = self.scrapemethod
-        obj['page_number'] = self.current_page
-        obj['requested_at'] = self.current_request_time.isoformat()
-        obj['num_results'] = self.parser.search_results['num_results']
-        return obj
+            store_serp_result(dict_from_scraping_object(self), self.parser)
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -389,8 +341,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def __del__(self):
         """Close the json array if necessary."""
-        if self.output_format == 'json':
-            self.json_outfile.write(']')
+        end()
 
 
 class HttpScrape(SearchEngineScrape, threading.Timer):
@@ -882,35 +833,36 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Returns:
             The href attribute of the next_url for further results.
         """
+        if self.search_type == 'normal':
+            next_page_selectors = {
+                'google': '#pnnext',
+                'yandex': '.pager__button_kind_next',
+                'bing': '.sb_pagN',
+                'yahoo': '#pg-next',
+                'baidu': '.n',
+                'duckduckgo': '' # loads results dynamically with ajax
+            }
 
-        next_page_selectors = {
-            'google': '#pnnext',
-            'yandex': '.pager__button_kind_next',
-            'bing': '.sb_pagN',
-            'yahoo': '#pg-next',
-            'baidu': '.n',
-            'duckduckgo': '' # loads results dynamically with ajax
-        }
+            selector = next_page_selectors[self.search_engine]
+            next_url = ''
+            try:
+                # wait until the next page link emerges
+                WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                element = self.webdriver.find_element_by_css_selector(selector)
+                next_url = element.get_attribute('href')
+                element.click()
+                self.current_request_time = datetime.datetime.utcnow()
+            except TimeoutException as te:
+                logger.warning('Cannot locate next page element: {}'.format(te))
+                return False
+            except WebDriverException as e:
+                logger.warning('Cannot locate next page element: {}'.format(e))
+                return False
 
-        selector = next_page_selectors[self.search_engine]
-
-        next_url = ''
-
-        try:
-            # wait until the next page link emerges
-            WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-            element = self.webdriver.find_element_by_css_selector(selector)
-            next_url = element.get_attribute('href')
-            element.click()
-            self.current_request_time = datetime.datetime.utcnow()
-        except TimeoutException as te:
-            logger.warning('Cannot locate next page element: {}'.format(te))
-            return False
-        except WebDriverException as e:
-            logger.warning('Cannot locate next page element: {}'.format(e))
-            return False
-
-        return next_url
+            return next_url
+        elif self.search_type == 'image':
+            self.page_down()
+            return True
 
     def search(self):
         """Search with webdriver.
@@ -958,6 +910,27 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
             n += 1
 
+    def page_down(self):
+        """Scrolls down a page with javascript.
+
+        Used for next page in image search mode.
+        """
+        js = '''
+        var B = document.body,
+            H = document.documentElement,
+            height
+
+        if (typeof document.height !== 'undefined') {
+            height = document.height // For webkit browsers
+        } else {
+            height = Math.max( B.scrollHeight, B.offsetHeight,H.clientHeight, H.scrollHeight, H.offsetHeight );
+        }
+
+        window.scrollBy(0,800)
+        '''
+
+        self.webdriver.execute_script(js)
+        time.sleep(1.5)
 
     def run(self):
         """Run the SelScraper."""

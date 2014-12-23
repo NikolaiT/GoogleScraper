@@ -757,7 +757,7 @@ def parse_serp(html=None, search_engine=None,
 
         serp.num_results = num_results
 
-        return serp
+        return (serp, parser)
 
 if __name__ == '__main__':
     """Originally part of https://github.com/NikolaiT/GoogleScraper.

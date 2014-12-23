@@ -13,6 +13,8 @@ from GoogleScraper.config import Config
 from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
 from GoogleScraper.log import out
+from GoogleScraper.output_converter import store_serp_result, dict_from_serp_object
+
 
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
@@ -395,11 +397,13 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             serp = None #get_serp_from_database(session, query, search_engine, scrapemethod)
 
             if not serp:
-                serp = parse_again(fname, search_engine, scrapemethod, query)
+                serp, parser = parse_again(fname, search_engine, scrapemethod, query)
 
             serp.scraper_searches.append(scraper_search)
             session.add(serp)
             session.commit()
+
+            store_serp_result(dict_from_serp_object(serp), parser)
 
             mapping.pop(clean_filename)
             num_cached += 1
@@ -416,15 +420,13 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
 
 def parse_again(fname, search_engine, scrapemethod, query):
     html = read_cached_file(get_path(fname))
-    serp = parse_serp(
+    return parse_serp(
         html=html,
         search_engine=search_engine,
         scrapemethod=scrapemethod,
         current_page=0,
         current_keyword=query
     )
-    return serp
-
 
 def get_serp_from_database(session, query, search_engine, scrapemethod):
     try:
