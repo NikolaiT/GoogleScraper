@@ -14,6 +14,7 @@ Config = {
     'SCRAPING': {
         # Whether to scrape with own ip address or just with proxies
         'use_own_ip': True,
+        # which scrapemethod to use
         'scrapemethod': 'http'
     },
     'GLOBAL': {
@@ -30,9 +31,7 @@ Config = {
     },
     'SELENIUM': {
         # The maximal amount of selenium browser windows running in parallel
-        'num_browser_instances': 4,
-        # The base Google URL for SelScraper objects
-        'sel_scraper_base_url': 'http://www.google.com/ncr',
+        'num_workers': 4,
         # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
         'sel_browser': 'Chrome',
     },
@@ -96,12 +95,25 @@ def parse_config(cmd_args=False):
     # and replace the global Config variable with the real thing
     Config = cfg_parser
 
+def update_config_with_file(external_cfg_file):
+    """Updates the global Config with the configuration of an
+    external file.
+
+    Args:
+        external_cfg_file: The external configuration file to update from.
+    """
+    if external_cfg_file and os.path.exists(external_cfg_file):
+        external = configparser.ConfigParser()
+        external.read_file(open(external_cfg_file, 'rt'))
+        external.remove_section('DEFAULT')
+        update_config(dict(external))
+
 def parse_cmd_args(cmd_args=None):
     """Parse the command line
 
     Args:
         cmd_args: Optional dictionary, if given, don't parse the command line,
-                  prepopulate the config with this dicionary.
+                  prepopulate the config with this dictionary.
     """
     if isinstance(cmd_args, list):
         cargs = get_command_line(cmd_args)
@@ -148,7 +160,7 @@ def update_config(d, target=None):
         Config = target
 
     for section, mapping in d.items():
-        if not Config.has_section(section):
+        if not Config.has_section(section) and section != 'DEFAULT':
             Config.add_section(section)
 
         for option, value in mapping.items():

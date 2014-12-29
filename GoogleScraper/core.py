@@ -7,11 +7,12 @@ import datetime
 import os
 import logging
 from GoogleScraper.utils import chunk_it
+from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
 from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
-from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config
+from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
 import GoogleScraper.config
 
@@ -133,11 +134,17 @@ def main(return_results=False, parse_cmd_line=True):
     Args:
         return_results: When GoogleScrape is used from within another program, don't print results to stdout,
                         store them in a database instead.
+        parse_cmd_line: Whether to get options from the command line or not.
     Returns:
         A database session to the results when return_results is True
     """
     if parse_cmd_line:
         parse_cmd_args()
+
+    # If the configuration file to use is explicitly specified, update the current configuration
+    # with it.
+    if Config['GLOBAL'].get('config_file', None):
+        update_config_with_file(Config['GLOBAL'].get('config_file', None))
 
     if Config['GLOBAL'].getboolean('view_config'):
         from GoogleScraper.config import CONFIG_FILE
@@ -174,6 +181,7 @@ def main(return_results=False, parse_cmd_line=True):
 
     if not (keyword or keywords) and not kwfile:
         logger.error('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
+        get_command_line(False, True)
         return
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):

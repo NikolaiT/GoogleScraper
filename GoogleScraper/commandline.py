@@ -2,13 +2,15 @@
 
 import argparse
 
-def get_command_line(static_args=False):
-    """Parse command line arguments when GoogleScraper is used from the CLI.
+def get_command_line(static_args=False, print_help=False):
+    """Parse command line arguments when GoogleScraper is used as a CLI application.
 
     Args:
         static_args: A Namespace object that contains config parameters.
                         If supplied, don't parse from the command line and
                         apply the command parser on them instead.
+        print_help: If set to True, only prints the usage and returns.
+
     Returns:
         The configuration as a dictionary that determines the behaviour of the app.
     """
@@ -77,6 +79,8 @@ def get_command_line(static_args=False):
     parser.add_argument('-s', '--search-engines', action='store',
                         help='What search engines to use. Supported search engines: google, yandex, bing, yahoo, baidu, duckduckgo. If you want to use more than one concurrently, just separate with commatas: "google, bing, yandex"')
 
+    if print_help:
+        print(parser.format_help())
 
     if static_args:
         args = parser.parse_args(static_args)
