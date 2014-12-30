@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import argparse
+from GoogleScraper.version import __version__
 
 def get_command_line(static_args=False, print_help=False):
     """Parse command line arguments when GoogleScraper is used as a CLI application.
@@ -18,7 +19,7 @@ def get_command_line(static_args=False, print_help=False):
     parser = argparse.ArgumentParser(prog='GoogleScraper',
                                      description='Scrapes the Google, Yandex, Bing and many other  search engines by forging http requests that imitate '
                                                  'browser searches or by using real browsers controlled by the selenium framework. Multithreading support.',
-                                     epilog='This program might infringe the TOS of the search engines. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com')
+                                     epilog='GoogleScraper {version}. This program might infringe the TOS of the search engines. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com'.format(version=__version__))
 
     parser.add_argument('-m', '--scrapemethod', type=str, default='http',
                         help='''The scraping type. There are currently three types: "http", "selenium" and "http-async".

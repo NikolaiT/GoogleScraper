@@ -251,7 +251,8 @@ def main(return_results=False, parse_cmd_line=True):
         number_search_engines_used=1,
         number_proxies_used=len(proxies),
         number_search_queries=len(keywords),
-        started_searching=datetime.datetime.utcnow()
+        started_searching=datetime.datetime.utcnow(),
+        used_search_engines=','.join(search_engines)
     )
 
     # First of all, lets see how many keywords remain to scrape after parsing the cache

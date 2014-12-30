@@ -9,6 +9,7 @@ import sys
 import time
 import socket
 import abc
+from urllib.parse import urlencode
 
 try:
     from selenium import webdriver
@@ -800,16 +801,17 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             A tuple to locate the search field as used by seleniums function presence_of_element_located()
         """
 
-        input_field_selectors = {
+        self.input_field_selectors = {
             'google': (By.NAME, 'q'),
             'yandex': (By.NAME, 'text'),
             'bing': (By.NAME, 'q'),
             'yahoo': (By.NAME, 'p'),
             'baidu': (By.NAME, 'wd'),
-            'duckduckgo': (By.NAME, 'q')
+            'duckduckgo': (By.NAME, 'q'),
+            'ask': ()
         }
 
-        return input_field_selectors[self.search_engine]
+        return self.input_field_selectors[self.search_engine]
 
     def _wait_until_search_input_field_appears(self, max_wait=5):
         """Waits until the search input field can be located for the current search engine

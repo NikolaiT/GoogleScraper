@@ -743,6 +743,9 @@ def parse_serp(html=None, search_engine=None,
                     # fill with nones to prevent key errors
                     [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
 
+
+                    # sqlalchemy will automatically add this link to
+                    # the serp object.
                     l = Link(
                         link=link['link'],
                         snippet=link['snippet'],
@@ -750,7 +753,8 @@ def parse_serp(html=None, search_engine=None,
                         visible_link=link['visible_link'],
                         domain=parsed.netloc,
                         rank=rank,
-                        serp=serp
+                        serp=serp,
+                        link_type=key
                     )
                     num_results += 1
                     rank += 1
