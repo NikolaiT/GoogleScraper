@@ -60,7 +60,7 @@ def store_serp_result(serp, parser):
             for row in results():
                 row.update(serp)
                 outfile.writerow(row)
-        elif output_format == 'stdout':
+        elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity') > 2:
             outfile.write(str(serp))
 
 

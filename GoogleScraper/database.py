@@ -33,6 +33,7 @@ class ScraperSearch(Base):
     __tablename__ = 'scraper_search'
 
     id = Column(Integer, primary_key=True)
+    keyword_file = Column(String)
     number_search_engines_used = Column(Integer)
     used_search_engines = Column(String)
     number_proxies_used = Column(Integer)
@@ -98,6 +99,9 @@ class Link(Base):
 
 def get_engine(path=None):
     """Return the sqlalchemy engine.
+
+    Args:
+        path: The path/name of the database to create/read from.
 
     Returns:
         The sqlalchemy engine.

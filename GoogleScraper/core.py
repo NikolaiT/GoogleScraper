@@ -4,6 +4,7 @@
 import queue
 import threading
 import datetime
+import hashlib
 import os
 import logging
 from GoogleScraper.utils import chunk_it
@@ -11,12 +12,31 @@ from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
 from GoogleScraper.scraping import SelScrape, HttpScrape
-from GoogleScraper.caching import maybe_clean_cache, fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
+from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
+
+
+def id_for_keywords(keywords):
+    """Determine a unique id for the keywords.
+
+    Helps to continue the last scrape and to identify the last
+    scrape object.
+
+    Args:
+        keywords: All the keywords in the scrape process
+    Returns:
+        The unique md5 string of all keywords.
+    """
+
+    m = hashlib.md5()
+    for kw in keywords:
+        m.update(kw.encode())
+    return m.hexdigest()
+
 
 def scrape_with_config(config, **kwargs):
     """Runs GoogleScraper with the dict in config.
@@ -156,9 +176,7 @@ def main(return_results=False, parse_cmd_line=True):
         print(__version__)
         return
 
-    maybe_clean_cache()
-
-    kwfile = Config['SCRAPING'].get('keyword_file')
+    kwfile = Config['SCRAPING'].get('keyword_file', '')
     keyword = Config['SCRAPING'].get('keyword')
     keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
@@ -247,13 +265,35 @@ def main(return_results=False, parse_cmd_line=True):
     Session = get_session(scoped=False, create=True)
     session = Session()
 
-    scraper_search = ScraperSearch(
-        number_search_engines_used=1,
-        number_proxies_used=len(proxies),
-        number_search_queries=len(keywords),
-        started_searching=datetime.datetime.utcnow(),
-        used_search_engines=','.join(search_engines)
-    )
+    # ask the user to continue the last scrape. We detect a continuation of a
+    # previously established scrape, if the keyword-file is the same and unmodified since
+    # the beginning of the last scrape.
+
+    scraper_search = None
+    if kwfile:
+        searches = session.query(ScraperSearch).\
+            filter(ScraperSearch.keyword_file == kwfile).\
+            order_by(ScraperSearch.started_searching).\
+            all()
+
+        if searches:
+            last_search = searches[-1]
+            last_modified = datetime.datetime.fromtimestamp(os.path.getmtime(last_search.keyword_file))
+
+            # if the last modification is older then the starting of the search
+            if last_modified < last_search.started_searching:
+                scraper_search = last_search
+                logger.info('Continuing last scrape.')
+
+    if not scraper_search:
+        scraper_search = ScraperSearch(
+            keyword_file=kwfile,
+            number_search_engines_used=1,
+            number_proxies_used=len(proxies),
+            number_search_queries=len(keywords),
+            started_searching=datetime.datetime.utcnow(),
+            used_search_engines=','.join(search_engines)
+        )
 
     # First of all, lets see how many keywords remain to scrape after parsing the cache
     if Config['GLOBAL'].getboolean('do_caching'):

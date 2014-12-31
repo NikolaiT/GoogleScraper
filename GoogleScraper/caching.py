@@ -510,6 +510,8 @@ def cached(f, attr_to_cache=None):
             value = f(*args, attr_to_cache=None, **kwargs)
             cache_results(value, *args, params=kwargs)
     return wraps
+
+maybe_clean_cache()
     
 if __name__ == '__main__':
     import doctest
