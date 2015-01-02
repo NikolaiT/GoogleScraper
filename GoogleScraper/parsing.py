@@ -720,7 +720,6 @@ def parse_serp(html=None, search_engine=None,
             parser = parser()
             parser.parse(html)
 
-        out(parser, lvl=2)
         num_results = 0
 
         if not serp:

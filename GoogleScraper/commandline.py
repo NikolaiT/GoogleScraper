@@ -10,7 +10,7 @@ def get_command_line(static_args=False, print_help=False):
         static_args: A Namespace object that contains config parameters.
                         If supplied, don't parse from the command line and
                         apply the command parser on them instead.
-        print_help: If set to True, only prints the usage and returns.
+        print_help: If set to True, only prints the usage and immediately returns.
 
     Returns:
         The configuration as a dictionary that determines the behaviour of the app.
@@ -19,7 +19,7 @@ def get_command_line(static_args=False, print_help=False):
     parser = argparse.ArgumentParser(prog='GoogleScraper',
                                      description='Scrapes the Google, Yandex, Bing and many other  search engines by forging http requests that imitate '
                                                  'browser searches or by using real browsers controlled by the selenium framework. Multithreading support.',
-                                     epilog='GoogleScraper {version}. This program might infringe the TOS of the search engines. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2014. incolumitas.com'.format(version=__version__))
+                                     epilog='GoogleScraper {version}. This program might infringe the TOS of the search engines. Please use it on your own risk. (c) by Nikolai Tschacher, 2012-2015. incolumitas.com'.format(version=__version__))
 
     parser.add_argument('-m', '--scrapemethod', type=str, default='http',
                         help='''The scraping type. There are currently three types: "http", "selenium" and "http-async".
@@ -28,9 +28,11 @@ def get_command_line(static_args=False, print_help=False):
                          You may search more than 1000 requests per second if you have the necessary number of proxies available.
                          ''', choices=('http', 'selenium', 'http-async'))
 
-    parser.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
+    keyword_group = parser.add_mutually_exclusive_group()
 
-    parser.add_argument('--keyword-file', type=str, action='store',
+    keyword_group.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
+
+    keyword_group.add_argument('--keyword-file', type=str, action='store',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
 
     parser.add_argument('-f', '--output-format', type=str, action='store', default='stdout', choices=['stdout', 'json', 'csv'],
@@ -44,7 +46,7 @@ def get_command_line(static_args=False, print_help=False):
 
     parser.add_argument('-n', '--num-results-per-page', type=int,
                          action='store', default=50,
-                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode. Some search engines do not support this.')
+                        help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode. Some search engines ignore this setting.')
 
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
                         default=1, help='The number of pages to request for each keyword. Each page is requested by a unique connection and if possible by a unique IP (at least in "http" mode).')
@@ -63,7 +65,7 @@ def get_command_line(static_args=False, print_help=False):
                         help='''The path to the configuration file for GoogleScraper. Normally you won't need this, because GoogleScrape
                         comes shipped with a thoroughly commented configuration file named `config.cfg`''')
 
-    parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its rough length will be printed.''')
+    parser.add_argument('--simulate', action='store_true', default=False, required=False, help='''If this flag is set, the scrape job and its estimated length will be printed.''')
 
     parser.add_argument('-v', '--verbosity', type=int, default=1,
                         help='The verbosity of GoogleScraper output. 0: no ouput, 1: most necessary info, summary (no results), 2: detailed scraping info (still without results), 3: show parsed results:, > 3:  Degbug info.')
@@ -82,6 +84,7 @@ def get_command_line(static_args=False, print_help=False):
 
     if print_help:
         print(parser.format_help())
+        return
 
     if static_args:
         args = parser.parse_args(static_args)

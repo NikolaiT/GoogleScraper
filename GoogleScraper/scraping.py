@@ -9,7 +9,6 @@ import sys
 import time
 import socket
 import abc
-from urllib.parse import urlencode
 
 try:
     from selenium import webdriver
@@ -24,8 +23,8 @@ except ImportError as ie:
 
 import GoogleScraper.socks as socks
 from GoogleScraper.proxies import Proxy
-from GoogleScraper.caching import get_cached, cache_results, cached_file_name, cached
-from GoogleScraper.database import SearchEngineResultsPage, Link, get_session
+from GoogleScraper.caching import cache_results
+from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result, end, dict_from_scraping_object
@@ -251,8 +250,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         assert self.session, 'No database session. Turning down.'
 
         with self.db_lock:
-            num_results = 0
-
             serp = SearchEngineResultsPage(
                 search_engine_name=self.search_engine,
                 scrapemethod=self.scrapemethod,
@@ -290,7 +287,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
         out('[+] {}[{}][search-type:{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages per keyword={}'.format(
-            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=2)
+            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
 
 
     def cache_results(self):

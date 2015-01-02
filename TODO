@@ -33,7 +33,11 @@
   - finally implement async mode!!!
 
  30.12.2014:
-  - Fixed issue #45
+  - Fixed issue #45 [done]
+
+ 02.01.2015:
+  - Check output verbosity levels and modify them. [done]
+
 
 
 

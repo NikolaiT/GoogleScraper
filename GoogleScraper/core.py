@@ -129,18 +129,24 @@ class ShowProgressQueue(threading.Thread):
         Args:
             queue: A queue.Queue instance to share among the worker threads.
             num_keywords: The number of total keywords that need to be scraped.
-
         """
         super().__init__()
         self.queue = queue
         self.num_keywords = num_keywords
         self.num_already_processed = 0
+        self.verbosity = Config['GLOBAL'].getint('verbosity', 1)
+        self.progress_fmt = '\033[92m{}/{} keywords processed.\033[0m'
 
     def run(self):
         while self.num_already_processed < self.num_keywords:
             e = self.queue.get()
             self.num_already_processed += 1
-            print('{}/{} keywords processed.'.format(self.num_already_processed, self.num_keywords), end='\r')
+
+            if self.verbosity == 1:
+                print(self.progress_fmt.format(self.num_already_processed, self.num_keywords), end='\r')
+            elif self.verbosity == 2 and self.verbosity % 5 == 0:
+                print(self.progress_fmt.format(self.num_already_processed, self.num_keywords))
+
             self.queue.task_done()
 
 
@@ -304,93 +310,92 @@ def main(return_results=False, parse_cmd_line=True):
     # remove duplicates and empty keywords
     remaining = [keyword for keyword in set(remaining) if keyword]
 
-    kwgroups = assign_keywords_to_scrapers(remaining)
+    if remaining:
 
-    # Create a lock to synchronize database access in the sqlalchemy session
-    db_lock = threading.Lock()
+        kwgroups = assign_keywords_to_scrapers(remaining)
 
-    # create a lock to cache results
-    cache_lock = threading.Lock()
+        # Create a lock to synchronize database access in the sqlalchemy session
+        db_lock = threading.Lock()
 
-    # final check before going into the loop
-    num_workers_to_allocate = len(kwgroups) * len(search_engines) > Config['SCRAPING'].getint('maximum_workers')
-    if (len(kwgroups) * len(search_engines)) > Config['SCRAPING'].getint('maximum_workers'):
-        logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
+        # create a lock to cache results
+        cache_lock = threading.Lock()
+
+        # final check before going into the loop
+        num_workers_to_allocate = len(kwgroups) * len(search_engines) > Config['SCRAPING'].getint('maximum_workers')
+        if (len(kwgroups) * len(search_engines)) > Config['SCRAPING'].getint('maximum_workers'):
+            logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
 
 
-    out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
-        num_keywords=len(remaining),
-        num_proxies=len(proxies),
-        num_threads=Config['SCRAPING'].getint('num_workers', 1)
-    ), lvl=1)
+        out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
+            num_keywords=len(remaining),
+            num_proxies=len(proxies),
+            num_threads=Config['SCRAPING'].getint('num_workers', 1)
+        ), lvl=1)
 
-    # Show the progress of the scraping
-    q = None
-    if Config['GLOBAL'].getint('verbosity', 1) == 1:
+        # Show the progress of the scraping
         q = queue.Queue()
         progress_thread = ShowProgressQueue(q, len(remaining))
         progress_thread.start()
 
-    # Let the games begin
-    if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
-        # A lock to prevent multiple threads from solving captcha.
-        captcha_lock = threading.Lock()
+        # Let the games begin
+        if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
+            # A lock to prevent multiple threads from solving captcha.
+            captcha_lock = threading.Lock()
 
-        # Distribute the proxies evenly on the keywords to search for
-        scrapejobs = []
+            # Distribute the proxies evenly on the keywords to search for
+            scrapejobs = []
 
-        for k, search_engine in enumerate(search_engines):
-            for i, keyword_group in enumerate(kwgroups):
-                
-                proxy_to_use = proxies[i % len(proxies)]
-                
-                if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
-                    scrapejobs.append(
-                        SelScrape(
-                            search_engine=search_engine,
-                            session=session,
-                            keywords=keyword_group,
-                            db_lock=db_lock,
-                            cache_lock=cache_lock,
-                            scraper_search=scraper_search,
-                            captcha_lock=captcha_lock,
-                            browser_num=i,
-                            proxy=proxy_to_use,
-                            progress_queue=q,
+            for k, search_engine in enumerate(search_engines):
+                for i, keyword_group in enumerate(kwgroups):
+
+                    proxy_to_use = proxies[i % len(proxies)]
+
+                    if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
+                        scrapejobs.append(
+                            SelScrape(
+                                search_engine=search_engine,
+                                session=session,
+                                keywords=keyword_group,
+                                db_lock=db_lock,
+                                cache_lock=cache_lock,
+                                scraper_search=scraper_search,
+                                captcha_lock=captcha_lock,
+                                browser_num=i,
+                                proxy=proxy_to_use,
+                                progress_queue=q,
+                            )
                         )
-                    )
-                elif Config['SCRAPING'].get('scrapemethod') == 'http':
-                    scrapejobs.append(
-                        HttpScrape(
-                            search_engine=search_engine,
-                            keywords=keyword_group,
-                            session=session,
-                            scraper_search=scraper_search,
-                            cache_lock=cache_lock,
-                            db_lock=db_lock,
-                            proxy=proxy_to_use,
-                            progress_queue=q,
+                    elif Config['SCRAPING'].get('scrapemethod') == 'http':
+                        scrapejobs.append(
+                            HttpScrape(
+                                search_engine=search_engine,
+                                keywords=keyword_group,
+                                session=session,
+                                scraper_search=scraper_search,
+                                cache_lock=cache_lock,
+                                db_lock=db_lock,
+                                proxy=proxy_to_use,
+                                progress_queue=q,
+                            )
                         )
-                    )
 
-        for t in scrapejobs:
-            t.start()
+            for t in scrapejobs:
+                t.start()
 
-        for t in scrapejobs:
-            t.join()
+            for t in scrapejobs:
+                t.join()
 
-    elif Config['SCRAPING'].get('scrapemethod') == 'http-async':
-        raise NotImplemented('soon my dear friends :)')
+        elif Config['SCRAPING'].get('scrapemethod') == 'http-async':
+            raise NotImplemented('soon my dear friends :)')
 
-    else:
-        raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')
+        else:
+            raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')
 
-    scraper_search.stopped_searching = datetime.datetime.utcnow()
-    session.add(scraper_search)
-    session.commit()
+        scraper_search.stopped_searching = datetime.datetime.utcnow()
+        session.add(scraper_search)
+        session.commit()
 
-    if Config['GLOBAL'].getint('verbosity', 1) == 1:
         progress_thread.join()
 
-    if return_results:
-        return session
+        if return_results:
+            return session

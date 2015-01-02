@@ -1,12 +1,16 @@
+# -*- coding: utf-8 -*-
+
 import csv
 import sys
 import json
 import datetime
 from GoogleScraper.config import Config
 
-"""Stores serp results in the appropriate output format.
+"""Stores SERP results in the appropriate output format.
 
-Streamig process, one serp object at the time.
+Streamline process, one serp object at the time, because GoogleScraper works incrementally.
+Furthermore we cannot accumulate all results and then process them, because it would be
+impossible to launch lang scrape jobs with millions of keywords.
 """
 
 outfile = None
@@ -60,7 +64,7 @@ def store_serp_result(serp, parser):
             for row in results():
                 row.update(serp)
                 outfile.writerow(row)
-        elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity') > 2:
+        elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
             outfile.write(str(serp))
 
 
