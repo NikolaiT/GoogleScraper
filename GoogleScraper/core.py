@@ -11,7 +11,7 @@ from GoogleScraper.utils import chunk_it
 from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
-from GoogleScraper.scraping import SelScrape, HttpScrape
+from GoogleScraper.scraping import HttpScrape, get_selenium_scraper_by_search_engine_name
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
@@ -352,7 +352,8 @@ def main(return_results=False, parse_cmd_line=True):
 
                     if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
                         scrapejobs.append(
-                            SelScrape(
+                            get_selenium_scraper_by_search_engine_name(
+                                search_engine,
                                 search_engine=search_engine,
                                 session=session,
                                 keywords=keyword_group,
@@ -362,7 +363,7 @@ def main(return_results=False, parse_cmd_line=True):
                                 captcha_lock=captcha_lock,
                                 browser_num=i,
                                 proxy=proxy_to_use,
-                                progress_queue=q,
+                                progress_queue=q
                             )
                         )
                     elif Config['SCRAPING'].get('scrapemethod') == 'http':

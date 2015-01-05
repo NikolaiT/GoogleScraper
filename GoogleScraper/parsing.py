@@ -10,7 +10,6 @@ from urllib.parse import urlparse, unquote
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
 from GoogleScraper.config import Config
-from GoogleScraper.log import out
 from cssselect import HTMLTranslator
 
 logger = logging.getLogger('GoogleScraper')

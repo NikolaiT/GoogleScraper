@@ -321,15 +321,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.current_delay = random.randrange(*self._largest_sleep_range(self.search_number))
         time.sleep(self.current_delay)
 
-    def after_search(self, html):
+    def after_search(self):
         """Store the results and parse em.
 
         Notify the progress queue if necessary.
-
-        Args:
-            html: The scraped html.
         """
-        self.parser.parse(html)
+        self.parser.parse(self.html)
         self.store()
         if self.progress_queue:
             self.progress_queue.put(1)
@@ -577,13 +574,11 @@ class AsyncHttpScrape(SearchEngineScrape):
 
 
 class SelScrape(SearchEngineScrape, threading.Thread):
-    """Instances of this class make use of selenium browser objects to query Google.
-
-    This is a quite cool approach if you ask me :D
+    """Instances of this class make use of selenium browser objects to query the search engines on a high level.
     """
 
     def __init__(self, *args, captcha_lock=None, browser_num=1, **kwargs):
-        """Create a new SelScraper Thread.
+        """Create a new SelScraper thread Instance.
 
         Args:
             captcha_lock: To sync captcha solving (stdin)
@@ -839,18 +834,15 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 'bing': '.sb_pagN',
                 'yahoo': '#pg-next',
                 'baidu': '.n',
-                'duckduckgo': '' # loads results dynamically with ajax
             }
 
             selector = next_page_selectors[self.search_engine]
-            next_url = ''
             try:
                 # wait until the next page link emerges
                 WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
                 element = self.webdriver.find_element_by_css_selector(selector)
                 next_url = element.get_attribute('href')
                 element.click()
-                self.current_request_time = datetime.datetime.utcnow()
             except TimeoutException as te:
                 logger.warning('Cannot locate next page element: {}'.format(te))
                 return False
@@ -862,6 +854,14 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         elif self.search_type == 'image':
             self.page_down()
             return True
+
+    def wait_until_next_keyword_appeared(self):
+        # Waiting until the keyword appears in the title may
+        # not be enough. The content may still be from the old page.
+        try:
+            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
+        except TimeoutException as e:
+            logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
 
     def search(self):
         """Search with webdriver.
@@ -890,19 +890,20 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             super().keyword_info()
 
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
-                # Waiting until the keyword appears in the title may
-                # not be enough. The content may still be from the old page.
-                try:
-                    WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
-                except TimeoutException as e:
-                    logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
-                    break
 
-                super().after_search(self.webdriver.page_source)
+                self.wait_until_next_keyword_appeared()
+
+                try:
+                    self.html = self.webdriver.execute_script('return document.body.innerHTML;')
+                except WebDriverException as e:
+                    self.html = self.webdriver.page_source
+
+                super().after_search()
 
                 # Click the next page link not when leaving the loop
                 if self.current_page < self.num_pages_per_keyword:
                     self.next_url = self._goto_next_page()
+                    self.current_request_time = datetime.datetime.utcnow()
 
                     if not self.next_url:
                         break
@@ -947,3 +948,57 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.search()
 
         self.webdriver.close()
+
+
+"""
+For most search engines, the normal SelScrape works perfectly, but sometimes
+the parsing is different for other search engines.
+
+Duckduckgo loads new results on the fly (via ajax) and doesn't support any "next page"
+link. Others like gekko.com have a completely different SERP page format.
+
+That's why we need to inherit from SelScrape for specific unique logic.
+The following functionality may differ in particular:
+
+    - _goto_next_page()
+    - _get_search_input()
+    - _wait_until_search_input_field_appears()
+    - _handle_request_denied()
+    - wait_until_next_keyword_appeared()
+"""
+
+class DuckduckgoSelScrape(SelScrape):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def _goto_next_page(self):
+        super().page_down()
+
+
+class GekkoSelScrape(SelScrape):
+    pass
+
+class AskSelScrape(SelScrape):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def wait_until_next_keyword_appeared(self):
+        return self.search_engine in self.webdriver.current_url
+
+
+def get_selenium_scraper_by_search_engine_name(search_engine_name, *args, **kwargs):
+    """Get the appropriate selenium scraper for the given search engine name.
+
+    Args:
+        search_engine_name: The search engine name.
+        args: The arguments for the target search engine instance creation.
+        kwargs: The keyword arguments for the target search engine instance creation.
+    Returns;
+        Either a concrete SelScrape instance specific for the given search engine or the abstract SelScrape object.
+    """
+    class_name = search_engine_name[0].upper() + search_engine_name[1:].lower() + 'SelScrape'
+    ns = globals()
+    if class_name in ns:
+        return ns[class_name](*args, **kwargs)
+
+    return SelScrape(*args, **kwargs)

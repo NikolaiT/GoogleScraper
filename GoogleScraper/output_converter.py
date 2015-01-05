@@ -65,7 +65,7 @@ def store_serp_result(serp, parser):
                 row.update(serp)
                 outfile.writerow(row)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
-            outfile.write(str(serp))
+            print(parser, file=outfile)
 
 
 def dict_from_serp_object(serp):
