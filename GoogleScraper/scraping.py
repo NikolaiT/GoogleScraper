@@ -177,6 +177,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # the scrape mode
         # to be set by subclasses
         self.scrapemethod = ''
+        
+        # Wether the instance is ready to run
+        self.startable = True
 
         # set the database lock
         self.db_lock = db_lock
@@ -449,6 +452,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         if not self.proxy.host in data:
             logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
+            self.startable = False
         else:
             logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
 
@@ -563,10 +567,11 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         super().after_search(request.text)
 
     def run(self):
-        args = []
-        kwargs = {}
-        kwargs['rand'] = False
-        SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
+        if self.startable:
+            args = []
+            kwargs = {}
+            kwargs['rand'] = False
+            SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
 
 
 class AsyncHttpScrape(SearchEngineScrape):
@@ -615,6 +620,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         if not self.proxy.host in data:
             logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
+            self.startable = False
         else:
             logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
 
@@ -843,6 +849,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 element = self.webdriver.find_element_by_css_selector(selector)
                 next_url = element.get_attribute('href')
                 element.click()
+                return next_url
             except TimeoutException as te:
                 logger.warning('Cannot locate next page element: {}'.format(te))
                 return False
@@ -850,12 +857,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 logger.warning('Cannot locate next page element: {}'.format(e))
                 return False
 
-            return next_url
         elif self.search_type == 'image':
             self.page_down()
             return True
 
-    def wait_until_next_keyword_appeared(self):
+    def wait_until_serp_loaded(self):
         # Waiting until the keyword appears in the title may
         # not be enough. The content may still be from the old page.
         try:
@@ -884,14 +890,15 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_input.send_keys(self.current_keyword + Keys.ENTER)
                 self.current_request_time = datetime.datetime.utcnow()
             else:
-                raise GoogleSearchError('Cannot get handle to the input form!')
+                logger.warning('Cannot get handle to the input form for keyword {}.'.format(self.current_keyword))
+                continue
 
             super().detection_prevention_sleep()
             super().keyword_info()
 
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
 
-                self.wait_until_next_keyword_appeared()
+                self.wait_until_serp_loaded()
 
                 try:
                     self.html = self.webdriver.execute_script('return document.body.innerHTML;')
@@ -901,10 +908,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 super().after_search()
 
                 # Click the next page link not when leaving the loop
+                # in the next iteration.
                 if self.current_page < self.num_pages_per_keyword:
                     self.next_url = self._goto_next_page()
                     self.current_request_time = datetime.datetime.utcnow()
-
+                    
                     if not self.next_url:
                         break
 
@@ -913,58 +921,58 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def page_down(self):
         """Scrolls down a page with javascript.
 
-        Used for next page in image search mode.
+        Used for next page in image search mode or when the 
+        next results are obtained by scrolling down a page.
         """
         js = '''
-        var B = document.body,
-            H = document.documentElement,
-            height
+        var w = window,
+            d = document,
+            e = d.documentElement,
+            g = d.getElementsByTagName('body')[0],
+            y = w.innerHeight|| e.clientHeight|| g.clientHeight;
 
-        if (typeof document.height !== 'undefined') {
-            height = document.height // For webkit browsers
-        } else {
-            height = Math.max( B.scrollHeight, B.offsetHeight,H.clientHeight, H.scrollHeight, H.offsetHeight );
-        }
-
-        window.scrollBy(0,800)
+        window.scrollBy(0,y);
+        return y;
         '''
 
         self.webdriver.execute_script(js)
-        time.sleep(1.5)
 
     def run(self):
         """Run the SelScraper."""
-        if not self._get_webdriver():
-            raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
+        if self.startable:
+            if not self._get_webdriver():
+                raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
 
-        try:
-            self.webdriver.set_window_size(400, 400)
-            self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
-        except WebDriverException as e:
-            logger.error(e)
+            try:
+                self.webdriver.set_window_size(400, 400)
+                self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
+            except WebDriverException as e:
+                logger.error(e)
 
-        self.build_search()
+            self.build_search()
 
-        self.search()
+            self.search()
 
-        self.webdriver.close()
+            self.webdriver.close()
 
 
 """
 For most search engines, the normal SelScrape works perfectly, but sometimes
-the parsing is different for other search engines.
+the scraping logic is different for other search engines.
 
 Duckduckgo loads new results on the fly (via ajax) and doesn't support any "next page"
-link. Others like gekko.com have a completely different SERP page format.
+link. Other search engines like gekko.com have a completely different SERP page format.
 
-That's why we need to inherit from SelScrape for specific unique logic.
+That's why we need to inherit from SelScrape for specific logic that only applies for the given
+search engine.
+
 The following functionality may differ in particular:
 
     - _goto_next_page()
     - _get_search_input()
     - _wait_until_search_input_field_appears()
     - _handle_request_denied()
-    - wait_until_next_keyword_appeared()
+    - wait_until_serp_loaded()
 """
 
 class DuckduckgoSelScrape(SelScrape):
@@ -973,6 +981,24 @@ class DuckduckgoSelScrape(SelScrape):
 
     def _goto_next_page(self):
         super().page_down()
+    
+    def wait_until_serp_loaded(self):
+        def wait_until_result_more_invisible(driver):
+            try:
+                elements = driver.find_elements_by_css_selector('.result--more')
+                if elements:
+                    loader = elements[-1]
+                    # If the engine loads the next results with ajax, 
+                    # the element is visible. Then we need to wait until
+                    # the element becomes undisplayed again.
+                    visible = loader.get_attribute('style').strip()
+                    return not visible or visible == 'display:none;'
+                else:
+                    return True
+            except WebDriverException:
+                pass
+                
+        WebDriverWait(self.webdriver, 5).until(wait_until_result_more_invisible)
 
 
 class GekkoSelScrape(SelScrape):
@@ -982,7 +1008,7 @@ class AskSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def wait_until_next_keyword_appeared(self):
+    def wait_until_serp_loaded(self):
         return self.search_engine in self.webdriver.current_url
 
 
