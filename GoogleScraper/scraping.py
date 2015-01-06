@@ -979,37 +979,56 @@ class DuckduckgoSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.largest_id = 0
+
     def _goto_next_page(self):
         super().page_down()
+        return 'No more results' not in self.html
     
     def wait_until_serp_loaded(self):
-        def wait_until_result_more_invisible(driver):
+        def new_results(driver):
             try:
-                elements = driver.find_elements_by_css_selector('.result--more')
+                elements = driver.find_elements_by_css_selector('[id*="r1-"]')
                 if elements:
-                    loader = elements[-1]
-                    # If the engine loads the next results with ajax, 
-                    # the element is visible. Then we need to wait until
-                    # the element becomes undisplayed again.
-                    visible = loader.get_attribute('style').strip()
-                    return not visible or visible == 'display:none;'
+                    i = sorted([int(e.get_attribute('id')[3:]) for e in elements])[-1]
+                    return i > self.largest_id
                 else:
-                    return True
+                    return False
             except WebDriverException:
                 pass
-                
-        WebDriverWait(self.webdriver, 5).until(wait_until_result_more_invisible)
 
+        try:
+            WebDriverWait(self.webdriver, 5).until(new_results)
+        except TimeoutException as e:
+            pass
+
+        elements = self.webdriver.find_elements_by_css_selector('[id*="r1-"]')
+        try:
+            self.largest_id = sorted([int(e.get_attribute('id')[3:]) for e in elements])[-1]
+        except:
+            self.largest_id = 0
+        
 
 class GekkoSelScrape(SelScrape):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+    def _goto_next_page(self):
+        pass
 
 class AskSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def wait_until_serp_loaded(self):
-        return self.search_engine in self.webdriver.current_url
+        
+        def wait_until_keyword_in_url(driver, current_keyword):
+            try:
+                return current_keyword in driver.current_url
+            except WebDriverException as e:
+                pass
+            
+        WebDriverWait(self.webdriver, 5).until(wait_until_keyword_in_url)
 
 
 def get_selenium_scraper_by_search_engine_name(search_engine_name, *args, **kwargs):
