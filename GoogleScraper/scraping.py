@@ -109,6 +109,20 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and some more tricky engineering.
     """
 
+
+    malicious_request_needles = {
+        'google': {
+            'inurl': '/sorry/',
+            'inhtml': 'detected unusual traffic'
+        },
+        'bing': {},
+        'yahoo': {},
+        'baidu': {},
+        'yandex': {},
+        'ask': {},
+        'blekko': {}
+    }
+
     def __init__(self, keywords=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
                  start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
         """Instantiate an SearchEngineScrape object.
@@ -227,8 +241,16 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             for self.current_page in range(1, self.num_pages_per_keyword + 1):
 
                 # set the actual search code in the derived class
-                callback(*args, **kwargs)
-
+                try:
+                    callback(*args, **kwargs)
+                except MaliciousRequestDetected as e:
+                    # Leave search when search engines detected us :/
+                    logger.critical(e)
+                    return
+                except self.requests.exceptions.RequestException as e:
+                    # In case of any http networking exception that wasn't caught
+                    # in the actual request, just end the worker.
+                    return
 
     @abc.abstractmethod
     def set_proxy(self):
@@ -243,10 +265,10 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def proxy_check(self, proxy):
         """Check whether the assigned proxy works correctly and react"""
 
-        
+
     @abc.abstractmethod
     def handle_request_denied(self):
-        """Behaviour when search engines detect our scraping."""
+        """Generic behaviour when search engines detect our scraping."""
 
     def store(self):
         """Store the parsed data in the sqlalchemy scoped session."""
@@ -289,7 +311,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
-        out('[+] {}[{}][search-type:{}] created using the search engine {}. Number of keywords to scrape={}, using proxy={}, number of pages per keyword={}'.format(
+        out('[+] {}[{}][search-type:{}] created using the search engine "{}". Number of keywords to scrape={}, using proxy={}, number of pages per keyword={}'.format(
             scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
 
 
@@ -336,6 +358,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.cache_results()
         self.search_number += 1
 
+    def before_search(self):
+        """Things that need to happen before entering the search loop."""
+
+        # check proxies first before anything
+        if Config['SCRAPING'].getboolean('check_proxies', True) and self.proxy:
+            if not self.proxy_check():
+                self.startable = False
+
 
     def __del__(self):
         """Close the json array if necessary."""
@@ -360,7 +390,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
     # Several different User-Agents to diversify the requests.
     # Keep the User-Agents updated. Last update: 13th November 2014
     # Get them here: http://techblog.willshouse.com/2012/01/03/most-common-user-agents/
-    USER_AGENTS = [
+    user_agents = [
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10) AppleWebKit/600.1.25 (KHTML, like Gecko) Version/8.0 Safari/600.1.25',
         'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.111 Safari/537.36',
         'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.104 Safari/537.36',
@@ -413,10 +443,6 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
 
-        # check proxies first before anything
-        if Config['SCRAPING'].getboolean('check_proxies'):
-            self.proxy_check()
-
         super().instance_creation_info(self.__class__.__name__)
 
 
@@ -448,18 +474,36 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
     def proxy_check(self):
         assert self.proxy and self.requests, 'ScraperWorker needs valid proxy instance and requests library to make the proxy check.'
 
-        data = self.requests.get(Config['GLOBAL'].get('proxy_check_url')).text
+        try:
+            data = self.requests.get(Config['GLOBAL'].get('proxy_check_url')).text
+        except self.requests.ConnectionError as e:
+            logger.warning('No connection to proxy server possible, determinating: {}'.format(e))
+            return False
+        except self.requests.Timeout as e:
+            logger.warning('Timeout while connecting to proxy server: {}'.format(e))
+            return False
 
         if not self.proxy.host in data:
             logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
-            self.startable = False
+            return False
         else:
             logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
+            return True
 
 
     def handle_request_denied(self, status_code):
+        """Handle request denied by the search engine.
+
+        This is the perfect place to distinguish the different responses
+        if search engine detect exhaustive searching.
+
+        Args:
+            status_code: The status code of the HTTP response.
+
+        Returns:
+        """
         super().handle_request_denied()
-        raise Exception('Request not allowed')
+        raise MaliciousRequestDetected('Request not allowed: {}'.format(status_code))
 
     def build_search(self):
         """Build the headers and params for the search request for the search engine."""
@@ -527,6 +571,13 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         elif self.search_engine == 'duckduckgo':
             self.parser = DuckduckgoParser()
             self.search_params['q'] = self.current_keyword
+        elif self.search_engine == 'ask':
+            self.search_params['q'] = self.current_keyword
+            self.search_params['qsrc'] = '0'
+            self.search_params['l'] = 'dir'
+            self.search_params['qo'] = 'homepageSearchBox'
+        elif self.search_engine == 'blekko':
+            self.search_params['q'] = self.current_keyword
             
     def search(self, *args, rand=False, **kwargs):
         """The actual search for the search engine."""
@@ -534,7 +585,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.build_search()
 
         if rand:
-            self.headers['User-Agent'] = random.choice(self.USER_AGENTS)
+            self.headers['User-Agent'] = random.choice(self.user_agents)
 
         try:
             out('[HTTP - {proxy}] Base_url: {base_url}, headers={headers}, params={params}'.format(
@@ -552,6 +603,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
             self.current_request_time = datetime.datetime.utcnow()
 
+            self.html = request.text
+
         except self.requests.ConnectionError as ce:
             logger.error('Network problem occurred {}'.format(ce))
             raise ce
@@ -560,13 +613,14 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             raise te
 
         if not request.ok:
-            logger.error('HTTP Error: {}'.format(request.status_code))
             self.handle_request_denied(request.status_code)
             return False
 
-        super().after_search(request.text)
+        super().after_search()
 
     def run(self):
+        super().before_search()
+
         if self.startable:
             args = []
             kwargs = {}
@@ -574,13 +628,51 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
 
 
-class AsyncHttpScrape(SearchEngineScrape):
-    pass
-
-
 class SelScrape(SearchEngineScrape, threading.Thread):
     """Instances of this class make use of selenium browser objects to query the search engines on a high level.
     """
+
+    next_page_selectors = {
+        'google': '#pnnext',
+        'yandex': '.pager__button_kind_next',
+        'bing': '.sb_pagN',
+        'yahoo': '#pg-next',
+        'baidu': '.n',
+        'ask': '#paging div a.txt3.l_nu'
+    }
+
+    input_field_selectors = {
+        'google': (By.NAME, 'q'),
+        'yandex': (By.NAME, 'text'),
+        'bing': (By.NAME, 'q'),
+        'yahoo': (By.NAME, 'p'),
+        'baidu': (By.NAME, 'wd'),
+        'duckduckgo': (By.NAME, 'q'),
+        'ask': (By.NAME, 'q'),
+        'blekko': (By.NAME, 'q'),
+    }
+
+    normal_search_locations = {
+        'google': 'https://www.google.com/',
+        'yandex': 'http://www.yandex.ru/',
+        'bing': 'http://www.bing.com/',
+        'yahoo': 'https://yahoo.com/',
+        'baidu': 'http://baidu.com/',
+        'duckduckgo': 'https://duckduckgo.com/',
+        'ask': 'http://ask.com/',
+        'blekko': 'http://blekko.com/'
+    }
+
+    image_search_locations = {
+        'google': 'https://www.google.com/imghp',
+        'yandex': 'http://yandex.ru/images/',
+        'bing': 'https://www.bing.com/?scope=images',
+        'yahoo': 'http://images.yahoo.com/',
+        'baidu': 'http://image.baidu.com/',
+        'duckduckgo': None, # duckduckgo doesnt't support direct image search
+        'ask': 'http://www.ask.com/pictures/',
+        'blekko': None,
+    }
 
     def __init__(self, *args, captcha_lock=None, browser_num=1, **kwargs):
         """Create a new SelScraper thread Instance.
@@ -610,19 +702,22 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def switch_proxy(self, proxy):
         """Switch the proxy on the communication channel."""
 
-
     def proxy_check(self):
         assert self.proxy and self.webdriver, 'Scraper instance needs valid webdriver and proxy instance to make the proxy check'
 
-        self.webdriver.get(Config['GLOBAL'].get('proxy_check_url'))
+        try:
+            self.webdriver.get(Config['GLOBAL'].get('proxy_check_url'))
 
-        data = self.webdriver.page_source
+            data = self.webdriver.page_source
+        except Exception as e:
+            return False
 
         if not self.proxy.host in data:
             logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
-            self.startable = False
+            return False
         else:
             logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
+            return True
 
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
@@ -717,18 +812,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Raises:
             MaliciousRequestDetected when there was not way to stp Google From denying our requests.
         """
-        malicious_request_needles = {
-            'google': {
-                'inurl': '/sorry/',
-                'inhtml': 'detected unusual traffic'
-            },
-            'bing': {},
-            'yahoo': {},
-            'baidu': {},
-            'yandex': {},
-        }
-
-        needles = malicious_request_needles[self.search_engine]
+        needles = self.malicious_request_needles[self.search_engine]
 
         if needles and needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
 
@@ -760,34 +844,12 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """Build the search for SelScrapers"""
         assert self.webdriver, 'Webdriver needs to be ready to build the search'
 
-        # do the proxy check
-        if Config['SCRAPING'].getboolean('check_proxies'):
-            self.proxy_check()
-
-        normal_search_locations = {
-            'google': 'https://www.google.com/',
-            'yandex': 'http://www.yandex.ru/',
-            'bing': 'http://www.bing.com/',
-            'yahoo': 'https://yahoo.com/',
-            'baidu': 'http://baidu.com/',
-            'duckduckgo': 'https://duckduckgo.com/'
-        }
-
-        image_search_locations = {
-            'google': 'https://www.google.com/imghp',
-            'yandex': 'http://yandex.ru/images/',
-            'bing': 'https://www.bing.com/?scope=images',
-            'yahoo': 'http://images.yahoo.com/',
-            'baidu': 'http://image.baidu.com/',
-            'duckduckgo': None # duckduckgo doesnt't support direct image search
-        }
-
         self.starting_point = None
 
         if Config['SCRAPING'].get('search_type', 'normal') == 'image':
-            self.starting_point = image_search_locations[self.search_engine]
+            self.starting_point = self.image_search_locations[self.search_engine]
         else:
-            self.starting_point = normal_search_locations[self.search_engine]
+            self.starting_point = self.normal_search_locations[self.search_engine]
 
         self.webdriver.get(self.starting_point)
 
@@ -798,17 +860,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Returns:
             A tuple to locate the search field as used by seleniums function presence_of_element_located()
         """
-
-        self.input_field_selectors = {
-            'google': (By.NAME, 'q'),
-            'yandex': (By.NAME, 'text'),
-            'bing': (By.NAME, 'q'),
-            'yahoo': (By.NAME, 'p'),
-            'baidu': (By.NAME, 'wd'),
-            'duckduckgo': (By.NAME, 'q'),
-            'ask': ()
-        }
-
         return self.input_field_selectors[self.search_engine]
 
     def _wait_until_search_input_field_appears(self, max_wait=5):
@@ -834,15 +885,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             The href attribute of the next_url for further results.
         """
         if self.search_type == 'normal':
-            next_page_selectors = {
-                'google': '#pnnext',
-                'yandex': '.pager__button_kind_next',
-                'bing': '.sb_pagN',
-                'yahoo': '#pg-next',
-                'baidu': '.n',
-            }
-
-            selector = next_page_selectors[self.search_engine]
+            selector = self.next_page_selectors[self.search_engine]
             try:
                 # wait until the next page link emerges
                 WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
@@ -875,8 +918,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Fills out the search form of the search engine for each keyword.
         Clicks the next link while num_pages_per_keyword is not reached.
         """
-        n = 0
-
         for self.current_keyword in self.keywords:
 
             self.search_input = self._wait_until_search_input_field_appears()
@@ -916,8 +957,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     if not self.next_url:
                         break
 
-            n += 1
-
     def page_down(self):
         """Scrolls down a page with javascript.
 
@@ -939,6 +978,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     def run(self):
         """Run the SelScraper."""
+
+        super().before_search()
+
         if self.startable:
             if not self._get_webdriver():
                 raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
@@ -1009,7 +1051,7 @@ class DuckduckgoSelScrape(SelScrape):
             self.largest_id = 0
         
 
-class GekkoSelScrape(SelScrape):
+class BlekkoSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
@@ -1022,9 +1064,9 @@ class AskSelScrape(SelScrape):
 
     def wait_until_serp_loaded(self):
         
-        def wait_until_keyword_in_url(driver, current_keyword):
+        def wait_until_keyword_in_url(driver):
             try:
-                return current_keyword in driver.current_url
+                return self.current_keyword in driver.current_url
             except WebDriverException as e:
                 pass
             
@@ -1047,3 +1089,7 @@ def get_selenium_scraper_by_search_engine_name(search_engine_name, *args, **kwar
         return ns[class_name](*args, **kwargs)
 
     return SelScrape(*args, **kwargs)
+
+
+class AsyncHttpScrape(SearchEngineScrape):
+    pass

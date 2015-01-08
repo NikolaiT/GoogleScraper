@@ -623,7 +623,7 @@ class BaiduParser(Parser):
 class DuckduckgoParser(Parser):
     """Parses SERP pages of the Duckduckgo search engine."""
     
-    search_types = ['normal', 'image']
+    search_types = ['normal']
     
     num_results_search_selectors = []
     
@@ -639,6 +639,49 @@ class DuckduckgoParser(Parser):
             }
         },
     }
+
+
+class AskParser(Parser):
+    """Parses SERP pages of the Ask search engine."""
+
+    search_types = ['normal']
+
+    num_results_search_selectors = []
+
+    normal_search_selectors = {
+        'results': {
+            'de_ip': {
+                'container': '#midblock',
+                'result_container': '.ptbs.ur',
+                'link': '.abstract > a::attr(href)',
+                'snippet': '.abstract::text',
+                'title': '.txt_lg.b::text',
+                'visible_link': '.durl span::text'
+            }
+        },
+    }
+
+
+class BlekkoParser(Parser):
+    """Parses SERP pages of the Blekko search engine."""
+
+    search_types = ['normal']
+
+    num_results_search_selectors = []
+
+    normal_search_selectors = {
+        'results': {
+            'de_ip': {
+                'container': '#links',
+                'result_container': '.result',
+                'link': '.result__title > a::attr(href)',
+                'snippet': 'result__snippet::text',
+                'title': '.result__title > a::text',
+                'visible_link': '.result__url__domain::text'
+            }
+        },
+    }
+
 
 
 def get_parser_by_url(url):
@@ -667,7 +710,10 @@ def get_parser_by_url(url):
         parser = BaiduParser
     elif re.search(r'^https://duckduckgo\.com', url):
         parser = DuckduckgoParser
-
+    if re.search(r'^http[s]?://[a-z]{2}?\.ask', url):
+        parser = AskParser
+    if re.search(r'^http[s]?://blekko', url):
+        parser = BlekkoParser
     if not parser:
         raise UnknowUrlException('No parser for {}.'.format(url))
 
@@ -698,6 +744,10 @@ def get_parser_by_search_engine(search_engine):
         return BaiduParser
     elif search_engine == 'duckduckgo':
         return DuckduckgoParser
+    elif search_engine == 'ask':
+        return AskParser
+    elif search_engine == 'blekko':
+        return BlekkoParser
     else:
         raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
 

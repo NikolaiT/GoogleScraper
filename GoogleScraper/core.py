@@ -140,6 +140,10 @@ class ShowProgressQueue(threading.Thread):
     def run(self):
         while self.num_already_processed < self.num_keywords:
             e = self.queue.get()
+
+            if e == 'done':
+                break
+
             self.num_already_processed += 1
 
             if self.verbosity == 1:
@@ -187,6 +191,7 @@ def main(return_results=False, parse_cmd_line=True):
     keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
     proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
+    num_search_engines = len(Config['SCRAPING'].get('search_engines', 1).split(','))
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
@@ -274,7 +279,6 @@ def main(return_results=False, parse_cmd_line=True):
     # ask the user to continue the last scrape. We detect a continuation of a
     # previously established scrape, if the keyword-file is the same and unmodified since
     # the beginning of the last scrape.
-
     scraper_search = None
     if kwfile:
         searches = session.query(ScraperSearch).\
@@ -293,8 +297,8 @@ def main(return_results=False, parse_cmd_line=True):
 
     if not scraper_search:
         scraper_search = ScraperSearch(
-            keyword_file=kwfile,
-            number_search_engines_used=1,
+            keyword_file=os.path.abspath(kwfile),
+            number_search_engines_used=num_search_engines,
             number_proxies_used=len(proxies),
             number_search_queries=len(keywords),
             started_searching=datetime.datetime.utcnow(),
@@ -329,7 +333,7 @@ def main(return_results=False, parse_cmd_line=True):
         out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
             num_keywords=len(remaining),
             num_proxies=len(proxies),
-            num_threads=Config['SCRAPING'].getint('num_workers', 1)
+            num_threads=num_search_engines
         ), lvl=1)
 
         # Show the progress of the scraping
@@ -386,11 +390,14 @@ def main(return_results=False, parse_cmd_line=True):
             for t in scrapejobs:
                 t.join()
 
+            # after threads are done, stop the progress queue.
+            q.put('done')
+
         elif Config['SCRAPING'].get('scrapemethod') == 'http-async':
             raise NotImplemented('soon my dear friends :)')
 
         else:
-            raise InvalidConfigurationException('No such scrapemethod. Use "http" or "sel"')
+            raise InvalidConfigurationException('No such scrapemethod. Use "http" or "selenium"')
 
         scraper_search.stopped_searching = datetime.datetime.utcnow()
         session.add(scraper_search)
