@@ -826,7 +826,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     solution = input('enter the captcha please...')
                     self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
                     try:
-                        self.search_input = WebDriverWait(self.webdriver, 5).until(self._get_search_input_field())
+                        self.search_input = WebDriverWait(self.webdriver, 5).until(
+                                EC.visibility_of_element_located(self._get_search_input_field()))
                     except TimeoutException as e:
                         raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
                     tf.close()
