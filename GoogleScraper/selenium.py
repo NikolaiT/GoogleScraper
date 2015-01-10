@@ -3,6 +3,10 @@
 import threading
 import json
 import logging
+import datetime
+import time
+import math
+import sys
 
 try:
     from selenium import webdriver
@@ -15,7 +19,7 @@ except ImportError as ie:
     print(ie)
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
-from GoogleScraper.scraping import SearchEngineScrape
+from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, SeleniumMisconfigurationError, get_base_search_url_by_search_engine, GoogleSearchError, MaliciousRequestDetected
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 

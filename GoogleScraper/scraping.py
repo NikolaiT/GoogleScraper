@@ -2,9 +2,7 @@
 
 import datetime
 import random
-import math
 import logging
-import sys
 import time
 import os
 import abc
@@ -15,7 +13,7 @@ from GoogleScraper.database import SearchEngineResultsPage, db_Proxy
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result, end, dict_from_scraping_object
-from GoogleScraper.parsing import GoogleParser, YahooParser, YandexParser, BaiduParser, BingParser, DuckduckgoParser, get_parser_by_search_engine, parse_serp
+from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 
 logger = logging.getLogger('GoogleScraper')
 
