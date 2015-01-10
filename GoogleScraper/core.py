@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-
 import queue
 import threading
 import datetime
@@ -9,9 +8,10 @@ import os
 import logging
 from GoogleScraper.utils import chunk_it
 from GoogleScraper.commandline import get_command_line
-from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
+from GoogleScraper.database import ScraperSearch, SERP, Link, get_session, fixtures
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
-from GoogleScraper.scraping import HttpScrape, get_selenium_scraper_by_search_engine_name
+from GoogleScraper.http import HttpScrape
+from GoogleScraper.selenium import SelScrape, get_selenium_scraper_by_search_engine_name
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
@@ -278,6 +278,9 @@ def main(return_results=False, parse_cmd_line=True):
     # get a scoped sqlalchemy session
     Session = get_session(scoped=False, create=True)
     session = Session()
+    
+    # add fixtures
+    fixtures(session)
 
     # add proxies to the database
     add_proxies_to_db(proxies, session)

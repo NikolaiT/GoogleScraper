@@ -132,6 +132,31 @@ class Proxy(Base):
 db_Proxy = Proxy
 
 
+class SearchEngine(Base):
+    __tablename__ = 'search_engine'
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True)
+    http_url = Column(String)
+    selenium_url = Column(String)
+    image_url = Column(String)
+    
+    
+class SearchEngineProxyStatus(Base):
+    """Stores last proxy status for the given search engine.
+    
+    A proxy can either work on a search engine or not.
+    """  
+    
+    __tablename__ = 'search_engine_proxy_status'
+    
+    id = Column(Integer, primary_key=True)
+    proxy_id = Column(Integer, ForeignKey('proxy.id')),
+    search_engine_id = Column(Integer, ForeignKey('search_engine.id'))
+    available = Column(Boolean)
+    last_check = Column(DateTime)
+
+
 def get_engine(path=None):
     """Return the sqlalchemy engine.
 
@@ -164,3 +189,13 @@ def get_session(scoped=False, create=False, engine=None, path=None):
         return ScopedSession
     else:
         return session_factory
+        
+        
+def fixtures(session):
+    """Add some base data."""  
+    
+    for se in Config['SCRAPING'].get('supported_search_engines', '').split(','):
+        if se:
+            session.add(SearchEngine(name=se))
+    
+    session.commit()
