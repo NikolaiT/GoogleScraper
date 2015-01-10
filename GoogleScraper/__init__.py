@@ -6,13 +6,12 @@ That buck that bought a bottle could've struck the lotto.
 """
 
 __author__ = 'Nikolai Tschacher'
-__updated__ = '08.01.2015'  # day.month.year
+__updated__ = '10.01.2015'  # day.month.year
 __home__ = 'incolumitas.com'
 
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.config import get_config
 from GoogleScraper.log import setup_logger
-import logging
 
 """
 All objects imported here are exposed as the public API of GoogleScraper

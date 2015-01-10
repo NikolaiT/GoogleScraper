@@ -5,6 +5,7 @@ import os
 import pymysql
 import logging
 import re
+from GoogleScraper import database
 
 Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
 logger = logging.getLogger('GoogleScraper')
@@ -93,3 +94,31 @@ def get_proxies_from_mysql_db(s):
     found = pattern.search(s)
     return get_proxies(found.group('host'), found.group('user'),
                                 found.group('pwd'), found.group('db'))
+
+
+def add_proxies_to_db(proxies, session):
+    """Adds the list of proxies to the database.
+
+    If the proxy-ip already exists and the other data differs,
+    it will be overwritten.
+
+    Will not check the status of the proxy.
+
+    Args:
+        proxies: A list of proxies.
+        session: A database session to work with.
+    """
+    for proxy in proxies:
+        if proxy:
+            p = session.query(database.Proxy).filter(proxy.host == database.Proxy.ip).first()
+
+            if not p:
+                p = database.Proxy(ip=proxy.host)
+
+            p.port = proxy.port
+            p.username = proxy.username
+            p.password = proxy.password
+            p.proto = proxy.proto
+
+            session.add(p)
+            session.commit()

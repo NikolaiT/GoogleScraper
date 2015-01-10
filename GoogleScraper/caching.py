@@ -394,16 +394,19 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            serp = None #get_serp_from_database(session, query, search_engine, scrapemethod)
+            serp = get_serp_from_database(session, query, search_engine, scrapemethod)
 
+            parser = None
             if not serp:
                 serp, parser = parse_again(fname, search_engine, scrapemethod, query)
 
             serp.scraper_searches.append(scraper_search)
             session.add(serp)
-            session.commit()
 
-            store_serp_result(dict_from_serp_object(serp), parser)
+            if num_cached % 200 == 0:
+                session.commit()
+
+            store_serp_result(dict_from_serp_object(serp), parser=parser)
 
             mapping.pop(clean_filename)
             num_cached += 1
@@ -434,7 +437,6 @@ def get_serp_from_database(session, query, search_engine, scrapemethod):
                 SearchEngineResultsPage.query == query,
                 SearchEngineResultsPage.search_engine_name == search_engine,
                 SearchEngineResultsPage.scrapemethod == scrapemethod).first()
-        out(serp.links, lvl=2)
         return serp
     except NoResultFound as e:
         # that shouldn't happen

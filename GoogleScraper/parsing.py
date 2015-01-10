@@ -179,6 +179,8 @@ class Parser():
                                     pass
 
                         serp_result[key] = value
+                    serp_result['rank'] = index+1
+
                     # only add items that have not None links.
                     # Avoid duplicates. Detect them by the link.
                     # If statement below: Lazy evaluation. The more probable case first.
@@ -784,7 +786,6 @@ def parse_serp(html=None, search_engine=None,
 
         for key, value in parser.search_results.items():
             if isinstance(value, list):
-                rank = 1
                 for link in value:
                     parsed = urlparse(link['link'])
 
@@ -800,12 +801,11 @@ def parse_serp(html=None, search_engine=None,
                         title=link['title'],
                         visible_link=link['visible_link'],
                         domain=parsed.netloc,
-                        rank=rank,
+                        rank=link['rank'],
                         serp=serp,
                         link_type=key
                     )
                     num_results += 1
-                    rank += 1
 
         serp.num_results = num_results
 

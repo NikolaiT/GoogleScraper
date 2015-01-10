@@ -7,8 +7,11 @@ import math
 import logging
 import sys
 import time
+import os
 import socket
+import json
 import abc
+from urllib.parse import urlencode
 
 try:
     from selenium import webdriver
@@ -24,7 +27,7 @@ except ImportError as ie:
 import GoogleScraper.socks as socks
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.caching import cache_results
-from GoogleScraper.database import SearchEngineResultsPage
+from GoogleScraper.database import SearchEngineResultsPage, db_Proxy
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result, end, dict_from_scraping_object
@@ -71,9 +74,16 @@ def get_base_search_url_by_search_engine(search_engine_name, search_mode):
     specific_base_url = Config[search_mode.upper()].get('{}_search_url'.format(search_engine_name), None)
 
     if not specific_base_url:
-        return Config['SCRAPING'].get('{}_search_url'.format(search_engine_name), None)
-    else:
-        return specific_base_url
+        specific_base_url = Config['SCRAPING'].get('{}_search_url'.format(search_engine_name), None)
+
+    ipfile = Config['SCRAPING'].get('{}_ip_file'.format(search_engine_name), '')
+
+    if os.path.exists(ipfile):
+        ips = open(ipfile, 'rt').read().split('\n')
+        random_ip = random.choice(ips)
+        return random_ip
+
+    return specific_base_url
 
     
 class SearchEngineScrape(metaclass=abc.ABCMeta):
@@ -192,7 +202,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # to be set by subclasses
         self.scrapemethod = ''
         
-        # Wether the instance is ready to run
+        # Whether the instance is ready to run
         self.startable = True
 
         # set the database lock
@@ -224,7 +234,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         """Send the search request(s) over the transport."""
 
 
-    def blocking_search(self, callback, *args, nextkw=None, **kwargs):
+    def blocking_search(self, callback, *args, **kwargs):
         """Similar transports have the same search loop layout.
 
         The SelScrape and HttpScrape classes have the same search loops. Just
@@ -233,6 +243,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         Args:
             callback: A callable with the search functionality.
+            args: Arguments for the callback
+            kwargs: Keyword arguments for the callback.
         """
         for self.current_keyword in self.keywords:
 
@@ -287,10 +299,16 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.scraper_search.serps.append(serp)
 
             serp, parser = parse_serp(serp=serp, parser=self.parser)
-            self.session.add(serp)
-            self.session.commit()
+
+            if serp.num_results > 0:
+                self.session.add(serp)
+                self.session.commit()
+            else:
+                return False
 
             store_serp_result(dict_from_scraping_object(self), self.parser)
+
+            return True
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -311,8 +329,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
-        out('[+] {}[{}][search-type:{}] created using the search engine "{}". Number of keywords to scrape={}, using proxy={}, number of pages per keyword={}'.format(
-            scraper_name, self.ip, self.search_type, self.search_engine, len(self.keywords), self.proxy, self.num_pages_per_keyword), lvl=1)
+        out('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords ={}, num pages for keyword={}'.format(
+            scraper_name, self.ip, self.search_type, self.base_search_url, self.search_engine, len(self.keywords), self.num_pages_per_keyword), lvl=1)
 
 
     def cache_results(self):
@@ -352,11 +370,15 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         Notify the progress queue if necessary.
         """
         self.parser.parse(self.html)
-        self.store()
+        self.search_number += 1
+
+        if not self.store():
+            logger.error('No results to store, skip current keyword: "{0}"'.format(self.current_keyword))
+            return
+
         if self.progress_queue:
             self.progress_queue.put(1)
         self.cache_results()
-        self.search_number += 1
 
     def before_search(self):
         """Things that need to happen before entering the search loop."""
@@ -366,6 +388,29 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             if not self.proxy_check():
                 self.startable = False
 
+
+    def update_proxy_status(self, status, ipinfo={}, online=True):
+        """Sets the proxy status with the results of ipinfo.io
+
+        Args:
+            status: A string the describes the status of the proxy.
+            ipinfo: The json results from ipinfo.io
+            online: Whether the proxy is usable or not.
+        """
+
+        with self.db_lock:
+
+            proxy = self.session.query(db_Proxy).filter(self.proxy.host == db_Proxy.ip).first()
+            if proxy:
+                for key in ipinfo.keys():
+                    setattr(proxy, key, ipinfo[key])
+
+                proxy.checked_at = datetime.datetime.utcnow()
+                proxy.status = status
+                proxy.online = online
+
+                self.session.add(proxy)
+                self.session.commit()
 
     def __del__(self):
         """Close the json array if necessary."""
@@ -474,21 +519,32 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
     def proxy_check(self):
         assert self.proxy and self.requests, 'ScraperWorker needs valid proxy instance and requests library to make the proxy check.'
 
-        try:
-            data = self.requests.get(Config['GLOBAL'].get('proxy_check_url')).text
-        except self.requests.ConnectionError as e:
-            logger.warning('No connection to proxy server possible, determinating: {}'.format(e))
-            return False
-        except self.requests.Timeout as e:
-            logger.warning('Timeout while connecting to proxy server: {}'.format(e))
-            return False
+        online = False
+        status = 'Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__)
+        ipinfo = {}
 
-        if not self.proxy.host in data:
-            logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
-            return False
+        try:
+            text = self.requests.get(Config['GLOBAL'].get('proxy_info_url')).text
+            try:
+                ipinfo = json.loads(text)
+            except ValueError as v:
+                pass
+        except self.requests.ConnectionError as e:
+            status = 'No connection to proxy server possible, aborting: {}'.format(e)
+        except self.requests.Timeout as e:
+            status = 'Timeout while connecting to proxy server: {}'.format(e)
+        except self.requests.exceptions.RequestException as e:
+            status = 'Unknown exception: {}'.format(e)
+
+        if 'ip' in ipinfo and self.proxy.host == ipinfo['ip']:
+            online = True
+            status = 'Proxy is working.'
         else:
-            logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
-            return True
+            logger.warning(status)
+
+        super().update_proxy_status(status, ipinfo, online)
+
+        return online
 
 
     def handle_request_denied(self, status_code):
@@ -588,22 +644,19 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.headers['User-Agent'] = random.choice(self.user_agents)
 
         try:
-            out('[HTTP - {proxy}] Base_url: {base_url}, headers={headers}, params={params}'.format(
-                proxy=self.proxy,
-                base_url=self.base_search_url,
-                headers=self.headers,
-                params=self.search_params),
-            lvl=3)
-
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            request = self.requests.get(self.base_search_url, headers=self.headers,
-                             params=self.search_params, timeout=5)
+            request = self.requests.get(self.base_search_url + urlencode(self.search_params), headers=self.headers, timeout=5)
 
             self.current_request_time = datetime.datetime.utcnow()
-
             self.html = request.text
+
+            out('[HTTP - {url}, headers={headers}, params={params}'.format(
+                url=request.url,
+                headers=self.headers,
+                params=self.search_params),
+            lvl=3)
 
         except self.requests.ConnectionError as ce:
             logger.error('Network problem occurred {}'.format(ce))
@@ -705,19 +758,28 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def proxy_check(self):
         assert self.proxy and self.webdriver, 'Scraper instance needs valid webdriver and proxy instance to make the proxy check'
 
+        online = False
+        status = 'Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__)
+        ipinfo = {}
+
         try:
-            self.webdriver.get(Config['GLOBAL'].get('proxy_check_url'))
-
-            data = self.webdriver.page_source
+            self.webdriver.get(Config['GLOBAL'].get('proxy_info_url'))
+            try:
+                ipinfo = json.loads(self.webdriver.page_source)
+            except ValueError as v:
+                pass
         except Exception as e:
-            return False
+            status = str(e)
 
-        if not self.proxy.host in data:
-            logger.warning('Proxy check failed: {host}:{port} is not used while requesting'.format(**self.proxy.__dict__))
-            return False
+        if 'ip' in ipinfo and self.proxy.host == ipinfo['ip']:
+            online = True
+            status = 'Proxy is working.'
         else:
-            logger.info('Proxy check successful: All requests going through {host}:{port}'.format(**self.proxy.__dict__))
-            return True
+            logger.warning(status)
+
+        super().update_proxy_status(status, ipinfo, online)
+
+        return online
 
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
@@ -850,7 +912,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if Config['SCRAPING'].get('search_type', 'normal') == 'image':
             self.starting_point = self.image_search_locations[self.search_engine]
         else:
-            self.starting_point = self.normal_search_locations[self.search_engine]
+            self.starting_point = self.base_search_url
 
         self.webdriver.get(self.starting_point)
 
@@ -980,22 +1042,22 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def run(self):
         """Run the SelScraper."""
 
+        if not self._get_webdriver():
+            raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
+
+        try:
+            self.webdriver.set_window_size(400, 400)
+            self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
+        except WebDriverException as e:
+            logger.error(e)
+
         super().before_search()
 
         if self.startable:
-            if not self._get_webdriver():
-                raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
-
-            try:
-                self.webdriver.set_window_size(400, 400)
-                self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
-            except WebDriverException as e:
-                logger.error(e)
-
             self.build_search()
-
             self.search()
 
+        if self.webdriver:
             self.webdriver.close()
 
 

@@ -3,11 +3,12 @@
 """
 The database schema of GoogleScraper.
 
-There are three entities:
+There are four entities:
 
     ScraperSearch: Represents a call to GoogleScraper. A search job.
     SearchEngineResultsPage: Represents a SERP result page of a search_engine
     Link: Represents a LINK on a SERP
+    Proxy: Stores all proxies and their statuses.
 
 Because searches repeat themselves and we avoid doing them again (caching), one SERP page
 can be assigned to more than one ScraperSearch. Therefore we need a n:m relationship.
@@ -15,10 +16,10 @@ can be assigned to more than one ScraperSearch. Therefore we need a n:m relation
 
 import datetime
 from GoogleScraper.config import Config
-from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime
+from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime, Enum, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, backref
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, UniqueConstraint
 from sqlalchemy.orm import scoped_session
 from sqlalchemy.orm import sessionmaker
 
@@ -97,6 +98,40 @@ class Link(Base):
         return self.__str__()
 
 
+class Proxy(Base):
+    __tablename__= 'proxy'
+
+    id = Column(Integer, primary_key=True)
+    ip = Column(String)
+    hostname = Column(String)
+    port = Column(Integer)
+    proto = Column(Enum('socks5', 'socks4', 'http'))
+    username = Column(String)
+    password = Column(String)
+
+    online = Column(Boolean)
+    status = Column(String)
+    checked_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    city = Column(String)
+    region = Column(String)
+    country = Column(String)
+    loc = Column(String)
+    org = Column(String)
+    postal = Column(String)
+
+    UniqueConstraint(ip, port, name='unique_proxy')
+
+    def __str__(self):
+        return '<Proxy {ip}>'.format(**self.__dict__)
+
+    def __repr__(self):
+        return self.__str__()
+
+db_Proxy = Proxy
+
+
 def get_engine(path=None):
     """Return the sqlalchemy engine.
 
@@ -108,7 +143,7 @@ def get_engine(path=None):
     """
     db_path = path if path else Config['GLOBAL'].get('output_filename', 'google_scraper') + '.db'
     echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 4) else False
-    engine = create_engine('sqlite:///' + db_path, echo=echo)
+    engine = create_engine('sqlite:///' + db_path, echo=echo, connect_args={'check_same_thread': False})
     Base.metadata.create_all(engine)
 
     return engine

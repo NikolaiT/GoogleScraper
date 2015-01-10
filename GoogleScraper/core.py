@@ -10,7 +10,7 @@ import logging
 from GoogleScraper.utils import chunk_it
 from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session
-from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db
+from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
 from GoogleScraper.scraping import HttpScrape, get_selenium_scraper_by_search_engine_name
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
@@ -148,7 +148,7 @@ class ShowProgressQueue(threading.Thread):
 
             if self.verbosity == 1:
                 print(self.progress_fmt.format(self.num_already_processed, self.num_keywords), end='\r')
-            elif self.verbosity == 2 and self.verbosity % 5 == 0:
+            elif self.verbosity == 2 and self.num_already_processed % 5 == 0:
                 print(self.progress_fmt.format(self.num_already_processed, self.num_keywords))
 
             self.queue.task_done()
@@ -200,11 +200,13 @@ def main(return_results=False, parse_cmd_line=True):
         namespace['ScraperSearch'] = ScraperSearch
         namespace['SERP'] = SERP
         namespace['Link'] = Link
+        namespace['Proxy'] = GoogleScraper.database.Proxy
         print('Available objects:')
         print('session - A sqlalchemy session of the results database')
         print('ScraperSearch - Search/Scrape job instances')
         print('SERP - A search engine results page')
         print('Link - A single link belonging to a SERP')
+        print('Proxy - Proxies stored for scraping projects.')
         start_python_console(namespace)
         return
 
@@ -226,7 +228,8 @@ def main(return_results=False, parse_cmd_line=True):
             # Clean the keywords of duplicates right in the beginning
             keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
 
-    search_engines = list({search_engine for search_engine in Config['SCRAPING'].get('search_engines', 'google').split(',') if search_engine})
+    search_engines = list({search_engine.strip() for search_engine
+        in Config['SCRAPING'].get('search_engines', 'google').split(',') if search_engine.strip()})
     assert search_engines, 'No search engine specified'
 
     if Config['GLOBAL'].getboolean('clean_cache_files', False):
@@ -276,6 +279,9 @@ def main(return_results=False, parse_cmd_line=True):
     Session = get_session(scoped=False, create=True)
     session = Session()
 
+    # add proxies to the database
+    add_proxies_to_db(proxies, session)
+
     # ask the user to continue the last scrape. We detect a continuation of a
     # previously established scrape, if the keyword-file is the same and unmodified since
     # the beginning of the last scrape.
@@ -288,7 +294,7 @@ def main(return_results=False, parse_cmd_line=True):
 
         if searches:
             last_search = searches[-1]
-            last_modified = datetime.datetime.fromtimestamp(os.path.getmtime(last_search.keyword_file))
+            last_modified = datetime.datetime.utcfromtimestamp(os.path.getmtime(last_search.keyword_file))
 
             # if the last modification is older then the starting of the search
             if last_modified < last_search.started_searching:

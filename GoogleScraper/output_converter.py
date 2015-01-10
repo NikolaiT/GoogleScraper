@@ -39,7 +39,16 @@ def init_output_storage():
         elif output_format == 'stdout':
             outfile = sys.stdout
 
-def store_serp_result(serp, parser):
+def store_serp_result(serp, parser=None):
+    """Store the parsed SERP page in the suited output format.
+
+    If there is no parser object, the links are available over
+    serp.links
+
+    Args:
+        serp: The serp object
+        parser: A parse object.
+    """
     global outfile
 
     output_format = Config['GLOBAL'].get('output_format', 'stdout')
@@ -50,10 +59,14 @@ def store_serp_result(serp, parser):
     if outfile:
         def results():
             rows = []
-            for result_type, value in parser.search_results.items():
-                if isinstance(value, list):
-                    for link in value:
-                        rows.append(link)
+            if parser:
+                for result_type, value in parser.search_results.items():
+                    if isinstance(value, list):
+                        for link in value:
+                            rows.append(link)
+            else:
+                for link in serp.links:
+                    row.append(link)
             return rows
 
         if output_format == 'json':
