@@ -406,7 +406,7 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             if num_cached % 200 == 0:
                 session.commit()
 
-            store_serp_result(dict_from_serp_object(serp), parser=parser)
+            store_serp_result(dict_from_serp_object(serp), serp, parser=parser)
 
             mapping.pop(clean_filename)
             num_cached += 1

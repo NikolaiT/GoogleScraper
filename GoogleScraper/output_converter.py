@@ -39,13 +39,14 @@ def init_output_storage():
         elif output_format == 'stdout':
             outfile = sys.stdout
 
-def store_serp_result(serp, parser=None):
+def store_serp_result(obj, serp, parser=None):
     """Store the parsed SERP page in the suited output format.
 
     If there is no parser object, the links are available over
     serp.links
 
     Args:
+        obj: The serp object as dict.
         serp: The serp object
         parser: A parse object.
     """
@@ -70,15 +71,15 @@ def store_serp_result(serp, parser=None):
             return rows
 
         if output_format == 'json':
-            serp['results'] = results()
-            json.dump(serp, outfile, indent=2, sort_keys=True)
+            obj['results'] = results()
+            json.dump(obj, outfile, indent=2, sort_keys=True)
             outfile.write(',')
         elif output_format == 'csv':
             for row in results():
-                row.update(serp)
+                row.update(obj)
                 outfile.writerow(row)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
-            print(parser, file=outfile)
+            print(parser if parser else serp.links, file=outfile)
 
 
 def dict_from_serp_object(serp):

@@ -53,6 +53,25 @@ class SeleniumMisconfigurationError(Exception):
 class SeleniumSearchError(Exception):
     pass
 
+class StopScrapingException(Exception):
+    pass
+
+
+"""
+GoogleScraper should be as robust as possible.
+
+There are several conditions that may stop the scraping process. In such a case,
+a StopScrapingException is raised with the reason.
+
+- All proxies are detected and we cannot request further keywords => Stop.
+- No internet connection => Stop.
+
+- If the proxy is detected by the search engine we try to get another proxy from the pool and we call switch_proxy() => continue.
+
+- If the proxy is detected by the search engine and there is no other proxy in the pool, we wait {search_engine}_proxy_detected_timeout seconds => continue.
+    + If the proxy is detected again after the waiting time, we discard the proxy for the whole scrape.
+"""
+
 
 def get_base_search_url_by_search_engine(search_engine_name, search_mode):
     """Retrieves the search engine base url for a specific search_engine.
@@ -163,6 +182,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         self.keywords = list(set(self.keywords))
 
+        # the keywords that couldn't be scraped by this worker
+        self.missed_keywords = set()
+
         # the number of keywords
         self.num_keywords = len(self.keywords)
         
@@ -229,6 +251,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
 
+        # the default timeout
+        self.timeout = 5
+
+
+
     @abc.abstractmethod
     def search(self, *args, **kwargs):
         """Send the search request(s) over the transport."""
@@ -246,7 +273,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             args: Arguments for the callback
             kwargs: Keyword arguments for the callback.
         """
-        for self.current_keyword in self.keywords:
+        for i, self.current_keyword in enumerate(self.keywords):
 
             self.current_page = self.start_page_pos
 
@@ -254,14 +281,15 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
                 # set the actual search code in the derived class
                 try:
-                    callback(*args, **kwargs)
-                except MaliciousRequestDetected as e:
-                    # Leave search when search engines detected us :/
+
+                    if not callback(*args, **kwargs):
+                        self.missed_keywords.add(self.current_keyword)
+
+                except StopScrapingException as e:
+                    # Leave search when search engines detected us
+                    # add the rest of the keywords as missed one
                     logger.critical(e)
-                    return
-                except self.requests.exceptions.RequestException as e:
-                    # In case of any http networking exception that wasn't caught
-                    # in the actual request, just end the worker.
+                    self.missed_keywords.extend(self.keywords[i:])
                     return
 
     @abc.abstractmethod
@@ -279,8 +307,18 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
 
     @abc.abstractmethod
-    def handle_request_denied(self):
-        """Generic behaviour when search engines detect our scraping."""
+    def handle_request_denied(self, status_code):
+        """Generic behaviour when search engines detect our scraping.
+
+        Args:
+            status_code: The status code of the http response.
+        """
+        logger.warning('Malicious request detected: {}'.format(status_code))
+
+        # cascade
+        timeout = Config['PROXY_POLICY'].getint('{search_engine}_proxy_detected_timeout'.format(
+            search_engine=self.search_engine), Config['PROXY_POLICY'].getint('proxy_detected_timeout'))
+        time.sleep(timeout)
 
     def store(self):
         """Store the parsed data in the sqlalchemy scoped session."""
@@ -558,8 +596,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         Returns:
         """
-        super().handle_request_denied()
-        raise MaliciousRequestDetected('Request not allowed: {}'.format(status_code))
+        super().handle_request_denied(status_code)
 
     def build_search(self):
         """Build the headers and params for the search request for the search engine."""
@@ -636,7 +673,12 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.search_params['q'] = self.current_keyword
             
     def search(self, *args, rand=False, **kwargs):
-        """The actual search for the search engine."""
+        """The actual search for the search engine.
+
+        When raising StopScrapingException, the scraper will stop.
+
+        When return False, the scraper tries to continue with next keyword.
+        """
 
         self.build_search()
 
@@ -659,17 +701,23 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             lvl=3)
 
         except self.requests.ConnectionError as ce:
-            logger.error('Network problem occurred {}'.format(ce))
-            raise ce
+            reason = 'Network problem occurred {}'.format(ce)
+            raise StopScrapingException('Stopping scraping because {}'.format(reason))
         except self.requests.Timeout as te:
-            logger.error('Connection timeout {}'.format(te))
-            raise te
+            reason = 'Connection timeout {}'.format(te)
+            raise StopScrapingException('Stopping scraping because {}'.format(reason))
+        except self.requests.exceptions.RequestException as e:
+            # In case of any http networking exception that wasn't caught
+            # in the actual request, just end the worker.
+            raise StopScrapingException('Stopping scraping because {}'.format(e))
 
         if not request.ok:
             self.handle_request_denied(request.status_code)
             return False
 
         super().after_search()
+
+        return True
 
     def run(self):
         super().before_search()
