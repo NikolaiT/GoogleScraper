@@ -275,7 +275,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                     # Leave search when search engines detected us
                     # add the rest of the keywords as missed one
                     logger.critical(e)
-                    self.missed_keywords.extend(self.keywords[i:])
+                    self.missed_keywords.add(self.keywords[i:])
                     return
 
     @abc.abstractmethod

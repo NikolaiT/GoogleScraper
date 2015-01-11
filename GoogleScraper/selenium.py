@@ -300,11 +300,18 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Returns: False if the search input field could not be located within the time
                 or the handle to the search input field.
         """
+        def find_visible_search_input(driver):
+            inputs = driver.find_elements(*self._get_search_input_field())
+            for input in inputs:
+                if input.is_displayed():
+                    return input
+            return False
+            
         try:
-            search_input = WebDriverWait(self.webdriver, max_wait).until(
-                EC.visibility_of_element_located(self._get_search_input_field()))
+            search_input = WebDriverWait(self.webdriver, max_wait).until(find_visible_search_input)
             return search_input
         except TimeoutException as e:
+            logger.error("TimeoutException waiting for search input field: {0}".format(e))
             return False
 
     def _goto_next_page(self):
@@ -317,7 +324,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             selector = self.next_page_selectors[self.search_engine]
             try:
                 # wait until the next page link emerges
-                WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
                 element = self.webdriver.find_element_by_css_selector(selector)
                 next_url = element.get_attribute('href')
                 element.click()
