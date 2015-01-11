@@ -276,7 +276,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                     # add the rest of the keywords as missed one
                     logger.critical(e)
                     self.missed_keywords.add(self.keywords[i:])
-                    return
+                    continue
 
     @abc.abstractmethod
     def set_proxy(self):
