@@ -76,6 +76,9 @@ def get_command_line(static_args=False, print_help=False):
     parser.add_argument('--version', action='store_true', default=False,
                         help='Prints the version of GoogleScraper')
 
+    parser.add_argument('-c', '--clean', action='store_true', default=False,
+                        help='Cleans all stored data. Please be very careful.')
+
     parser.add_argument('--mysql-proxy-db', action='store',
                         help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
 
@@ -96,5 +99,5 @@ def get_command_line(static_args=False, print_help=False):
 
     return {
         'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
-        'GLOBAL':  make_dict(['debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
+        'GLOBAL':  make_dict(['clean', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
     }

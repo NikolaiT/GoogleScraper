@@ -6,6 +6,7 @@ import logging
 import datetime
 import time
 import math
+import re
 import sys
 
 try:
@@ -127,13 +128,15 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         try:
             self.webdriver.get(Config['GLOBAL'].get('proxy_info_url'))
             try:
-                ipinfo = json.loads(self.webdriver.page_source)
+                text = re.search(r'(\{.*?\})', self.webdriver.page_source, flags=re.DOTALL).group(0)
+                ipinfo = json.loads(text)
             except ValueError as v:
-                pass
+                logger.critical(text)
+
         except Exception as e:
             status = str(e)
 
-        if 'ip' in ipinfo and self.proxy.host == ipinfo['ip']:
+        if 'ip' in ipinfo and ipinfo['ip']:
             online = True
             status = 'Proxy is working.'
         else:
@@ -171,7 +174,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.webdriver = webdriver.Chrome()
             return True
         except WebDriverException as e:
-            # we dont have a chrome executable or a chrome webdriver installed
+            # we don't have a chrome executable or a chrome webdriver installed
             logger.error(e)
         return False
 
@@ -236,6 +239,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Raises:
             MaliciousRequestDetected when there was not way to stp Google From denying our requests.
         """
+        # selenium webdriver objects have no status code :/
+        super().handle_request_denied('400')
+
         needles = self.malicious_request_needles[self.search_engine]
 
         if needles and needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
@@ -262,8 +268,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 out('Waiting for user to solve captcha', lvl=1)
                 return self._wait_until_search_input_field_appears(10*60*60)
 
-        elif 'is not an HTTP Proxy' in self.webdriver.page_source:
-            raise GoogleSearchError('Inavlid TOR usage. Specify the proxy protocol as socks5')
 
     def build_search(self):
         """Build the search for SelScrapers"""

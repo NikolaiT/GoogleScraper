@@ -228,7 +228,10 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         # How long to sleep (in seconds) after every n-th request
         self.sleeping_ranges = dict()
-        for line in Config['GLOBAL'].get('sleeping_ranges').split('\n'):
+        sleep_ranges_option = Config['GLOBAL'].get('{search_engine}_sleeping_ranges'.format(search_engine=self.search_engine),
+                                      Config['GLOBAL'].get('sleeping_ranges'))
+
+        for line in sleep_ranges_option.split('\n'):
             assert line.count(':') == 1, 'Invalid sleep range format.'
             key, value = line.split(':')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])

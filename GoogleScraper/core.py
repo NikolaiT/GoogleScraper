@@ -186,6 +186,14 @@ def main(return_results=False, parse_cmd_line=True):
         print(__version__)
         return
 
+    if Config['GLOBAL'].getboolean('clean', False):
+        try:
+            os.remove('google_scraper.db')
+            os.system('rm {}/*'.format(Config['GLOBAL'].get('cachedir')))
+        except:
+            pass
+        return
+
     kwfile = Config['SCRAPING'].get('keyword_file', '')
     keyword = Config['SCRAPING'].get('keyword')
     keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}

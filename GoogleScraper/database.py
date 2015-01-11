@@ -151,7 +151,7 @@ class SearchEngineProxyStatus(Base):
     __tablename__ = 'search_engine_proxy_status'
     
     id = Column(Integer, primary_key=True)
-    proxy_id = Column(Integer, ForeignKey('proxy.id')),
+    proxy_id = Column(Integer, ForeignKey('proxy.id'))
     search_engine_id = Column(Integer, ForeignKey('search_engine.id'))
     available = Column(Boolean)
     last_check = Column(DateTime)
@@ -196,6 +196,8 @@ def fixtures(session):
     
     for se in Config['SCRAPING'].get('supported_search_engines', '').split(','):
         if se:
-            session.add(SearchEngine(name=se))
+            search_engine = session.query(SearchEngine).filter(SearchEngine.name == se).first()
+            if not search_engine:
+                session.add(SearchEngine(name=se))
     
     session.commit()
