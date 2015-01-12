@@ -275,7 +275,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                     # Leave search when search engines detected us
                     # add the rest of the keywords as missed one
                     logger.critical(e)
+<<<<<<< HEAD
                     self.missed_keywords.add(self.keywords[i:])
+=======
+                    self.missed_keywords.add(self.keywords[i])
+>>>>>>> some fix for http scraping
                     continue
 
     @abc.abstractmethod
