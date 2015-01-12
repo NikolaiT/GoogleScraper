@@ -259,6 +259,10 @@ def main(return_results=False, parse_cmd_line=True):
 
     if Config['SCRAPING'].getboolean('use_own_ip'):
         proxies.append(None)
+
+    request_timeout = Config['SCRAPING'].getint('timeout', 10)
+    if request_timeout < 10:
+        request_timeout = 10
         
     if not proxies:
         raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
@@ -398,6 +402,7 @@ def main(return_results=False, parse_cmd_line=True):
                                 db_lock=db_lock,
                                 proxy=proxy_to_use,
                                 progress_queue=q,
+                                request_timeout=request_timeout
                             )
                         )
 

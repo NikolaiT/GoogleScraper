@@ -136,7 +136,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     }
 
     def __init__(self, keywords=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
-                 start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
+                 start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None,
+                 request_timeout=10):
         """Instantiate an SearchEngineScrape object.
 
         Args:
@@ -239,6 +240,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         # the default timeout
         self.timeout = 5
+
+        # http request timeout
+        self.request_timeout = request_timeout
 
 
 
