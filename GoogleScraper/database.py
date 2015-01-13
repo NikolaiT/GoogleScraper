@@ -166,7 +166,7 @@ def get_engine(path=None):
     Returns:
         The sqlalchemy engine.
     """
-    db_path = path if path else Config['GLOBAL'].get('output_filename', 'google_scraper') + '.db'
+    db_path = path if path else Config['OUTPUT'].get('database_name', 'google_scraper') + '.db'
     echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 4) else False
     engine = create_engine('sqlite:///' + db_path, echo=echo, connect_args={'check_same_thread': False})
     Base.metadata.create_all(engine)
@@ -174,7 +174,7 @@ def get_engine(path=None):
     return engine
 
 
-def get_session(scoped=False, create=False, engine=None, path=None):
+def get_session(scoped=False, engine=None, path=None):
     if not engine:
         engine = get_engine(path=path)
 

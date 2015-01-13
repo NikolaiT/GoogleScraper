@@ -5,6 +5,7 @@
 Shows how to control GoogleScraper programmatically.
 """
 
+import sys
 from GoogleScraper import scrape_with_config, GoogleSearchError
 from GoogleScraper.database import ScraperSearch, SERP, Link
 
@@ -127,8 +128,19 @@ def image_search():
 ### MAIN FUNCTION ###
 
 if __name__ == '__main__':
-    # basic_usage()
-    image_search()
+
+    usage = 'Usage: {} [basic|image-search]'.format(sys.argv[0])
+    if len(sys.argv) != 2:
+        print(usage)
+    else:
+        arg = sys.argv[1]
+        if arg == 'basic':
+            basic_usage()
+        elif arg == 'image':
+            image_search()
+        else:
+            print(usage)
+
 
 
 

@@ -35,12 +35,8 @@ def get_command_line(static_args=False, print_help=False):
     keyword_group.add_argument('--keyword-file', type=str, action='store',
                         help='Keywords to search for. One keyword per line. Empty lines are ignored.')
 
-    parser.add_argument('-f', '--output-format', type=str, action='store', default='stdout', choices=['stdout', 'json', 'csv'],
-                        help='''How to save the output of the scrape. The results are always saved in the database. But for '
-                             the purpose of immediate exploration, the results may be also saved as JSON and CSV files.''')
-
-    parser.add_argument('-o-', '--output-filename', type=str, action='store', default='google_scraper',
-                        help='The name of the output file. Depends on the output format. Sqlite3 files will have a .db suffix, json results a .json ending and csv output a .csv ending. This means: Do not provide your own suffix!')
+    parser.add_argument('-o-', '--output-filename', type=str, action='store', default='',
+                        help='The name of the output file. If the file ending is "json", write a json file, if the ending is "csv", write a csv file.')
 
     parser.add_argument('--shell', action='store_true', default=False, help='Fire up a shell with a loaded sqlalchemy session.')
 
@@ -99,5 +95,6 @@ def get_command_line(static_args=False, print_help=False):
 
     return {
         'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
-        'GLOBAL':  make_dict(['clean', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version'])
+        'GLOBAL':  make_dict(['clean', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version']),
+        'OUTPUT': make_dict(['output_filename'])
     }

@@ -19,7 +19,7 @@ GoogleScraper is written in Python 3. You should install at least Python 3.4
 Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode. On Ubuntu 14.04 for instance,
 you certainly have to install the Chrome driver.
 
-From now on (August 2014), you can install GoogleScraper comfortably with pip:
+You can install GoogleScraper comfortably with pip:
 
 ```
 virtualenv --python python3 env
@@ -71,7 +71,7 @@ Scrape all keywords that are in
 + increase verbosity
 + and use a proxy file named "proxies.txt"
 ```
-GoogleScraper -m http --keyword-file keywords.txt --num-workers 10 --proxy-file proxies.txt --search-engines "google,bing,yahoo" --output-format json --output-filename output -v2
+GoogleScraper -m http --keyword-file keywords.txt --num-workers 10 --proxy-file proxies.txt --search-engines "google,bing,yahoo" --output-filename output.json -v2
 ```
 
 Do an image search for the keyword "K2 mountain" on some search engines:
@@ -169,6 +169,7 @@ Here you can learn how to use GoogleScrape from within your own Python scripts.
 Shows how to control GoogleScraper programmatically.
 """
 
+import sys
 from GoogleScraper import scrape_with_config, GoogleSearchError
 from GoogleScraper.database import ScraperSearch, SERP, Link
 
@@ -215,7 +216,7 @@ def image_search():
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
-            'keyword': 'sexy girl', # :D hehe have fun my dear friends
+            'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
             'search_engines': 'yandex,google,bing,baidu,yahoo', # duckduckgo not supported
             'search_type': 'image',
             'scrapemethod': 'selenium'
@@ -291,8 +292,18 @@ def image_search():
 ### MAIN FUNCTION ###
 
 if __name__ == '__main__':
-    # basic_usage()
-    image_search()
+
+    usage = 'Usage: {} [basic|image-search]'.format(sys.argv[0])
+    if len(sys.argv) != 2:
+        print(usage)
+    else:
+        arg = sys.argv[1]
+        if arg == 'basic':
+            basic_usage()
+        elif arg == 'image':
+            image_search()
+        else:
+            print(usage)
 ```
 
 <a name="cli-usage" \>

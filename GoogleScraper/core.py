@@ -284,7 +284,7 @@ def main(return_results=False, parse_cmd_line=True):
         return
 
     # get a scoped sqlalchemy session
-    Session = get_session(scoped=False, create=True)
+    Session = get_session(scoped=False)
     session = Session()
     
     # add fixtures
