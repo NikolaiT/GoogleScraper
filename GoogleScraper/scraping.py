@@ -353,7 +353,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
-        out('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords ={}, num pages for keyword={}'.format(
+        out('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords={}, num pages for keyword={}'.format(
             scraper_name, self.ip, self.search_type, self.base_search_url, self.search_engine, len(self.keywords), self.num_pages_per_keyword), lvl=1)
 
 
