@@ -8,12 +8,12 @@ import bz2
 import re
 import logging
 import functools
-from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
+from sqlalchemy.orm.exc import NoResultFound
 from GoogleScraper.config import Config
 from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
 from GoogleScraper.log import out
-from GoogleScraper.output_converter import store_serp_result, dict_from_serp_object
+from GoogleScraper.output_converter import store_serp_result
 
 
 """
@@ -394,19 +394,21 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            serp = get_serp_from_database(session, query, search_engine, scrapemethod)
+            serps = get_serp_from_database(session, query, search_engine, scrapemethod)
 
             parser = None
-            if not serp:
+            if not serps:
                 serp, parser = parse_again(fname, search_engine, scrapemethod, query)
+                serps = [serp]
 
-            serp.scraper_searches.append(scraper_search)
-            session.add(serp)
+            for serp in serps:
+                serp.scraper_searches.append(scraper_search)
+                session.add(serp)
 
             if num_cached % 200 == 0:
                 session.commit()
 
-            store_serp_result(dict_from_serp_object(serp), serp, parser=parser)
+            store_serp_result(None, serps=serps, parser=parser)
 
             mapping.pop(clean_filename)
             num_cached += 1
@@ -433,18 +435,16 @@ def parse_again(fname, search_engine, scrapemethod, query):
 
 def get_serp_from_database(session, query, search_engine, scrapemethod):
     try:
-        serp = session.query(SearchEngineResultsPage).filter(
+        serps = session.query(SearchEngineResultsPage).filter(
                 SearchEngineResultsPage.query == query,
                 SearchEngineResultsPage.search_engine_name == search_engine,
-                SearchEngineResultsPage.scrapemethod == scrapemethod).first()
-        return serp
+                SearchEngineResultsPage.scrapemethod == scrapemethod).all()
+        return serps
     except NoResultFound as e:
         # that shouldn't happen
         # we have a cache file that matches the above identifying information
         # but it was never stored to the database.
         return False
-    except MultipleResultsFound as e:
-        raise e
 
     return False
 

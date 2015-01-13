@@ -32,12 +32,14 @@
   - Maybe add other search engines!
   - finally implement async mode!!!
 
- 30.12.2014:
+30.12.2014:
   - Fixed issue #45 [done]
 
- 02.01.2015:
+02.01.2015:
   - Check output verbosity levels and modify them. [done]
 
+13.01.2015:
+  - Handle sigint. Then close all open files (csv, json).
 
 
 

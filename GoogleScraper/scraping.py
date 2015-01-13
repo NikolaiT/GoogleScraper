@@ -12,7 +12,7 @@ from GoogleScraper.caching import cache_results
 from GoogleScraper.database import SearchEngineResultsPage, db_Proxy
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
-from GoogleScraper.output_converter import store_serp_result, end, dict_from_scraping_object
+from GoogleScraper.output_converter import store_serp_result, dict_from_scraping_object
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 
 logger = logging.getLogger('GoogleScraper')
@@ -330,7 +330,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             else:
                 return False
 
-            store_serp_result(dict_from_scraping_object(self), self.parser)
+            store_serp_result(dict_from_scraping_object(self), parser=self.parser)
 
             return True
 
@@ -436,6 +436,3 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 self.session.add(proxy)
                 self.session.commit()
 
-    def __del__(self):
-        """Close the json array if necessary."""
-        end()

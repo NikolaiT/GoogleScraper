@@ -46,7 +46,7 @@ class Parser():
     search_types = []
 
 
-    # Each subclass of Parser may declare an arbitrary amount of attribute that
+    # Each subclass of Parser may declare an arbitrary amount of attributes that
     # follow a naming convention like this:
     # *_search_selectors
     # where the asterix may be replaced with arbitrary identifier names.
