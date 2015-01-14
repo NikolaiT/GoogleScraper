@@ -250,7 +250,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            request = self.requests.get(self.base_search_url + urlencode(self.search_params), headers=self.headers, timeout=5)
+            request = self.requests.get(self.base_search_url + urlencode(self.search_params), headers=self.headers,
+                                        timeout=self.request_timeout)
 
             self.current_request_time = datetime.datetime.utcnow()
             self.html = request.text

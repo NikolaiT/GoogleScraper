@@ -364,7 +364,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             if self.search_input:
                 self.search_input.clear()
                 time.sleep(.25)
-                self.search_input.send_keys(self.current_keyword + Keys.ENTER)
+                self.search_input.send_keys(self.current_keyword)
+                if self.browser_type == 'phantomjs':
+                    time.sleep(1)  # Phantomjs are much faster than firefox, chrome
+                self.search_input.send_keys(Keys.ENTER)
                 self.current_request_time = datetime.datetime.utcnow()
             else:
                 logger.warning('Cannot get handle to the input form for keyword {}.'.format(self.current_keyword))
