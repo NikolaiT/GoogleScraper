@@ -426,7 +426,7 @@ class BingParser(Parser):
                 'container': '#b_results',
                 'result_container': '.b_algo',
                 'link': 'h2 > a::attr(href)',
-                'snippet': '.b_caption > .b_attribution > p::text',
+                'snippet': '.b_caption > p::text',
                 'title': 'h2::text',
                 'visible_link': 'cite::text'
             },
@@ -437,7 +437,14 @@ class BingParser(Parser):
                 'snippet': '.b_caption > p::text',
                 'title': 'h2::text',
                 'visible_link': 'cite::text'
-            }
+            },
+            'de_ip_news_items': {
+                'container': 'ul.b_vList li',
+                'link': ' h5 a::attr(href)',
+                'snippet': 'p::text',
+                'title': ' h5 a::text',
+                'visible_link': 'cite::text'
+            },
         },
         'ads_main': {
             'us_ip': {
