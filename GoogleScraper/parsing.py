@@ -2,7 +2,6 @@
 
 import sys
 import re
-import hashlib
 import lxml.html
 from lxml.html.clean import Cleaner
 import logging
@@ -77,13 +76,14 @@ class Parser():
         if self.html:
             self.parse()
         
-    def parse(self, html):
+    def parse(self, html=None):
         """Public function to start parsing the search engine results.
         
         Args: 
             html: The raw html data to extract the SERP entries from.
         """
-        self.html = html
+        if html:
+            self.html = html
         
         # lets do the actual parsing
         self._parse()
@@ -140,9 +140,15 @@ class Parser():
 
             for selector_specific, selectors in selector_class.items():
 
+                if 'result_container' in selectors and selectors['result_container']:
+                    css = '{container} {result_container}'.format(**selectors)
+                else:
+                    css = selectors['container']
+
                 results = self.dom.xpath(
-                    css_to_xpath('{container} {result_container}'.format(**selectors))
+                    css_to_xpath(css)
                 )
+
                 to_extract = set(selectors.keys()) - {'container', 'result_container'}
                 selectors_to_use = {key: selectors[key] for key in to_extract if key in selectors.keys()}
 
@@ -188,22 +194,6 @@ class Parser():
                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
 
-    def result_id(self, args):
-        """Gets an unique id for the args.
-
-        Args:
-            args: A number of arguments that constitute the uniqueness of the result.
-
-        Returns:
-            An hash of the concatenated arguments.
-        """
-        hasher = hashlib.md5()
-        for arg in args:
-            if arg:
-                hasher.update(arg.encode())
-
-        return hasher.hexdigest()
-                    
     def after_parsing(self):
         """Subclass specific behaviour after parsing happened.
         
@@ -278,7 +268,14 @@ class GoogleParser(Parser):
                 'snippet': 'div.s span.st::text',
                 'title': 'h3.r > a:first-child::text',
                 'visible_link': 'cite::text'
-            }
+            },
+            'de_ip_news_items': {
+                'container': 'li.card-section',
+                'link': 'a._Dk::attr(href)',
+                'snippet': 'span._dwd::text',
+                'title': 'a._Dk::text',
+                'visible_link': 'cite::text'
+            },
         },
         'ads_main': {
             'us_ip': {
@@ -835,4 +832,3 @@ if __name__ == '__main__':
     
     with open('/tmp/testhtml.html', 'w') as of:
         of.write(raw_html)
-    

@@ -4,6 +4,9 @@ instructions/
 google_scraper_results/
 
 
+# internal tests
+tests/
+
 # all dirs that start with a point
 .*/
 
