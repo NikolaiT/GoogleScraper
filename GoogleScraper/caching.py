@@ -355,8 +355,6 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
     Returns:
         A list of keywords that couldn't be parsed and which need to be scraped anew.
     """
-    google_query_needle = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
-
     files = _get_all_cache_files()
     mapping = {}
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
@@ -394,11 +392,10 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            serps = get_serp_from_database(session, query, search_engine, scrapemethod)
+            serps = get_serps_from_database(session, query, search_engine, scrapemethod)
 
-            parser = None
             if not serps:
-                serp, parser = parse_again(fname, search_engine, scrapemethod, query)
+                serp = parse_again(fname, search_engine, scrapemethod, query)
                 serps = [serp]
 
             for serp in serps:
@@ -408,7 +405,8 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             if num_cached % 200 == 0:
                 session.commit()
 
-            store_serp_result(None, serps=serps, parser=parser)
+            for serp in serps:
+                store_serp_result(serp)
 
             mapping.pop(clean_filename)
             num_cached += 1
@@ -429,11 +427,11 @@ def parse_again(fname, search_engine, scrapemethod, query):
         html=html,
         search_engine=search_engine,
         scrapemethod=scrapemethod,
-        current_page=0,
+        current_page=-1,
         current_keyword=query
     )
 
-def get_serp_from_database(session, query, search_engine, scrapemethod):
+def get_serps_from_database(session, query, search_engine, scrapemethod):
     try:
         serps = session.query(SearchEngineResultsPage).filter(
                 SearchEngineResultsPage.query == query,

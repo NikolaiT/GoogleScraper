@@ -40,6 +40,11 @@ class Parser():
     Attributes:
         search_results: The results after parsing.
     """
+
+    # if subclasses specify an value for this attribute and the attribute
+    # targets an element in the serp page, then there weren't any results
+    # for the original query.
+    num_results_search_selectors = []
     
     # The supported search types. For instance, Google supports Video Search, Image Search, News search
     search_types = []
@@ -72,6 +77,9 @@ class Parser():
         self.dom = None
         self.search_results = {}
         self.search_results['num_results'] = ''
+
+        # short alias because we use it so extensively
+        self.css_to_xpath = HTMLTranslator().css_to_xpath
         
         if self.html:
             self.parse()
@@ -107,7 +115,7 @@ class Parser():
     def _parse(self, cleaner=None):
         """Internal parse the dom according to the provided css selectors.
         
-        Raises: InvalidSearchTypeExcpetion if no css selectors for the searchtype could be found.
+        Raises: InvalidSearchTypeException if no css selectors for the searchtype could be found.
         """
         self._parse_lxml(cleaner)
         
@@ -115,22 +123,28 @@ class Parser():
         attr_name = self.searchtype + '_search_selectors'
         selector_dict = getattr(self, attr_name, None)
 
-        # short alias because we use it so extensively
-        css_to_xpath = HTMLTranslator().css_to_xpath
-
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
         self.search_results['num_results'] = ''
 
         if isinstance(num_results_selector, list) and num_results_selector:
             for selector in num_results_selector:
-                try:
-                    self.search_results['num_results'] = self.dom.xpath(css_to_xpath(selector))[0].text_content()
-                except IndexError as e:
-                    logger.warning('Cannot parse num_results from serp page with selector {}'.format(selector))
-                else: # leave when first selector grabbed something
-                    break
+                if selector:
+                    try:
+                        self.search_results['num_results'] = self.advanced_css(selector, element=self.dom)
+                    except IndexError as e:
+                        logger.warning('Cannot parse num_results from serp page with selector {}'.format(selector))
+                    else: # leave when first selector grabbed something
+                        break
 
+        # let's see if the search query was shitty (no results for that query)
+        try:
+            self.search_results['effective_query'] = self.advanced_css(self.no_results_selector, element=self.dom)
+        except Exception as e:
+            self.search_results['effective_query'] = ''
+
+
+        # get the stuff that is of interest in SERP pages.
         if not selector_dict and not isinstance(selector_dict, dict):
             raise InvalidSearchTypeException('There is no such attribute: {}. No selectors found'.format(attr_name))
 
@@ -146,7 +160,7 @@ class Parser():
                     css = selectors['container']
 
                 results = self.dom.xpath(
-                    css_to_xpath(css)
+                    self.css_to_xpath(css)
                 )
 
                 to_extract = set(selectors.keys()) - {'container', 'result_container'}
@@ -165,26 +179,8 @@ class Parser():
                     # key are for example 'link', 'snippet', 'visible-url', ...
                     # selector is the selector to grab these items
                     for key, selector in selectors_to_use.items():
-                        value = None
-                        if selector.endswith('::text'):
-                            try:
-                                value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].text_content()
-                            except IndexError as e:
-                                pass
-                        else:
-                            attr = re.search(r'::attr\((?P<attr>.*)\)$', selector).group('attr')
-                            if attr:
-                                try:
-                                    value = result.xpath(css_to_xpath(selector.split('::')[0]))[0].get(attr)
-                                except IndexError as e:
-                                    pass
-                            else:
-                                try:
-                                    value = result.xpath(css_to_xpath(selector))[0].text_content()
-                                except IndexError as e:
-                                    pass
+                        serp_result[key] = self.advanced_css(selector, result)
 
-                        serp_result[key] = value
                     serp_result['rank'] = index+1
 
                     # only add items that have not None links.
@@ -193,6 +189,42 @@ class Parser():
                     if 'link' in serp_result and serp_result['link'] and \
                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
+
+
+    def advanced_css(self, selector, element=None):
+        """Evaluate the :text and ::attr(attr-name) additionally.
+
+        Args:
+            selector: A css selector.
+            element: The element on which to apply the selector.
+
+        Returns:
+            The targeted element.
+
+        """
+        value = None
+
+        if selector.endswith('::text'):
+            try:
+                value = element.xpath(self.css_to_xpath(selector.split('::')[0]))[0].text_content()
+            except IndexError as e:
+                pass
+        else:
+            match = re.search(r'::attr\((?P<attr>.*)\)$', selector)
+
+            if match:
+                attr = match.group('attr')
+                try:
+                    value = element.xpath(self.css_to_xpath(selector.split('::')[0]))[0].get(attr)
+                except IndexError as e:
+                    pass
+            else:
+                try:
+                    value = element.xpath(self.css_to_xpath(selector))[0].text_content()
+                except IndexError as e:
+                    pass
+
+        return value
 
     def after_parsing(self):
         """Subclass specific behaviour after parsing happened.
@@ -248,7 +280,9 @@ class GoogleParser(Parser):
     """Parses SERP pages of the Google search engine."""
     
     search_types = ['normal', 'image']
-    
+
+    no_results_selector = '#topstuff .med > b::text'
+
     num_results_search_selectors = ['#resultStats']
     
     normal_search_selectors = {
@@ -785,6 +819,7 @@ def parse_serp(html=None, search_engine=None,
                 requested_at=requested_at,
                 requested_by=requested_by,
                 query=current_keyword,
+                effective_query=parser.search_results['effective_query'],
                 num_results_for_keyword=parser.search_results['num_results'],
             )
 
@@ -813,7 +848,7 @@ def parse_serp(html=None, search_engine=None,
 
         serp.num_results = num_results
 
-        return (serp, parser)
+        return serp
 
 if __name__ == '__main__':
     """Originally part of https://github.com/NikolaiT/GoogleScraper.

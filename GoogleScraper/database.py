@@ -65,6 +65,12 @@ class SearchEngineResultsPage(Base):
     requested_by = Column(String, default='127.0.0.1')
     num_results = Column(Integer)
     query = Column(String)
+
+    # if the query was modified by the search engine because there weren't any
+    # results, this variable is set to the query that was used instead.
+    # Otherwise it remains empty.
+    effective_query = Column(String, default='')
+
     num_results_for_keyword = Column(String)
 
     def __str__(self):

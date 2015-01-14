@@ -12,7 +12,7 @@ from GoogleScraper.caching import cache_results
 from GoogleScraper.database import SearchEngineResultsPage, db_Proxy
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
-from GoogleScraper.output_converter import store_serp_result, dict_from_scraping_object
+from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 
 logger = logging.getLogger('GoogleScraper')
@@ -308,7 +308,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def store(self):
         """Store the parsed data in the sqlalchemy scoped session."""
-        assert self.session, 'No database session. Turning down.'
+        assert self.session, 'No database session.'
 
         with self.db_lock:
             serp = SearchEngineResultsPage(
@@ -318,11 +318,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 requested_at=self.current_request_time,
                 requested_by=self.ip,
                 query=self.current_keyword,
+                effective_query=self.parser.search_results['effective_query'],
                 num_results_for_keyword=self.parser.search_results['num_results'],
             )
             self.scraper_search.serps.append(serp)
 
-            serp, parser = parse_serp(serp=serp, parser=self.parser)
+            serp = parse_serp(serp=serp, parser=self.parser)
 
             if serp.num_results > 0:
                 self.session.add(serp)
@@ -330,7 +331,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             else:
                 return False
 
-            store_serp_result(dict_from_scraping_object(self), parser=self.parser)
+            store_serp_result(serp)
 
             return True
 

@@ -203,7 +203,7 @@ def main(return_results=False, parse_cmd_line=True):
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
-        Session = get_session(scoped=False, create=False)
+        Session = get_session(scoped=False)
         namespace['session'] = Session()
         namespace['ScraperSearch'] = ScraperSearch
         namespace['SERP'] = SERP

@@ -3,8 +3,9 @@
 import csv
 import sys
 import json
-import datetime
+from pprint import pprint
 from GoogleScraper.config import Config
+from GoogleScraper.database import Link
 
 """Stores SERP results in the appropriate output format.
 
@@ -15,7 +16,6 @@ impossible to launch lang scrape jobs with millions of keywords.
 
 output_format = 'stdout'
 outfile = None
-wrote_json_start = False
 
 class JsonStreamWriter():
     """Writes consecutive objects to an json output file."""
@@ -31,16 +31,29 @@ class JsonStreamWriter():
     def __del__(self):
         self.file.write(']')
 
+def store_serp_result(serp):
+    """Store the parsed SERP page.
 
-def init_output_storage():
-    """Init an outfile."""
+    Stores the results from scraping in the appropriate output format.
+
+    Either stdout, json or csv output format.
+
+    This function may be called from a SearchEngineScrape or from
+    caching functionality. When called from SearchEngineScrape, then
+    a parser object is passed.
+    When called from caching, a list of serp object are given.
+
+    Args:
+        serp: A serp object
+    """
     global outfile, output_format
 
-    output_file = Config['OUTPUT'].get('output_filename')
-    if '.' in output_file:
-        output_format = output_file.split('.')[-1]
-
     if not outfile:
+
+        output_file = Config['OUTPUT'].get('output_filename')
+        if '.' in output_file:
+            output_format = output_file.split('.')[-1]
+
         # the output files. Either CSV or JSON or STDOUT
         # It's little bit tricky to write the JSON output file, since we need to
         # create the array of the most outer results ourselves because we write
@@ -48,91 +61,26 @@ def init_output_storage():
         if output_format == 'json':
             outfile = JsonStreamWriter(output_file)
         elif output_format == 'csv':
-            outfile = csv.DictWriter(open(output_file, 'wt'),
-                    fieldnames=('rank', 'link', 'title', 'snippet', 'visible_link', 'num_results',
-                                'query', 'search_engine_name', 'requested_by',
-                                'scrapemethod', 'page_number', 'requested_at'))
+            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=Link.__table__.columns._data.keys())
             outfile.writeheader()
         elif output_format == 'stdout':
             outfile = sys.stdout
 
-def store_serp_result(obj, serps=None, parser=None):
-    """Store the parsed SERP page in the suited output format.
-
-    If there is no parser object given, the links are available over
-    serp.links.
-
-    Args:
-        obj: The serp object as dict.
-        serp: The serp object
-        parser: A parse object.
-    """
-    global outfile, output_format
-
-    if not outfile:
-        init_output_storage()
-
     if outfile:
-        def results():
-            rows = []
-            if parser:
-                for result_type, value in parser.search_results.items():
-                    if isinstance(value, list):
-                        for link in value:
-                            rows.append(link)
-            return rows
+        data = row2dict(serp)
+        data['results'] = []
+        for link in serp.links:
+            data['results'].append(row2dict(link))
+
         if output_format == 'json':
             # The problem here is, that we need to stream write the json data.
-
-            if parser:
-                if not obj:
-                    obj = {}
-                obj['results'] = results()
-            elif serps:
-                for serp in serps:
-                    data = {}
-                    data.update(dict_from_serp_object(serp))
-                    data['results'] = []
-                    for link in serp.links:
-                        d = row2dict(link)
-                        data['results'].append(d)
-                    outfile.write(data)
-
-            elif parser:
-                outfile.write(obj)
+            outfile.write(data)
         elif output_format == 'csv':
-            if parser:
-                for row in results():
-                    row.update(obj)
-                    outfile.writerow(row)
-
+            # one row per link
+            for row in data['results']:
+                outfile.writerow(row)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
-            print(parser if parser else '', file=outfile)
-
-
-def dict_from_serp_object(serp):
-    """Creates an dictionary from an SERP object."""
-    keys = ('query', 'search_engine_name', 'requested_by', 'scrapemethod', 'page_number', 'requested_at', 'num_results')
-    d = {key: getattr(serp, key) for key in keys}
-
-    for key, value in d.items():
-        if isinstance(value, datetime.datetime):
-            d[key] = value.isoformat()
-
-    return d
-
-def dict_from_scraping_object(obj):
-    """Little helper that creates a dict from a SearchEngineScrape object."""
-    d = {}
-    d['query'] = obj.current_keyword
-    d['search_engine_name'] = obj.search_engine
-    d['requested_by'] = obj.ip
-    d['scrapemethod'] = obj.scrapemethod
-    d['page_number'] = obj.current_page
-    d['requested_at'] = obj.current_request_time.isoformat()
-    d['num_results'] = obj.parser.search_results['num_results']
-    return d
-
+            pprint(data)
 
 def row2dict(obj):
     """Convert sql alchemy object to dictionary."""

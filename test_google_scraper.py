@@ -1,15 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
 import unittest
-from pprint import pprint
-
 from GoogleScraper.parsing import get_parser_by_search_engine
-
-# where to find the test html files
-
-u_sample_serp_path = 'data/uncompressed_serp_pages'
 
 
 class GoogleScraperTestCase(unittest.TestCase):
@@ -23,9 +16,7 @@ class GoogleScraperTestCase(unittest.TestCase):
     ### Test static parsing for all search engines. The html files are saved in u_sample_serp_path
 
     def get_parser_for_file(self, se, file):
-        path = os.path.join(u_sample_serp_path, file)
-
-        with open(path, 'r') as f:
+        with open(file, 'r') as f:
             html = f.read()
             parser = get_parser_by_search_engine(se)
             parser = parser(html)
@@ -33,7 +24,7 @@ class GoogleScraperTestCase(unittest.TestCase):
         return parser
 
     def test_parse_google(self):
-        parser = self.get_parser_for_file('google', 'abrakadabra_google_de_ip.html')
+        parser = self.get_parser_for_file('google', 'data/uncompressed_serp_pages/abrakadabra_google_de_ip.html')
 
         assert '232.000.000 Ergebnisse' in parser.search_results['num_results']
         assert len(parser.search_results['results']) == 12, len(parser.search_results)
@@ -43,11 +34,21 @@ class GoogleScraperTestCase(unittest.TestCase):
 
     def test_parse_bing(self):
 
-        parser = self.get_parser_for_file('bing', 'hello_bing_de_ip.html')
+        parser = self.get_parser_for_file('bing', 'data/uncompressed_serp_pages/hello_bing_de_ip.html')
 
         assert '16.900.000 results' == parser.search_results['num_results']
         assert len(parser.search_results['results']) == 12, len(parser.search_results['results'])
         assert all([v['visible_link'] for v in parser.search_results['results']])
+        assert all([v['link'] for v in parser.search_results['results']])
+        self.assertAlmostEqual(len([v['snippet'] for v in parser.search_results['results'] if v['snippet'] is not None]), 10, delta=4)
+        
+    def test_parse_yahoo(self):
+        
+        parser = self.get_parser_for_file('yahoo', 'data/uncompressed_serp_pages/snow_yahoo_de_ip.html')
+
+        assert '19,400,000 Ergebnisse' == parser.search_results['num_results']
+        assert len(parser.search_results['results']) >= 10, len(parser.search_results['results'])
+        assert len([v['visible_link'] for v in parser.search_results['results'] if v['visible_link']]) == 10, 'Not 10 elements with a visible link in yahoo serp page'
         assert all([v['link'] for v in parser.search_results['results']])
         self.assertAlmostEqual(len([v['snippet'] for v in parser.search_results['results'] if v['snippet'] is not None]), 10, delta=4)
 
@@ -64,6 +65,13 @@ class GoogleScraperTestCase(unittest.TestCase):
     ### test json output
 
     ### test proxies
+
+    ### test correct handling of SERP page that has no results for search query.
+
+    def test_no_results_for_query_google(self):
+        parser = self.get_parser_for_file('google', 'data/uncompressed_no_results_serp_pages/google.html')
+
+        assert parser.search_results['effective_query'] == '"be dealt and be evaluated"', 'No effective query.'
 
 if __name__ == '__main__':
     unittest.main()
