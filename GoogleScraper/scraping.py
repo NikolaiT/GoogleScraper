@@ -318,8 +318,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 requested_at=self.current_request_time,
                 requested_by=self.ip,
                 query=self.current_keyword,
-                effective_query=self.parser.search_results['effective_query'],
-                num_results_for_keyword=self.parser.search_results['num_results'],
+                effective_query=self.parser.effective_query,
+                num_results_for_keyword=self.parser.num_results,
             )
             self.scraper_search.serps.append(serp)
 

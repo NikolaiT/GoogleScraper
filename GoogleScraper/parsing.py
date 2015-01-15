@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os
 import re
 import lxml.html
 from lxml.html.clean import Cleaner
@@ -44,11 +45,16 @@ class Parser():
     # if subclasses specify an value for this attribute and the attribute
     # targets an element in the serp page, then there weren't any results
     # for the original query.
+    no_results_selectors = []
+
+    # the selector that gets the number of results (guessed) as shown by the search engine.
     num_results_search_selectors = []
+
+    # some search engine show on which page we currently are. If supportd, this selector will get this value.
+    page_number_selectors = []
     
     # The supported search types. For instance, Google supports Video Search, Image Search, News search
     search_types = []
-
 
     # Each subclass of Parser may declare an arbitrary amount of attributes that
     # follow a naming convention like this:
@@ -76,7 +82,9 @@ class Parser():
         self.html = html
         self.dom = None
         self.search_results = {}
-        self.search_results['num_results'] = ''
+        self.num_results = ''
+        self.effective_query = ''
+        self.page_number = -1
 
         # short alias because we use it so extensively
         self.css_to_xpath = HTMLTranslator().css_to_xpath
@@ -125,24 +133,16 @@ class Parser():
 
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
-        self.search_results['num_results'] = ''
 
-        if isinstance(num_results_selector, list) and num_results_selector:
-            for selector in num_results_selector:
-                if selector:
-                    try:
-                        self.search_results['num_results'] = self.advanced_css(selector, element=self.dom)
-                    except IndexError as e:
-                        logger.warning('Cannot parse num_results from serp page with selector {}'.format(selector))
-                    else: # leave when first selector grabbed something
-                        break
+        self.num_results = self.first_match(num_results_selector, self.dom)
+        if not self.num_results:
+            logger.warning('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__, num_results_selector))
+
+        # get the current page we are at. Sometimes we search engines don't show this.
+        self.page_number = self.first_match(self.page_number_selectors, self.dom)
 
         # let's see if the search query was shitty (no results for that query)
-        try:
-            self.search_results['effective_query'] = self.advanced_css(self.no_results_selector, element=self.dom)
-        except Exception as e:
-            self.search_results['effective_query'] = ''
-
+        self.effective_query = self.first_match(self.no_results_selectors, self.dom)
 
         # get the stuff that is of interest in SERP pages.
         if not selector_dict and not isinstance(selector_dict, dict):
@@ -191,7 +191,7 @@ class Parser():
                         self.search_results[result_type].append(serp_result)
 
 
-    def advanced_css(self, selector, element=None):
+    def advanced_css(self, selector, element):
         """Evaluate the :text and ::attr(attr-name) additionally.
 
         Args:
@@ -226,6 +226,30 @@ class Parser():
 
         return value
 
+
+    def first_match(self, selectors, element):
+        """Get the first match.
+
+        Args:
+            selectors: The selectors to test for a match.
+            element: The element on which to apply the selectors.
+
+        Returns:
+            The very first match or False if all selectors didn't match anything.
+        """
+        assert isinstance(selectors, list), 'selectors must be a list type you motherfucker'
+
+        for selector in selectors:
+            if selector:
+                try:
+                    match = self.advanced_css(selector, element=element)
+                    if match:
+                        return match
+                except IndexError as e:
+                    pass
+
+        return False
+
     def after_parsing(self):
         """Subclass specific behaviour after parsing happened.
         
@@ -249,6 +273,16 @@ class Parser():
         self.dom = cleaner.clean_html(self.dom)
         assert len(self.dom), 'The html needs to be parsed to get the cleaned html'
         return lxml.html.tostring(self.dom)
+
+
+    def iter_serp_items(self):
+        """Yields the key and index of any item in the serp results if it has a link value"""
+
+        for key, value in self.search_results.items():
+            if isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, dict) and item['link']:
+                        yield (key, i)
                 
 """
 Here follow the different classes that provide CSS selectors 
@@ -281,9 +315,11 @@ class GoogleParser(Parser):
     
     search_types = ['normal', 'image']
 
-    no_results_selector = '#topstuff .med > b::text'
+    no_results_selectors = ['#topstuff .med > b::text']
 
     num_results_search_selectors = ['#resultStats']
+
+    page_number_selectors = ['#navcnt td.cur::text']
     
     normal_search_selectors = {
         'results': {
@@ -369,16 +405,13 @@ class GoogleParser(Parser):
             'image': r'imgres\?imgurl=(?P<url>.*?)&'
         }
 
-        for key, value in self.search_results.items():
-            if isinstance(value, list):
-                for i, item in enumerate(value):
-                    if isinstance(item, dict) and item['link']:
-                        result = re.search(
-                            clean_regexes[self.searchtype],
-                            item['link']
-                        )
-                        if result:
-                            self.search_results[key][i]['link'] = unquote(result.group('url'))
+        for key, i in self.iter_serp_items():
+            result = re.search(
+                clean_regexes[self.searchtype],
+                self.search_results[key][i]['link']
+            )
+            if result:
+                self.search_results[key][i]['link'] = unquote(result.group('url'))
 
 
 class YandexParser(Parser):
@@ -386,7 +419,7 @@ class YandexParser(Parser):
 
     search_types = ['normal', 'image']
     
-    num_results_search_selectors = []
+    num_results_search_selectors = ['.serp-item__wrap strong']
     
     normal_search_selectors = {
         'results': {
@@ -433,18 +466,15 @@ class YandexParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'image':
-            for key, value in self.search_results.items():
-                if isinstance(value, list):
-                    for i, item in enumerate(value):
-                        if isinstance(item, dict) and item['link']:
-                            for regex in (
-                                r'\{"href"\s*:\s*"(?P<url>.*?)"\}',
-                                r'img_url=(?P<url>.*?)&'
-                            ):
-                                result = re.search(regex, item['link'])
-                                if result:
-                                    self.search_results[key][i]['link'] = result.group('url')
-                                    break
+            for key, i in self.iter_serp_items():
+                for regex in (
+                    r'\{"href"\s*:\s*"(?P<url>.*?)"\}',
+                    r'img_url=(?P<url>.*?)&'
+                ):
+                    result = re.search(regex, self.search_results[key][i]['link'])
+                    if result:
+                        self.search_results[key][i]['link'] = result.group('url')
+                        break
     
     
 class BingParser(Parser):
@@ -526,17 +556,14 @@ class BingParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'image':
-            for key, value in self.search_results.items():
-                if isinstance(value, list):
-                    for i, item in enumerate(value):
-                        if isinstance(item, dict) and item['link']:
-                            for regex in (
-                                r'imgurl:"(?P<url>.*?)"',
-                            ):
-                                result = re.search(regex, item['link'])
-                                if result:
-                                    self.search_results[key][i]['link'] = result.group('url')
-                                    break
+            for key, i in self.iter_serp_items():
+                for regex in (
+                    r'imgurl:"(?P<url>.*?)"',
+                ):
+                    result = re.search(regex, self.search_results[key][i]['link'])
+                    if result:
+                        self.search_results[key][i]['link'] = result.group('url')
+                        break
 
 
 class YahooParser(Parser):
@@ -588,19 +615,20 @@ class YahooParser(Parser):
         """
         super().after_parsing()
 
+        for key, i in self.iter_serp_items():
+            if self.search_results[key][i]['visible_link'] is None:
+                del self.search_results[key][i]
+
         if self.searchtype == 'image':
-            for key, value in self.search_results.items():
-                if isinstance(value, list):
-                    for i, item in enumerate(value):
-                        if isinstance(item, dict) and item['link']:
-                            for regex in (
-                                r'&imgurl=(?P<url>.*?)&',
-                            ):
-                                result = re.search(regex, item['link'])
-                                if result:
-                                    # TODO: Fix this manual protocol adding by parsing "rurl"
-                                    self.search_results[key][i]['link'] = 'http://' + unquote(result.group('url'))
-                                    break
+            for key, i in self.iter_serp_items():
+                for regex in (
+                    r'&imgurl=(?P<url>.*?)&',
+                ):
+                    result = re.search(regex, self.search_results[key][i]['link'])
+                    if result:
+                        # TODO: Fix this manual protocol adding by parsing "rurl"
+                        self.search_results[key][i]['link'] = 'http://' + unquote(result.group('url'))
+                        break
 
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""
@@ -618,6 +646,14 @@ class BaiduParser(Parser):
                 'snippet': '.c-abstract::text',
                 'title': 'h3 > a.t::text',
                 'visible_link': 'span.c-showurl::text'
+            },
+            'nojs': {
+                'container': '#content_left',
+                'result_container': '.result',
+                'link': 'h3 > a::attr(href)',
+                'snippet': '.c-abstract::text',
+                'title': 'h3 > a::text',
+                'visible_link': 'span.g::text'
             }
         },
     }
@@ -647,17 +683,14 @@ class BaiduParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'image':
-            for key, value in self.search_results.items():
-                if isinstance(value, list):
-                    for i, item in enumerate(value):
-                        if isinstance(item, dict) and item['link']:
-                            for regex in (
-                                r'&objurl=(?P<url>.*?)&',
-                            ):
-                                result = re.search(regex, item['link'])
-                                if result:
-                                    self.search_results[key][i]['link'] = unquote(result.group('url'))
-                                    break
+            for key, i in self.iter_serp_items():
+                for regex in (
+                    r'&objurl=(?P<url>.*?)&',
+                ):
+                    result = re.search(regex, self.search_results[key][i]['link'])
+                    if result:
+                        self.search_results[key][i]['link'] = unquote(result.group('url'))
+                        break
 
 
 class DuckduckgoParser(Parser):
@@ -819,8 +852,8 @@ def parse_serp(html=None, search_engine=None,
                 requested_at=requested_at,
                 requested_by=requested_by,
                 query=current_keyword,
-                effective_query=parser.search_results['effective_query'],
-                num_results_for_keyword=parser.search_results['num_results'],
+                effective_query=parser.effective_query,
+                num_results_for_keyword=parser.num_results,
             )
 
         for key, value in parser.search_results.items():
@@ -864,10 +897,15 @@ if __name__ == '__main__':
     But for some engines it nevertheless works (for example: yandex, google, ...).
     """
     import requests
-    assert len(sys.argv) == 2, 'Usage: {} url'.format(sys.argv[0])
+    assert len(sys.argv) >= 2, 'Usage: {} url/file'.format(sys.argv[0])
     url = sys.argv[1]
-    raw_html = requests.get(url).text
-    parser = get_parser_by_url(url)
+    if os.path.exists(url):
+        raw_html = open(url, 'r').read()
+        parser = get_parser_by_search_engine(sys.argv[2])
+    else:
+        raw_html = requests.get(url).text
+        parser = get_parser_by_url(url)
+
     parser = parser(raw_html)
     parser.parse()
     print(parser)
