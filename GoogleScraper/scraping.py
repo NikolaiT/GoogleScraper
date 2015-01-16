@@ -136,7 +136,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     }
 
     def __init__(self, keywords=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
-                 start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
+                 start_page_pos=1, num_pages=[], search_engine=None, search_type=None, proxy=None, progress_queue=None):
         """Instantiate an SearchEngineScrape object.
 
         Args:
@@ -153,7 +153,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.search_type = search_type
             
         # The number of pages to scrape for each keyword
-        self.num_pages_per_keyword = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
+        self.num_pages_per_keyword = num_pages
         
         # The keywords that need to be scraped
         # If a SearchEngineScrape receives explicitly keywords,
@@ -261,7 +261,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         """
         for i, self.current_keyword in enumerate(self.keywords):
 
-            for self.current_page in range(self.start_page_pos, self.num_pages_per_keyword + 1):
+            for self.current_page in self.num_pages_per_keyword:
 
                 # set the actual search code in the derived class
                 try:

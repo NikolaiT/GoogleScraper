@@ -2,9 +2,6 @@
 
 import logging
 
-from GoogleScraper.utils import chunk_it
-from GoogleScraper.config import Config
-
 logger = logging.getLogger('GoogleScraper')
 
 """
@@ -50,132 +47,32 @@ Therefore we need am special format, where you can specify the single settings f
 keyword.
 
 The best format for such a keyword file is just a python module with a dictionary with one
-mandatory key: The 'keyword'.
+mandatory key: The 'query'. The dictionary must be called 'scrape_jobs'.
+
+You can see such a example file in the examples/ directory.
 """
 
-def get_scrape_jobs(keywords, search_engines, scrapemethod, num_pages, all_pages=True):
-    """Yield the elements that define a scrape job."""
-    for query in keywords:
-        for search_engine in search_engines:
-            if all_pages:
-                for page_number in range(1, num_pages+1):
-                    yield (query, search_engine, scrapemethod, page_number)
-            else:
-                yield (query, search_engine, scrapemethod, num_pages)
+def default_scrape_jobs_for_keywords(keywords, search_engines, scrapemethod, num_pages):
+    """Get scrape jobs by keywords.
 
-
-def assign_elements_to_scrapers(elements, proxies):
-    """Scrapers are threads or asynchronous objects.
-
-    Splitting the elements to scrape equally on the workers is crucial
-    for maximal performance.
-
-    A SearchEngineScrape worker consumes:
-        - One or more keywords.
-        - A single proxy/ip address.
-        - One or more pages.
-        - A single search engine name.
-
-    It is important to see that the one connection can scrape all the
-    search engines simultaneously. Therefore we need to spread the load
-    evenly on such a data structure:
-
-    {
-        'connection1': {
-            'search_engine1': [
-                # the first worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-                # the second worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-            ],
-            'search_engine2': [
-                # the first worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-                # the second worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-            ],
-            ...
-        },
-        'connection2': {
-            'search_engine1': [
-                # the first worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-                # the second worker
-                {
-                    keywords: ...
-                    num_pages: ...
-                },
-            ],
-        }
-    }
-
-    But if num_workers is bigger than 1 (This means that an connection may
-    scrape more than one request at the same time on a search engine), the value
-    of the search_engine keys is a list of
-    {
-        keywords: ...
-        num_pages: ...
-    }
-    elements.
-
+    If you just submit a keyword file, then it is assumed that every keyword
+    should be scraped on
+    - all supplied search engines
+    - for num_pages
+    - in the specified search mode.
 
     Args:
-        elements: All elements to scrape
-        proxies: All available connection.s
+        keywords: A set of keywords to scrape.
 
     Returns:
-        The above depicted data structure.
+        A dict of scrapejobs.
     """
-    num_workers = Config['SCRAPING'].getint('num_workers', 1)
-
-    # if len(elements) > num_workers:
-    #     groups = chunk_it(elements, num_workers)
-    # else:
-    #     groups = [[e, ] for e in elements]
-    #
-    # return groups
-    import pprint
-
-    d = {proxy: {} for proxy in proxies}
-
-    last_worker = 0
-
-    for query, search_engine, scrapemethod, page_number in elements:
-
-        for proxy, data in d.items():
-
-            if not search_engine in d[proxy]:
-                 d[proxy][search_engine] = []
-
-            if not d[proxy][search_engine]:
-                for worker in range(num_workers):
-                    d[proxy][search_engine].append({
-                        'keywords': set(),
-                        'num_pages': page_number
-                    })
-
-            try:
-                d[proxy][search_engine][last_worker]['keywords'].add(query)
-                d[proxy][search_engine][last_worker]['num_pages'] = page_number
-            except (KeyError, IndexError) as e:
-                pass
-
-            last_worker = (last_worker + 1) % num_workers
-
-
-    return d
+    for keyword in keywords:
+        for search_engine in search_engines:
+            for page in range(1, num_pages+1):
+                yield {
+                    'query': keyword,
+                    'search_engine': search_engine,
+                    'scrapemethod': scrapemethod,
+                    'page_number': page
+                }

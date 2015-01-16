@@ -2,6 +2,7 @@
 
 import csv
 import sys
+import os
 import json
 from pprint import pprint
 from GoogleScraper.config import Config
@@ -53,7 +54,7 @@ def store_serp_result(serp):
 
         output_file = Config['OUTPUT'].get('output_filename')
         if '.' in output_file:
-            output_format = output_file.split('.')[-1]
+            output_format = os.path.split(output_file)[-1]
 
         # the output files. Either CSV or JSON or STDOUT
         # It's little bit tricky to write the JSON output file, since we need to
@@ -82,9 +83,9 @@ def store_serp_result(serp):
         elif output_format == 'csv':
             # one row per link
             for row in data['results']:
-                d = dict()
-                d.update({k:v for k,v in row2dict(serp).items() if k in csv_fieldnames})
+                d = row2dict(serp)
                 d.update(row)
+                d = ({k: v for k, v in d.items() if k in csv_fieldnames})
                 outfile.writerow(d)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
             pprint(data)

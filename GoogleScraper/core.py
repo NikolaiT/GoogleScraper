@@ -15,7 +15,7 @@ from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_na
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
-from GoogleScraper.scrape_jobs import assign_elements_to_scrapers, get_scrape_jobs
+from GoogleScraper.scrape_jobs import assign_elements_to_scrapers, default_scrape_jobs_for_keywords
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -173,6 +173,9 @@ def main(return_results=False, parse_cmd_line=True):
         return
 
     kwfile = Config['SCRAPING'].get('keyword_file', '')
+    if kwfile:
+        kwfile = os.path.abspath(kwfile)
+
     keyword = Config['SCRAPING'].get('keyword')
     keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
@@ -186,7 +189,7 @@ def main(return_results=False, parse_cmd_line=True):
     assert search_engines, 'No search engine specified'
     num_search_engines = len(search_engines)
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
-    num_pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
+    pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
@@ -217,12 +220,27 @@ def main(return_results=False, parse_cmd_line=True):
         return
 
     keywords = [keyword, ] if keyword else keywords
+    scrape_jobs = {}
     if kwfile:
         if not os.path.exists(kwfile):
             raise InvalidConfigurationException('The keyword file {} does not exist.'.format(kwfile))
         else:
-            # Clean the keywords of duplicates right in the beginning
-            keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
+            if kwfile.endswith('.py'):
+                # we need to import the variable "scrape_jobs" from the module.
+                sys.path.append(os.path.dirname(kwfile))
+                try:
+                    modname = os.path.split(kwfile)[-1].rstrip('.py')
+                    scrape_jobs = getattr(__import__(modname, fromlist=['scrape_jobs']), 'scrape_jobs')
+                except ImportError as e:
+                    logger.warning(e)
+            else:
+                # Clean the keywords of duplicates right in the beginning
+                keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
+
+    if not scrape_jobs:
+        scrape_jobs = default_scrape_jobs_for_keywords(keywords, search_engines, scrapemethod, pages)
+
+    scrape_jobs = list(scrape_jobs)
 
     if Config['GLOBAL'].getboolean('clean_cache_files', False):
         clean_cachefiles()
@@ -245,7 +263,7 @@ def main(return_results=False, parse_cmd_line=True):
         proxies.append(None)
         
     if not proxies:
-        raise InvalidConfigurationException("No proxies available and using own IP is prohibited by configuration. Turning down.")
+        raise InvalidConfigurationException('No proxies available and using own IP is prohibited by configuration. Turning down.')
 
     valid_search_types = ('normal', 'video', 'news', 'image')
     if Config['SCRAPING'].get('search_type') not in valid_search_types:
@@ -308,14 +326,11 @@ def main(return_results=False, parse_cmd_line=True):
 
     # First of all, lets see how many requests remain to issue after searching the cache.
     if Config['GLOBAL'].getboolean('do_caching'):
-        remaining = parse_all_cached_files(keywords, search_engines, session, scraper_search)
-    else:
-        remaining = get_scrape_jobs(keywords, search_engines, scrapemethod, num_pages, all_pages=False)
+        scrape_jobs = parse_all_cached_files(scrape_jobs, session, scraper_search)
 
-    if len(remaining) > 0:
-
+    if scrape_jobs:
         # Now process our scrape jobs suitable for SearchEngineScrape workers.
-        groups = assign_elements_to_scrapers(remaining, proxies)
+        scraping_description = assign_elements_to_scrapers(scrape_jobs, proxies)
         return
 
         # Create a lock to synchronize database access in the sqlalchemy session
@@ -325,56 +340,64 @@ def main(return_results=False, parse_cmd_line=True):
         cache_lock = threading.Lock()
 
         out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
-            num_keywords=len(remaining),
+            num_keywords=len(list(scrape_jobs)),
             num_proxies=len(proxies),
             num_threads=num_search_engines
         ), lvl=1)
 
         # Show the progress of the scraping
         q = queue.Queue()
-        progress_thread = ShowProgressQueue(q, len(remaining))
+        progress_thread = ShowProgressQueue(q, len(scrape_jobs))
         progress_thread.start()
 
         # Let the games begin
         if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
             # A lock to prevent multiple threads from solving captcha.
             captcha_lock = threading.Lock()
+            browser_num = 0
+
+            method = Config['SCRAPING'].get('scrapemethod', 'http')
+
             scrapejobs = []
-            for k, search_engine in enumerate(search_engines):
-                for i, keyword_group in enumerate(groups):
 
-                    # Distribute the proxies evenly on the keywords to search for
-                    proxy_to_use = proxies[i % len(proxies)]
+            for proxy, descr in scraping_description.items():
 
-                    if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
-                        scrapejobs.append(
-                            get_selenium_scraper_by_search_engine_name(
-                                search_engine,
-                                search_engine=search_engine,
-                                session=session,
-                                keywords=keyword_group,
-                                db_lock=db_lock,
-                                cache_lock=cache_lock,
-                                scraper_search=scraper_search,
-                                captcha_lock=captcha_lock,
-                                browser_num=i,
-                                proxy=proxy_to_use,
-                                progress_queue=q
+                for search_engine, jobs in descr.items():
+
+                    for i, job in enumerate(jobs):
+                        browser_num += 1
+
+                        if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
+                            scrapejobs.append(
+                                get_selenium_scraper_by_search_engine_name(
+                                    search_engine,
+                                    search_engine=search_engine,
+                                    session=session,
+                                    keywords=job['keywords'],
+                                    num_pages=job['pages'],
+                                    db_lock=db_lock,
+                                    cache_lock=cache_lock,
+                                    scraper_search=scraper_search,
+                                    captcha_lock=captcha_lock,
+                                    browser_num=browser_num,
+                                    proxy=proxy,
+                                    progress_queue=q
+                                )
                             )
-                        )
-                    elif Config['SCRAPING'].get('scrapemethod') == 'http':
-                        scrapejobs.append(
-                            HttpScrape(
-                                search_engine=search_engine,
-                                keywords=keyword_group,
-                                session=session,
-                                scraper_search=scraper_search,
-                                cache_lock=cache_lock,
-                                db_lock=db_lock,
-                                proxy=proxy_to_use,
-                                progress_queue=q,
+                        elif Config['SCRAPING'].get('scrapemethod') == 'http':
+                            scrapejobs.append(
+                                HttpScrape(
+                                    search_engine=search_engine,
+                                    keywords=job['keywords'],
+                                    num_pages=job['pages'],
+                                    session=session,
+                                    scraper_search=scraper_search,
+                                    cache_lock=cache_lock,
+                                    db_lock=db_lock,
+                                    proxy=proxy,
+                                    progress_queue=q,
+                                )
                             )
-                        )
 
             for t in scrapejobs:
                 t.start()

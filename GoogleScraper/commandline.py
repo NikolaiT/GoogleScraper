@@ -30,7 +30,7 @@ def get_command_line(print_help=False):
     keyword_group.add_argument('-q', '--keyword', type=str, action='store', dest='keyword', help='The search keyword to scrape for. If you need to scrape multiple keywords, use the --keyword-file flag')
 
     keyword_group.add_argument('--keyword-file', type=str, action='store',
-                        help='Keywords to search for. One keyword per line. Empty lines are ignored.')
+                        help='Keywords to search for. One keyword per line. Empty lines are ignored. Alternatively, you may specify the path to an python module (must end with the .py suffix) where the keywords must be held in a dictionary with the name "scrape_jobs".')
 
     parser.add_argument('-o-', '--output-filename', type=str, action='store', default='',
                         help='The name of the output file. If the file ending is "json", write a json file, if the ending is "csv", write a csv file.')

@@ -374,7 +374,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            for self.current_page in range(self.start_page_pos, self.num_pages_per_keyword + 1):
+            for self.current_page in self.num_pages_per_keyword:
 
                 self.wait_until_serp_loaded()
 
@@ -387,7 +387,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                 # Click the next page link not when leaving the loop
                 # in the next iteration.
-                if self.current_page < self.num_pages_per_keyword:
+                if self.current_page in self.num_pages_per_keyword:
                     self.next_url = self._goto_next_page()
                     self.current_request_time = datetime.datetime.utcnow()
                     

@@ -14,7 +14,8 @@ from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
 from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result
-from GoogleScraper.scrape_jobs import get_scrape_jobs
+
+
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
 you may need to repeat the same searches several times and you might end up being banned by
@@ -350,27 +351,28 @@ def _caching_is_one_to_one(keywords, search_engine, scrapemode, page_number):
         return True
 
 
-def parse_all_cached_files(keywords, search_engines, session, scraper_search):
+def parse_all_cached_files(scrape_jobs, session, scraper_search):
     """Walk recursively through the cachedir (as given by the Config) and parse all cached files.
 
     Args:
         session: An sql alchemy session to add the entities
+        scraper_search: Abstract object representing the current search.
 
     Returns:
-        A list of tuples that couldn't be parsed and which need to be scraped anew.
-        Each tuple consists of the keys (query, search_engine, scrapemethod, page_number).
+        The scrape jobs that couldn't be parsed from the cache directory.
     """
     files = _get_all_cache_files()
-    num_cached = 0
-    # a keyword is requested once for each search engine
-    num_total_keywords = len(keywords) * len(search_engines)
-    scrapemethod = Config['SCRAPING'].get('scrapemethod')
-    num_pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
-
+    num_cached = num_total = 0
     mapping = {}
-    for args in get_scrape_jobs(keywords, search_engines, scrapemethod, num_pages):
-        mapping[cached_file_name(*args)] = args
-        out('Params(keyword="{0}", search_engine="{1}", scrapemethod="{2}" yields {3}'.format(*args), lvl=5)
+    for job in scrape_jobs:
+        cache_name = cached_file_name(
+            job['query'],
+            job['search_engine'],
+            job['scrapemethod'],
+            job['page_number']
+        )
+        mapping[cache_name] = job
+        num_total += 1
 
     for path in files:
         # strip of the extension of the path if it has eny
@@ -380,39 +382,35 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             if fname.endswith(ext):
                 clean_filename = fname.rstrip('.' + ext)
 
-        val = mapping.get(clean_filename, None)
-        if val:
-            query, search_engine, scrapemethod, page_number = val
+        job = mapping.get(clean_filename, None)
 
-            if query and search_engine and page_number:
-                # We found a file that contains the keyword, search engine name and
-                # searchmode that fits our description. Let's see if there is already
-                # an record in the database and link it to our new ScraperSearch object.
-                serp = get_serp_from_database(session, query, search_engine, scrapemethod, page_number)
+        if job:
+            # We found a file that contains the keyword, search engine name and
+            # searchmode that fits our description. Let's see if there is already
+            # an record in the database and link it to our new ScraperSearch object.
+            serp = get_serp_from_database(session, job['query'], job['search_engine'], job['scrapemethod'], job['page_number'])
 
-                if not serp:
-                    serp = parse_again(fname, search_engine, scrapemethod, query)
+            if not serp:
+                serp = parse_again(fname, job['search_engine'], job['scrapemethod'], job['query'])
 
-                serp.scraper_searches.append(scraper_search)
-                session.add(serp)
+            serp.scraper_searches.append(scraper_search)
+            session.add(serp)
 
-                if num_cached % 200 == 0:
-                    session.commit()
+            if num_cached % 200 == 0:
+                session.commit()
 
-                store_serp_result(serp)
-
-                mapping.pop(clean_filename)
-                num_cached += 1
+            store_serp_result(serp)
+            num_cached += 1
+            scrape_jobs.remove(job)
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
-    out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
-        num_cached, num_total_keywords, num_total_keywords - num_cached), lvl=1)
+    out('{}/{} objects have been read from the cache. {} remain to get scraped.'.format(
+        num_cached, num_total, num_total - num_cached), lvl=1)
 
     session.add(scraper_search)
     session.commit()
 
-    # return the remaining keywords to scrape
-    return mapping.values()
+    return scrape_jobs
 
 
 def parse_again(fname, search_engine, scrapemethod, query):

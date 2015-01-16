@@ -10,9 +10,6 @@ from GoogleScraper import Config
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
 from collections import Counter
-from pprint import pprint
-
-
 
 all_search_engines = [se.strip() for se in Config['SCRAPING'].get('supported_search_engines').split(',')]
 
@@ -43,7 +40,7 @@ def random_word():
     return random.choice(words)
 
 
-class GoogleScraperTestCase(unittest.TestCase):
+class GoogleScraperStaticTestCase(unittest.TestCase):
 
     def setUp(self):
         pass
@@ -155,54 +152,6 @@ class GoogleScraperTestCase(unittest.TestCase):
         self.assert_atleast90percent_of_items_are_not_None(parser)
 
 
-    # generic function for dynamic parsing
-    def scrape_query(self, mode, search_engines, query='', random_query=False, sel_browser='Chrome'):
-
-        if random_query:
-            query = random_word()
-
-        config = {
-            'SCRAPING': {
-                'use_own_ip': 'True',
-                'keyword': query,
-                'search_engines': ','.join(search_engines),
-                'num_pages_for_keyword': 1,
-                'scrapemethod': mode,
-            },
-            'GLOBAL': {
-                'do_caching': 'False',
-                'verbosity': 0
-            },
-            'SELENIUM': {
-                'sel_browser': sel_browser
-            }
-        }
-        session = scrape_with_config(config)
-
-        return session
-
-    ### test dynamic parsing for http mode
-
-
-     def test_http_mode_all_engines(self):
-        
-        session = self.scrape_query('http', all_search_engines, random_query=True)
-    
-    
-     ### test dynamic parsing for selenium with phantomsjs
-     
-     def test_selenium_phantomjs_all_engines(self):
-    
-        session = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
-
-
-    ### test dynamic parsing for selenium mode with Chrome
-
-    def test_selenium_chrome_all_engines(self):
-
-        session = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
-
-
     ### test csv output
     
     def test_csv_output_static(self):
@@ -234,13 +183,15 @@ class GoogleScraperTestCase(unittest.TestCase):
             'GLOBAL': {
                 'cachedir': 'data/csv_tests/',
                 'do_caching': 'True',
-                'verbosity': 0
+                'verbosity': 1
             },
             'OUTPUT': {
                 'output_filename': csv_outfile
             }
         }
         session = scrape_with_config(config)
+
+        assert os.path.exists(csv_outfile), '{} does not exist'.format(csv_outfile)
 
         reader = csv.reader(csv_outfile)
         header = set(reader.next())
@@ -288,6 +239,8 @@ class GoogleScraperTestCase(unittest.TestCase):
         }
         session = scrape_with_config(config)
 
+        assert os.path.exists(json_outfile), '{} does not exist'.format(json_outfile)
+
         results = json.load(open(json_outfile))
 
         self.assertAlmostEqual(number_search_engines * 2 * 10, sum([len(i['results']) for i in results]), delta=20)
@@ -305,8 +258,6 @@ class GoogleScraperTestCase(unittest.TestCase):
                         assert result[item], '{} has a item that has no value: {}'.format(item, result)
 
 
-    ### test proxies
-
     ### test correct handling of SERP page that has no results for search query.
 
     def test_no_results_for_query_google(self):
@@ -314,5 +265,74 @@ class GoogleScraperTestCase(unittest.TestCase):
 
         assert parser.effective_query == '"be dealt and be evaluated"', 'No effective query.'
 
+
+
+class GoogleScraperFunctionalTestCase(unittest.TestCase):
+    # generic function for dynamic parsing
+    def scrape_query(self, mode, search_engines, query='', random_query=False, sel_browser='Chrome'):
+
+        if random_query:
+            query = random_word()
+
+        config = {
+            'SCRAPING': {
+                'use_own_ip': 'True',
+                'keyword': query,
+                'search_engines': ','.join(search_engines),
+                'num_pages_for_keyword': 1,
+                'scrapemethod': mode,
+            },
+            'GLOBAL': {
+                'do_caching': 'False',
+                'verbosity': 0
+            },
+            'SELENIUM': {
+                'sel_browser': sel_browser
+            }
+        }
+        session = scrape_with_config(config)
+
+        return session
+
+    ### test dynamic parsing for http mode
+
+
+    def test_http_mode_all_engines(self):
+
+        session = self.scrape_query('http', all_search_engines, random_query=True)
+
+
+     ### test dynamic parsing for selenium with phantomsjs
+
+    def test_selenium_phantomjs_all_engines(self):
+
+        session = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
+
+
+    ### test dynamic parsing for selenium mode with Chrome
+
+    def test_selenium_chrome_all_engines(self):
+
+        session = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
+
+    ### test proxies
+
 if __name__ == '__main__':
-    unittest.main()
+
+    suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
+    unittest.TextTestRunner().run(suite)
+
+    # import sys
+    # if len(sys.argv) > 1:
+    #     if sys.argv[1] == 'fast':
+    #
+    #         suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
+    #
+    #     else:
+    #
+    #         suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperFunctionalTestCase)
+    #
+    #     unittest.TextTestRunner().run(suite)
+    #
+    # else:
+    #     unittest.main()
