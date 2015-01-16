@@ -46,7 +46,7 @@ Config = {
 class InvalidConfigurationException(Exception):
     pass
 
-def parse_config(cmd_args=False):
+def parse_config():
     """Parse and normalize the config file and return a dictionary with the arguments.
 
     There are several places where GoogleScraper can be configured. The configuration is
@@ -59,26 +59,18 @@ def parse_config(cmd_args=False):
     So for example, program internal params are overwritten by the config file which in turn
     are shadowed by command line arguments.
 
-    Args:
-        cmd_args; An optional namespace object. If given, replaces command line parsing with this dict.
     """
     global Config, CONFIG_FILE
-    cargs = False
 
     cfg_parser = configparser.ConfigParser()
     # Add internal configuration
     cfg_parser.read_dict(Config)
 
-    # if necessary, get command line configuration
-    if isinstance(cmd_args, list):
-        cargs = get_command_line(cmd_args)
-    elif cmd_args:
-        cargs = get_command_line()
+    cargs = get_command_line()
 
-    if cmd_args:
-        cfg_file_cargs = cargs['GLOBAL'].get('config_file')
-        if cfg_file_cargs and os.path.exists(cfg_file_cargs):
-            CONFIG_FILE = cfg_file_cargs
+    cfg_file_cargs = cargs['GLOBAL'].get('config_file')
+    if cfg_file_cargs and os.path.exists(cfg_file_cargs):
+        CONFIG_FILE = cfg_file_cargs
 
     # Parse the config file
     try:
@@ -88,12 +80,29 @@ def parse_config(cmd_args=False):
         logger.error('Exception trying to parse config file {}: {}'.format(CONFIG_FILE, e))
 
     logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
+
     # add configuration parameters retrieved from command line
-    if cargs:
-        cfg_parser = update_config(cargs, cfg_parser)
+    cfg_parser = update_config(cargs, cfg_parser)
 
     # and replace the global Config variable with the real thing
     Config = cfg_parser
+
+    # if we got extended config via command line, update the Config
+    # object accordingly.
+
+    if cargs['GLOBAL'].get('extended_config'):
+        d = {}
+        for option in cargs['GLOBAL'].get('extended_config').split('|'):
+
+            assert ':' in option, '--extended_config "key:option, key2: option"'
+            key, value = option.strip().split(':')
+            d[key.strip()] = value.strip()
+
+        for section, section_proxy in Config.items():
+            for key, option in section_proxy.items():
+                if key in d and key != 'extended_config':
+                    Config.set(section, key, str(d[key]))
+
 
 def update_config_with_file(external_cfg_file):
     """Updates the global Config with the configuration of an
@@ -108,26 +117,17 @@ def update_config_with_file(external_cfg_file):
         external.remove_section('DEFAULT')
         update_config(dict(external))
 
-def parse_cmd_args(cmd_args=None):
+def parse_cmd_args():
     """Parse the command line
 
-    Args:
-        cmd_args: Optional dictionary, if given, don't parse the command line,
-                  prepopulate the config with this dictionary.
     """
-    if isinstance(cmd_args, list):
-        cargs = get_command_line(cmd_args)
-    else:
-        cargs = get_command_line()
-
     global Config
-    update_config(cargs, Config)
+    update_config(get_command_line(), Config)
 
-def get_config(cmd_args=False, force_reload=False):
+def get_config(force_reload=False):
     """Returns the GoogleScraper configuration.
 
     Args:
-        cmd_args; The command line arguments that should be passed to the cmd line argument parser.
         force_reload: If true, ignores the flag already_parsed
     Returns:
         The configuration after parsing it.
@@ -135,7 +135,7 @@ def get_config(cmd_args=False, force_reload=False):
     global already_parsed
     if not already_parsed or force_reload:
         already_parsed = True
-        parse_config(cmd_args)
+        parse_config()
     return Config
 
 def update_config(d, target=None):

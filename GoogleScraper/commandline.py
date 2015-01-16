@@ -3,13 +3,10 @@
 import argparse
 from GoogleScraper.version import __version__
 
-def get_command_line(static_args=False, print_help=False):
+def get_command_line(print_help=False):
     """Parse command line arguments when GoogleScraper is used as a CLI application.
 
     Args:
-        static_args: A Namespace object that contains config parameters.
-                        If supplied, don't parse from the command line and
-                        apply the command parser on them instead.
         print_help: If set to True, only prints the usage and immediately returns.
 
     Returns:
@@ -72,29 +69,28 @@ def get_command_line(static_args=False, print_help=False):
     parser.add_argument('--version', action='store_true', default=False,
                         help='Prints the version of GoogleScraper')
 
-    parser.add_argument('-c', '--clean', action='store_true', default=False,
+    parser.add_argument('--clean', action='store_true', default=False,
                         help='Cleans all stored data. Please be very careful.')
+
+    parser.add_argument('-c', '--extended-config', action='store', help='Pass additional configuration to GoogleScraper. The section ("GLOBAL" or "SCRAPING" for example) is not needed. Example: "--extended-config \'search_offset: 1 | clean_cache_files: False\'"')
 
     parser.add_argument('--mysql-proxy-db', action='store',
                         help="A mysql connection string for proxies to use. Format: mysql://<username>:<password>@<host>/<dbname>. Has precedence over proxy files.")
 
     parser.add_argument('-s', '--search-engines', action='store',
-                        help='What search engines to use. Supported search engines: google, yandex, bing, yahoo, baidu, duckduckgo. If you want to use more than one concurrently, just separate with commatas: "google, bing, yandex"')
+                        help='What search engines to use (See GoogleScraper --config for the all suported). If you want to use more than one at the same time, just separate with commatas: "google, bing, yandex". If you want to use all search engines that are available, give \'*\' as argument.')
 
     if print_help:
         print(parser.format_help())
         return
 
-    if static_args:
-        args = parser.parse_args(static_args)
-    else:
-        args = parser.parse_args()
+    args = parser.parse_args()
 
     make_dict = lambda L: dict([(key, value) for key, value
                                 in args.__dict__.items() if (key in L and value is not None)])
 
     return {
         'SCRAPING': make_dict(['search_engines', 'scrapemethod', 'num_pages_for_keyword', 'num_results_per_page', 'search_type', 'keyword', 'keyword_file', 'num_workers']),
-        'GLOBAL':  make_dict(['clean', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version']),
-        'OUTPUT': make_dict(['output_filename'])
+        'GLOBAL':  make_dict(['clean', 'debug', 'simulate', 'proxy_file', 'view_config', 'config_file', 'mysql_proxy_db', 'verbosity', 'output_format', 'shell', 'output_filename', 'output_format', 'version', 'extended_config']),
+        'OUTPUT': make_dict(['output_filename']),
     }

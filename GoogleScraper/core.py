@@ -3,18 +3,19 @@
 import queue
 import threading
 import datetime
+import sys
 import hashlib
 import os
 import logging
-from GoogleScraper.utils import chunk_it
 from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session, fixtures
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
 from GoogleScraper.http_mode import HttpScrape
-from GoogleScraper.selenium_mode import SelScrape, get_selenium_scraper_by_search_engine_name
+from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_name
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
+from GoogleScraper.scrape_jobs import assign_elements_to_scrapers, get_scrape_jobs
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -53,30 +54,6 @@ def scrape_with_config(config, **kwargs):
 
     GoogleScraper.config.update_config(config)
     return main(return_results=True, parse_cmd_line=False, **kwargs)
-
-def assign_keywords_to_scrapers(all_keywords):
-    """Scrapers are threads or asynchronous objects.
-
-    Splitting the keywords equally on the workers is crucial
-    for maximal performance.
-
-    Args:
-        all_keywords: All keywords to scrape
-
-    Returns:
-        A list of list. The elements of the inner list should be assigned to individual scraper instances, e. g. threads.
-    """
-    mode = Config['SCRAPING'].get('scrapemethod')
-
-    num_workers = Config['SCRAPING'].getint('num_workers', 1)
-
-    if len(all_keywords) > num_workers:
-        kwgroups = chunk_it(all_keywords, num_workers)
-    else:
-        # thats a little special there :)
-        kwgroups = [[kw, ] for kw in all_keywords]
-
-    return kwgroups
 
 
 # taken from https://github.com/scrapy/utils/console.py
@@ -189,7 +166,8 @@ def main(return_results=False, parse_cmd_line=True):
     if Config['GLOBAL'].getboolean('clean', False):
         try:
             os.remove('google_scraper.db')
-            os.system('rm {}/*'.format(Config['GLOBAL'].get('cachedir')))
+            if sys.platform == 'linux':
+                os.system('rm {}/*'.format(Config['GLOBAL'].get('cachedir')))
         except:
             pass
         return
@@ -199,7 +177,16 @@ def main(return_results=False, parse_cmd_line=True):
     keywords = {keyword for keyword in set(Config['SCRAPING'].get('keywords', []).split('\n')) if keyword}
     proxy_file = Config['GLOBAL'].get('proxy_file', '')
     proxy_db = Config['GLOBAL'].get('mysql_proxy_db', '')
-    num_search_engines = len(Config['SCRAPING'].get('search_engines', 1).split(','))
+
+    se = Config['SCRAPING'].get('search_engines', 'google')
+    if se.strip() == '*':
+        se = Config['SCRAPING'].get('supported_search_engines', 'google')
+
+    search_engines = list({search_engine.strip() for search_engine in se.split(',') if search_engine.strip()})
+    assert search_engines, 'No search engine specified'
+    num_search_engines = len(search_engines)
+    scrapemethod = Config['SCRAPING'].get('scrapemethod')
+    num_pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
@@ -220,7 +207,8 @@ def main(return_results=False, parse_cmd_line=True):
 
     if not (keyword or keywords) and not kwfile:
         logger.error('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
-        get_command_line(False, True)
+        # Just print the help.
+        get_command_line(True)
         return
 
     if Config['GLOBAL'].getboolean('fix_cache_names'):
@@ -235,10 +223,6 @@ def main(return_results=False, parse_cmd_line=True):
         else:
             # Clean the keywords of duplicates right in the beginning
             keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
-
-    search_engines = list({search_engine.strip() for search_engine
-        in Config['SCRAPING'].get('search_engines', 'google').split(',') if search_engine.strip()})
-    assert search_engines, 'No search engine specified'
 
     if Config['GLOBAL'].getboolean('clean_cache_files', False):
         clean_cachefiles()
@@ -322,30 +306,23 @@ def main(return_results=False, parse_cmd_line=True):
             used_search_engines=','.join(search_engines)
         )
 
-    # First of all, lets see how many keywords remain to scrape after parsing the cache
+    # First of all, lets see how many requests remain to issue after searching the cache.
     if Config['GLOBAL'].getboolean('do_caching'):
         remaining = parse_all_cached_files(keywords, search_engines, session, scraper_search)
     else:
-        remaining = keywords
+        remaining = get_scrape_jobs(keywords, search_engines, scrapemethod, num_pages, all_pages=False)
 
-    # remove duplicates and empty keywords
-    remaining = [keyword for keyword in set(remaining) if keyword]
+    if len(remaining) > 0:
 
-    if remaining:
-
-        kwgroups = assign_keywords_to_scrapers(remaining)
+        # Now process our scrape jobs suitable for SearchEngineScrape workers.
+        groups = assign_elements_to_scrapers(remaining, proxies)
+        return
 
         # Create a lock to synchronize database access in the sqlalchemy session
         db_lock = threading.Lock()
 
         # create a lock to cache results
         cache_lock = threading.Lock()
-
-        # final check before going into the loop
-        num_workers_to_allocate = len(kwgroups) * len(search_engines) > Config['SCRAPING'].getint('maximum_workers')
-        if (len(kwgroups) * len(search_engines)) > Config['SCRAPING'].getint('maximum_workers'):
-            logger.error('Too many workers: {} , might crash the app'.format(num_workers_to_allocate))
-
 
         out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
             num_keywords=len(remaining),
@@ -362,13 +339,11 @@ def main(return_results=False, parse_cmd_line=True):
         if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
             # A lock to prevent multiple threads from solving captcha.
             captcha_lock = threading.Lock()
-
-            # Distribute the proxies evenly on the keywords to search for
             scrapejobs = []
-
             for k, search_engine in enumerate(search_engines):
-                for i, keyword_group in enumerate(kwgroups):
+                for i, keyword_group in enumerate(groups):
 
+                    # Distribute the proxies evenly on the keywords to search for
                     proxy_to_use = proxies[i % len(proxies)]
 
                     if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
@@ -414,7 +389,7 @@ def main(return_results=False, parse_cmd_line=True):
             raise NotImplemented('soon my dear friends :)')
 
         else:
-            raise InvalidConfigurationException('No such scrapemethod. Use "http" or "selenium"')
+            raise InvalidConfigurationException('No such scrapemethod {}'.format(Config['SCRAPING'].get('scrapemethod')))
 
         scraper_search.stopped_searching = datetime.datetime.utcnow()
         session.add(scraper_search)

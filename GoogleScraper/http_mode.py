@@ -82,10 +82,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         }
 
         # the mode
-        self.scrapemethod = 'http'
+        self.scrape_mode = 'http'
 
         # get the base search url based on the search engine.
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrape_mode)
 
         super().instance_creation_info(self.__class__.__name__)
 

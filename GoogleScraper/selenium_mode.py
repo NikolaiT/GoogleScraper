@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import threading
+from urllib.parse import quote
 import json
 import logging
 import datetime
@@ -106,10 +107,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
-        self.scrapemethod = 'selenium'
+        self.scrape_mode = 'selenium'
 
         # get the base search url based on the search engine.
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrapemethod)
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrape_mode)
         super().instance_creation_info(self.__class__.__name__)
 
     def set_proxy(self):
@@ -373,7 +374,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            for self.current_page in range(1, self.num_pages_per_keyword + 1):
+            for self.current_page in range(self.start_page_pos, self.num_pages_per_keyword + 1):
 
                 self.wait_until_serp_loaded()
 
@@ -502,7 +503,8 @@ class AskSelScrape(SelScrape):
         
         def wait_until_keyword_in_url(driver):
             try:
-                return self.current_keyword in driver.current_url
+                return quote(self.current_keyword) in driver.current_url or\
+                       self.current_keyword.replace(' ', '+') in driver.current_url
             except WebDriverException as e:
                 pass
             

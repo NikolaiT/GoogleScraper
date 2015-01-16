@@ -41,7 +41,24 @@
 13.01.2015:
   - Handle sigint. Then close all open files (csv, json).
 
+15.01.2015:
+  - Implement JSON static tests []
+  - Implement CSV static tests []
+  - Catch Resource warnings in testing []
 
+  - Add no_results_selectors for all SE []
+    - add test for no_results_selectors parsing []
+  - Add page number selectors for all SE []
+    - add static tests
+
+  - add fabfile (google a basic template) for []
+      - adding & committing and uploading to master []
+      - push to the cheeseshop []
+  - add function in fabfile that pushes to cheeseshop only after all tests were successful []
+  - Add functionality that distinguishes the page number of serp pages when caching []
+
+  - implement async mode
+    - reade 20 minutes about asyncio built in moduel and decide whether if feets my needs
 
 
 

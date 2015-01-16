@@ -98,7 +98,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     
     The derivation is divided in two hierarchies: First we divide child
     classes in different Transport mechanisms. Scraping can happen over 
-    different communication channels like Raw HTTP, doing it with the 
+    different communication channels like Raw HTTP, scraping with the
     selenium framework or using the an asynchronous HTTP client.
     
     The next layer is the concrete implementation of the search functionality
@@ -109,19 +109,19 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     (An attribute name self.search_engine) and handle the different search
     engines in the search function.
     
-    Each must behave similarly: It can only scape at one search engine at the same time,
+    Each mode must behave similarly: It can only scape one search engine at the same time,
     but it may search for multiple search keywords. The initial start number may be
     set by the configuration. The number of pages that should be scraped for each
-    keyword may be also set.
+    keyword is also configurable.
     
     It may be possible to apply all the above rules dynamically for each
     search query. This means that the search page offset, the number of
     consecutive search pages may be provided for all keywords uniquely instead
     that they are the same for all keywords. But this requires also a
-    sophisticated input format and some more tricky engineering.
+    sophisticated input format and more tricky engineering.
     """
 
-
+    # TODO: How to get this information? Be evil :)
     malicious_request_needles = {
         'google': {
             'inurl': '/sorry/',
@@ -205,7 +205,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         
         # the scrape mode
         # to be set by subclasses
-        self.scrapemethod = ''
+        self.scrape_mode = ''
         
         # Whether the instance is ready to run
         self.startable = True
@@ -261,9 +261,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         """
         for i, self.current_keyword in enumerate(self.keywords):
 
-            self.current_page = self.start_page_pos
-
-            for self.current_page in range(1, self.num_pages_per_keyword + 1):
+            for self.current_page in range(self.start_page_pos, self.num_pages_per_keyword + 1):
 
                 # set the actual search code in the derived class
                 try:
@@ -275,7 +273,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                     # Leave search when search engines detected us
                     # add the rest of the keywords as missed one
                     logger.critical(e)
-                    self.missed_keywords.add(self.keywords[i:])
+                    self.missed_keywords += set(self.keywords[i:])
                     continue
 
     @abc.abstractmethod
@@ -313,7 +311,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         with self.db_lock:
             serp = SearchEngineResultsPage(
                 search_engine_name=self.search_engine,
-                scrapemethod=self.scrapemethod,
+                scrapemethod=self.scrape_mode,
                 page_number=self.current_page,
                 requested_at=self.current_request_time,
                 requested_by=self.ip,
@@ -361,8 +359,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def cache_results(self):
         """Caches the html for the current request."""
         if Config['GLOBAL'].getboolean('do_caching', False):
+
+            if Config['GLOBAL'].getboolean('minimize_caching_files', True):
+                html = self.parser.cleaned_html
+            else:
+                html = self.parser.html
+
             with self.cache_lock:
-                cache_results(self.parser.cleaned_html, self.current_keyword, self.search_engine, self.scrapemethod)
+                cache_results(html, self.current_keyword, self.search_engine, self.scrape_mode, self.current_page)
 
 
     def _largest_sleep_range(self, search_number):
@@ -398,7 +402,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.search_number += 1
 
         if not self.store():
-            logger.error('No results to store, skip current keyword: "{0}"'.format(self.current_keyword))
+            logger.error('No results to store, skip current keyword: "{}" in search engine: {}'.format(self.current_keyword, self.search_engine))
             return
 
         if self.progress_queue:

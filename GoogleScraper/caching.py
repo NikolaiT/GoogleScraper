@@ -14,8 +14,7 @@ from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
 from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result
-
-
+from GoogleScraper.scrape_jobs import get_scrape_jobs
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
 you may need to repeat the same searches several times and you might end up being banned by
@@ -162,7 +161,7 @@ def maybe_clean_cache():
                     os.remove(os.path.join(cachedir, fname))
 
 
-def cached_file_name(keyword, search_engine, scrapemode):
+def cached_file_name(keyword, search_engine, scrape_mode, page_number):
     """Make a unique file name from the search engine search request.
 
     Important! The order of the sequence is darn important! If search queries have the same
@@ -172,16 +171,18 @@ def cached_file_name(keyword, search_engine, scrapemode):
         keyword: The keyword that was used in the search.
         search_engine: The search engine the keyword was scraped for.
         scrapemode: The scrapemode that was used.
+        page_number: The number of the SERP page.
 
     Returns:
         A unique file name based on the parameters of the search request.
 
     """
     assert isinstance(keyword, str), 'Keyword {} must be a string'.format(keyword)
-    assert isinstance(search_engine, str), 'Seach engine {} must be a string'.format(search_engine)
-    assert isinstance(scrapemode, str), 'Scapemode {} needs to be a string'.format(scrapemode)
+    assert isinstance(search_engine, str), 'Search engine {} must be a string'.format(search_engine)
+    assert isinstance(scrape_mode, str), 'Scrapemode {} needs to be a string'.format(scrape_mode)
+    assert isinstance(page_number, int), 'Page_number {} needs to be an int'.format(page_number)
 
-    unique = [keyword, search_engine, scrapemode]
+    unique = [keyword, search_engine, scrape_mode, page_number]
 
     sha = hashlib.sha256()
     sha.update(b''.join(str(s).encode() for s in unique))
@@ -189,20 +190,21 @@ def cached_file_name(keyword, search_engine, scrapemode):
 
 
 @if_caching
-def get_cached(keyword, search_engine, scrapemode):
+def get_cached(keyword, search_engine, scrapemode, page_number):
     """Loads a cached SERP result.
 
     Args:
         keyword: The keyword that was used in the search.
         search_engine: The search engine the keyword was scraped for.
         scrapemode: The scrapemode that was used.
+        page_number: page_number
 
     Returns:
         The contents of the HTML that was shipped while searching. False if there couldn't
         be found a file based on the above params.
 
     """
-    fname = cached_file_name(keyword, search_engine, scrapemode)
+    fname = cached_file_name(keyword, search_engine, scrapemode, page_number)
 
     cdir = Config['GLOBAL'].get('cachedir', '.scrapecache')
 
@@ -271,7 +273,7 @@ def read_cached_file(path):
 
 
 @if_caching
-def cache_results(data, keyword, search_engine, scrapemode):
+def cache_results(data, keyword, search_engine, scrape_mode, page_number):
     """Stores the data in a file.
 
     The file name is determined by the parameters kw, url and params.
@@ -284,9 +286,10 @@ def cache_results(data, keyword, search_engine, scrapemode):
         data: The data to cache.
         keyword: The keyword that was used in the search.
         search_engine: The search engine the keyword was scraped for.
-        scrapemode: The scrapemode that was used.
+        scrape_mode: The scrapemode that was used.
+        page_number: The page number that the serp page is.
     """
-    fname = cached_file_name(keyword, search_engine, scrapemode)
+    fname = cached_file_name(keyword, search_engine, scrape_mode, page_number)
     cachedir = Config['GLOBAL'].get('cachedir', '.scrapecache')
     path = os.path.join(cachedir, fname)
 
@@ -318,20 +321,21 @@ def _get_all_cache_files():
     return files
 
 
-def _caching_is_one_to_one(keywords, search_engine, scrapemode):
+def _caching_is_one_to_one(keywords, search_engine, scrapemode, page_number):
     """Check whether all keywords map to a unique file name.
 
     Args:
         keywords: All keywords for which to check the uniqueness of the hash
         search_engine: The search engine the keyword was scraped for.
         scrapemode: The scrapemode that was used.
+        page_number: page_number
 
     Returns:
         True if all keywords map to a unique hash and False if not.
     """
     mappings = {}
     for kw in keywords:
-        hash = cached_file_name(kw, search_engine, scrapemode)
+        hash = cached_file_name(kw, search_engine, scrapemode, page_number)
         if hash not in mappings:
             mappings.update({hash: [kw, ]})
         else:
@@ -353,27 +357,20 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
         session: An sql alchemy session to add the entities
 
     Returns:
-        A list of keywords that couldn't be parsed and which need to be scraped anew.
+        A list of tuples that couldn't be parsed and which need to be scraped anew.
+        Each tuple consists of the keys (query, search_engine, scrapemethod, page_number).
     """
     files = _get_all_cache_files()
-    mapping = {}
-    scrapemethod = Config['SCRAPING'].get('scrapemethod')
     num_cached = 0
     # a keyword is requested once for each search engine
     num_total_keywords = len(keywords) * len(search_engines)
+    scrapemethod = Config['SCRAPING'].get('scrapemethod')
+    num_pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
 
-    for kw in keywords:
-        for search_engine in search_engines:
-            key = cached_file_name(kw, search_engine, scrapemethod)
-
-            out('Params(keyword="{kw}", search_engine="{se}", scrapemethod="{sm}" yields {hash}'.format(
-                    kw=kw,
-                    se=search_engine,
-                    sm=scrapemethod,
-                    hash=key
-                ), lvl=5)
-
-            mapping[key] = (kw, search_engine)
+    mapping = {}
+    for args in get_scrape_jobs(keywords, search_engines, scrapemethod, num_pages):
+        mapping[cached_file_name(*args)] = args
+        out('Params(keyword="{0}", search_engine="{1}", scrapemethod="{2}" yields {3}'.format(*args), lvl=5)
 
     for path in files:
         # strip of the extension of the path if it has eny
@@ -383,33 +380,29 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
             if fname.endswith(ext):
                 clean_filename = fname.rstrip('.' + ext)
 
-        query = search_engine = None
         val = mapping.get(clean_filename, None)
         if val:
-            query, search_engine = val
+            query, search_engine, scrapemethod, page_number = val
 
-        if query and search_engine:
-            # We found a file that contains the keyword, search engine name and
-            # searchmode that fits our description. Let's see if there is already
-            # an record in the database and link it to our new ScraperSearch object.
-            serps = get_serps_from_database(session, query, search_engine, scrapemethod)
+            if query and search_engine and page_number:
+                # We found a file that contains the keyword, search engine name and
+                # searchmode that fits our description. Let's see if there is already
+                # an record in the database and link it to our new ScraperSearch object.
+                serp = get_serp_from_database(session, query, search_engine, scrapemethod, page_number)
 
-            if not serps:
-                serp = parse_again(fname, search_engine, scrapemethod, query)
-                serps = [serp]
+                if not serp:
+                    serp = parse_again(fname, search_engine, scrapemethod, query)
 
-            for serp in serps:
                 serp.scraper_searches.append(scraper_search)
                 session.add(serp)
 
-            if num_cached % 200 == 0:
-                session.commit()
+                if num_cached % 200 == 0:
+                    session.commit()
 
-            for serp in serps:
                 store_serp_result(serp)
 
-            mapping.pop(clean_filename)
-            num_cached += 1
+                mapping.pop(clean_filename)
+                num_cached += 1
 
     out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
     out('{}/{} keywords have been cached and are ready to get parsed. {} remain to get scraped.'.format(
@@ -417,8 +410,9 @@ def parse_all_cached_files(keywords, search_engines, session, scraper_search):
 
     session.add(scraper_search)
     session.commit()
+
     # return the remaining keywords to scrape
-    return [e[0] for e in mapping.values()]
+    return mapping.values()
 
 
 def parse_again(fname, search_engine, scrapemethod, query):
@@ -431,13 +425,14 @@ def parse_again(fname, search_engine, scrapemethod, query):
         current_keyword=query
     )
 
-def get_serps_from_database(session, query, search_engine, scrapemethod):
+def get_serp_from_database(session, query, search_engine, scrapemethod, page_number):
     try:
-        serps = session.query(SearchEngineResultsPage).filter(
+        serp = session.query(SearchEngineResultsPage).filter(
                 SearchEngineResultsPage.query == query,
                 SearchEngineResultsPage.search_engine_name == search_engine,
-                SearchEngineResultsPage.scrapemethod == scrapemethod).all()
-        return serps
+                SearchEngineResultsPage.scrapemethod == scrapemethod,
+                SearchEngineResultsPage.page_number == page_number).first()
+        return serp
     except NoResultFound as e:
         # that shouldn't happen
         # we have a cache file that matches the above identifying information
@@ -463,7 +458,7 @@ def clean_cachefiles():
             cfile.write(cleaned)
             logger.info('Cleaned {}. Size before: {}, after {}'.format(file, len(data), len(cleaned)))
 
-def fix_broken_cache_names(url, search_engine, scrapemode):
+def fix_broken_cache_names(url, search_engine, scrapemode, page_number):
     """Fix broken cache names.
 
     Args:
@@ -477,7 +472,7 @@ def fix_broken_cache_names(url, search_engine, scrapemode):
         fname = os.path.split(path)[1].strip()
         data = read_cached_file(path)
         infilekws = r.search(data).group('kw')
-        realname = cached_file_name(infilekws, search_engine, scrapemode)
+        realname = cached_file_name(infilekws, search_engine, scrapemode, page_number)
         if fname != realname:
             out('The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(path), lvl=3)
             src = os.path.abspath(path)

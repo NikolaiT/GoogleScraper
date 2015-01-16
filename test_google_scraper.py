@@ -1,7 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-
 import os
 import unittest
 import requests
@@ -185,35 +184,126 @@ class GoogleScraperTestCase(unittest.TestCase):
     ### test dynamic parsing for http mode
 
 
-    # def test_http_mode_all_engines(self):
-    #
-    #     for se in all_search_engines:
-    #
-    #         session = self.scrape_query('http', [se], random_query=True)
-    #
-    #
-    # def test_selenium_phantomjs_all_engines(self):
-    #
-    #     for se in all_search_engines:
-    #
-    #         session = self.scrape_query('selenium', [se], sel_browser='phantomjs', random_query=True)
-
-
-    def test_selenium_chrome_all_engines(self):
-
-        for se in all_search_engines:
-
-            session = self.scrape_query('selenium', [se], sel_browser='chrome', random_query=True)
+     def test_http_mode_all_engines(self):
+        
+        session = self.scrape_query('http', all_search_engines, random_query=True)
+    
+    
+     ### test dynamic parsing for selenium with phantomsjs
+     
+     def test_selenium_phantomjs_all_engines(self):
+    
+        session = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
 
 
     ### test dynamic parsing for selenium mode with Chrome
 
-    ### test dynamic parsing for selenium with phantomsjs
+    def test_selenium_chrome_all_engines(self):
+
+        session = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
 
 
     ### test csv output
+    
+    def test_csv_output_static(self):
+        """Test csv output.
+
+        Test parsing 4 html pages with two queries and two pages per query and
+        transforming the results to csv format.
+
+        The cached file should be saved in 'data/csv_tests/', there should
+        be as many files as search_engine * pages_for_keyword
+
+        The keyword used in the static SERP pages MUST be 'some words'
+
+        The filenames must be in the GoogleScraper cache format.
+        """
+        
+        import csv
+        from GoogleScraper.output_converter import csv_fieldnames
+
+        number_search_engines = len(all_search_engines)
+        csv_outfile = 'data/tmp/csv_test.csv'
+
+        config = {
+            'SCRAPING': {
+                'keyword': 'some words',
+                'search_engines': ','.join(all_search_engines),
+                'num_pages_for_keyword': 2,
+            },
+            'GLOBAL': {
+                'cachedir': 'data/csv_tests/',
+                'do_caching': 'True',
+                'verbosity': 0
+            },
+            'OUTPUT': {
+                'output_filename': csv_outfile
+            }
+        }
+        session = scrape_with_config(config)
+
+        reader = csv.reader(csv_outfile)
+        header = set(reader.next())
+        assert header.issubset(set(csv_fieldnames)), 'Invalid CSV header: {}'.format(header)
+
+        # the items that should always have a value:
+        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name')
+
+        num_lines = 0
+        for row in reader:
+            # There should be around number_search_engines * 2 * 10 rows
+            num_lines +=1
+
+            for item in notnull:
+                assert row[header[item]], '{} has a item that has no value: {}'.format(item, row)
+
+        self.assertAlmostEqual(number_search_engines * 2 * 10, num_lines, delta=20)
 
     ### test json output
+
+    def test_json_output_static(self):
+        """Test json output.
+
+        """
+
+        import json
+
+        number_search_engines = len(all_search_engines)
+        json_outfile = 'data/tmp/json_test.json'
+
+        config = {
+            'SCRAPING': {
+                'keyword': 'some words',
+                'search_engines': ','.join(all_search_engines),
+                'num_pages_for_keyword': 2,
+            },
+            'GLOBAL': {
+                'cachedir': 'data/json_tests/',
+                'do_caching': 'True',
+                'verbosity': 0
+            },
+            'OUTPUT': {
+                'output_filename': json_outfile
+            }
+        }
+        session = scrape_with_config(config)
+
+        results = json.load(open(json_outfile))
+
+        self.assertAlmostEqual(number_search_engines * 2 * 10, sum([len(i['results']) for i in results]), delta=20)
+
+        # the items that should always have a value:
+        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name')
+
+        for key, value in results:
+
+            if key == 'results':
+
+                for result in results:
+
+                    for item in notnull:
+                        assert result[item], '{} has a item that has no value: {}'.format(item, result)
+
 
     ### test proxies
 

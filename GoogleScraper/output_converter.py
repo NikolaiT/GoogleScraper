@@ -5,7 +5,7 @@ import sys
 import json
 from pprint import pprint
 from GoogleScraper.config import Config
-from GoogleScraper.database import Link
+from GoogleScraper.database import Link, SERP
 
 """Stores SERP results in the appropriate output format.
 
@@ -16,6 +16,7 @@ impossible to launch lang scrape jobs with millions of keywords.
 
 output_format = 'stdout'
 outfile = None
+csv_fieldnames = set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'}
 
 class JsonStreamWriter():
     """Writes consecutive objects to an json output file."""
@@ -61,7 +62,10 @@ def store_serp_result(serp):
         if output_format == 'json':
             outfile = JsonStreamWriter(output_file)
         elif output_format == 'csv':
-            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=Link.__table__.columns._data.keys())
+            # every row in the csv output file should contain all fields
+            # that are in the table definition. Except the id, they have the
+            # same name in both tables
+            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=csv_fieldnames)
             outfile.writeheader()
         elif output_format == 'stdout':
             outfile = sys.stdout
@@ -78,7 +82,10 @@ def store_serp_result(serp):
         elif output_format == 'csv':
             # one row per link
             for row in data['results']:
-                outfile.writerow(row)
+                d = dict()
+                d.update({k:v for k,v in row2dict(serp).items() if k in csv_fieldnames})
+                d.update(row)
+                outfile.writerow(d)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
             pprint(data)
 
