@@ -31,7 +31,39 @@ class JsonStreamWriter():
         self.file.write(',')
 
     def __del__(self):
+        # remove the last written commata
+        # self.file.seek(-1, os.SEEK_END)
+        # self.file.truncate()
         self.file.write(']')
+
+
+def init_outfile(force_reload=False):
+
+    global outfile, output_format
+
+    if not outfile or force_reload:
+
+        output_file = Config['OUTPUT'].get('output_filename')
+
+        if output_file.endswith('.json'):
+            output_format = 'json'
+        elif output_file.endswith('.csv'):
+            output_format = 'csv'
+
+        # the output files. Either CSV or JSON or STDOUT
+        # It's little bit tricky to write the JSON output file, since we need to
+        # create the array of the most outer results ourselves because we write
+        # results as soon as we get them (it's impossible to hold the whole search in memory).
+        if output_format == 'json':
+            outfile = JsonStreamWriter(output_file)
+        elif output_format == 'csv':
+            # every row in the csv output file should contain all fields
+            # that are in the table definition. Except the id, they have the
+            # same name in both tables
+            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=csv_fieldnames)
+            outfile.writeheader()
+        elif output_format == 'stdout':
+            outfile = sys.stdout
 
 def store_serp_result(serp):
     """Store the parsed SERP page.
@@ -49,27 +81,6 @@ def store_serp_result(serp):
         serp: A serp object
     """
     global outfile, output_format
-
-    if not outfile:
-
-        output_file = Config['OUTPUT'].get('output_filename')
-        if '.' in output_file:
-            output_format = os.path.split(output_file)[-1]
-
-        # the output files. Either CSV or JSON or STDOUT
-        # It's little bit tricky to write the JSON output file, since we need to
-        # create the array of the most outer results ourselves because we write
-        # results as soon as we get them (it's impossible to hold the whole search in memory).
-        if output_format == 'json':
-            outfile = JsonStreamWriter(output_file)
-        elif output_format == 'csv':
-            # every row in the csv output file should contain all fields
-            # that are in the table definition. Except the id, they have the
-            # same name in both tables
-            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=csv_fieldnames)
-            outfile.writeheader()
-        elif output_format == 'stdout':
-            outfile = sys.stdout
 
     if outfile:
         data = row2dict(serp)

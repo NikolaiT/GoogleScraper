@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import queue
 import threading
 import datetime
 import sys
@@ -16,6 +15,7 @@ from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, 
 from GoogleScraper.log import out
 from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
 from GoogleScraper.scraping import ScrapeWorkerFactory
+from GoogleScraper.output_converter import init_outfile
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -172,6 +172,8 @@ def main(return_results=False, parse_cmd_line=True):
             pass
         return
 
+    init_outfile(force_reload=True)
+
     kwfile = Config['SCRAPING'].get('keyword_file', '')
     if kwfile:
         kwfile = os.path.abspath(kwfile)
@@ -191,6 +193,7 @@ def main(return_results=False, parse_cmd_line=True):
     num_workers = Config['SCRAPING'].getint('num_workers')
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
     pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
+    method = Config['SCRAPING'].get('scrapemethod', 'http')
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
@@ -337,6 +340,9 @@ def main(return_results=False, parse_cmd_line=True):
         # create a lock to cache results
         cache_lock = threading.Lock()
 
+        # A lock to prevent multiple threads from solving captcha, used in selenium instances.
+        captcha_lock = threading.Lock()
+
         out('Going to scrape {num_keywords} keywords with {num_proxies} proxies by using {num_threads} threads.'.format(
             num_keywords=len(list(scrape_jobs)),
             num_proxies=len(proxies),
@@ -349,18 +355,15 @@ def main(return_results=False, parse_cmd_line=True):
         progress_thread.start()
 
         # Let the games begin
-        if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
-            # A lock to prevent multiple threads from solving captcha.
-            captcha_lock = threading.Lock()
-            method = Config['SCRAPING'].get('scrapemethod', 'http')
+        if method in ('selenium', 'http'):
             workers = queue.Queue()
-
+            num_worker = 0
             for search_engine in search_engines:
 
                 for proxy in proxies:
 
                     for worker in range(num_workers):
-
+                        num_worker += 1
                         workers.put(
                             ScrapeWorkerFactory(
                                 mode=method,
@@ -371,9 +374,12 @@ def main(return_results=False, parse_cmd_line=True):
                                 cache_lock=cache_lock,
                                 scraper_search=scraper_search,
                                 captcha_lock=captcha_lock,
-                                progress_queue=q
+                                progress_queue=q,
+                                browser_num=num_worker
                             )
                         )
+
+
 
             for job in scrape_jobs:
 
@@ -388,7 +394,9 @@ def main(return_results=False, parse_cmd_line=True):
 
             while not workers.empty():
                 worker = workers.get()
-                threads.append(worker.get_worker())
+                thread = worker.get_worker()
+                if thread:
+                    threads.append(thread)
 
             for t in threads:
                 t.start()
@@ -399,7 +407,7 @@ def main(return_results=False, parse_cmd_line=True):
             # after threads are done, stop the progress queue.
             q.put('done')
 
-        elif Config['SCRAPING'].get('scrapemethod') == 'http-async':
+        elif method == 'http-async':
             raise NotImplemented('soon my dear friends :)')
 
         else:

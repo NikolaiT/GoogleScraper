@@ -179,11 +179,12 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'keyword': 'some words',
                 'search_engines': ','.join(all_search_engines),
                 'num_pages_for_keyword': 2,
+                'scrapemethod': 'selenium'
             },
             'GLOBAL': {
                 'cachedir': 'data/csv_tests/',
                 'do_caching': 'True',
-                'verbosity': 1
+                'verbosity': 0
             },
             'OUTPUT': {
                 'output_filename': csv_outfile
@@ -193,22 +194,21 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         assert os.path.exists(csv_outfile), '{} does not exist'.format(csv_outfile)
 
-        reader = csv.reader(csv_outfile)
-        header = set(reader.next())
-        assert header.issubset(set(csv_fieldnames)), 'Invalid CSV header: {}'.format(header)
+        reader = csv.reader(open(csv_outfile, 'rt'))
 
         # the items that should always have a value:
-        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name')
+        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name', 'snippet')
 
-        num_lines = 0
-        for row in reader:
-            # There should be around number_search_engines * 2 * 10 rows
-            num_lines +=1
+        for rownum, row in enumerate(reader):
+            if rownum == 0:
+                header = row
+                header_keys = set(row)
+                assert header_keys.issubset(set(csv_fieldnames)), 'Invalid CSV header: {}'.format(header)
 
             for item in notnull:
-                assert row[header[item]], '{} has a item that has no value: {}'.format(item, row)
+                assert row[header.index(item)], '{} has a item that has no value: {}'.format(item, row)
 
-        self.assertAlmostEqual(number_search_engines * 2 * 10, num_lines, delta=20)
+        self.assertAlmostEqual(number_search_engines * 2 * 10, rownum, delta=20)
 
     ### test json output
 
@@ -227,6 +227,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'keyword': 'some words',
                 'search_engines': ','.join(all_search_engines),
                 'num_pages_for_keyword': 2,
+                'scrapemethod': 'selenium'
             },
             'GLOBAL': {
                 'cachedir': 'data/json_tests/',
@@ -241,7 +242,11 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         assert os.path.exists(json_outfile), '{} does not exist'.format(json_outfile)
 
-        results = json.load(open(json_outfile))
+        try:
+            results = json.load(open(json_outfile))
+        except ValueError as e:
+            print('Cannot parse output json file {}. Reason: {}'.format(json_outfile, e))
+            raise e
 
         self.assertAlmostEqual(number_search_engines * 2 * 10, sum([len(i['results']) for i in results]), delta=20)
 

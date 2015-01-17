@@ -448,7 +448,7 @@ from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_na
 
 class ScrapeWorkerFactory():
     def __init__(self, mode=None, proxy=None, search_engine=None, session=None, db_lock=None,
-                 cache_lock=None, scraper_search=None, captcha_lock=None, progress_queue=None):
+                 cache_lock=None, scraper_search=None, captcha_lock=None, progress_queue=None, browser_num=1):
 
         self.mode = mode
         self.proxy = proxy
@@ -459,6 +459,7 @@ class ScrapeWorkerFactory():
         self.scraper_search = scraper_search
         self.captcha_lock = captcha_lock
         self.progress_queue = progress_queue
+        self.browser_num = browser_num
 
         self.jobs = dict()
 
@@ -495,7 +496,7 @@ class ScrapeWorkerFactory():
                     proxy=self.proxy,
                     progress_queue=self.progress_queue,
                     captcha_lock=self.captcha_lock,
-                    browser_num=1,
+                    browser_num=self.browser_num,
                 )
 
             elif self.mode == 'http':
