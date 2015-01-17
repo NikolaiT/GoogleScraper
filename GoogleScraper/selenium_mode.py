@@ -21,9 +21,9 @@ except ImportError as ie:
     print(ie)
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
-from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, SeleniumMisconfigurationError, get_base_search_url_by_search_engine, GoogleSearchError, MaliciousRequestDetected
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
+from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, SeleniumMisconfigurationError, get_base_search_url_by_search_engine, MaliciousRequestDetected
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -44,6 +44,7 @@ def get_selenium_scraper_by_search_engine_name(search_engine_name, *args, **kwar
         return ns[class_name](*args, **kwargs)
 
     return SelScrape(*args, **kwargs)
+
 
 class SelScrape(SearchEngineScrape, threading.Thread):
     """Instances of this class make use of selenium browser objects to query the search engines on a high level.
@@ -353,9 +354,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """Search with webdriver.
 
         Fills out the search form of the search engine for each keyword.
-        Clicks the next link while num_pages_per_keyword is not reached.
+        Clicks the next link while pages_per_keyword is not reached.
         """
-        for self.current_keyword in self.keywords:
+        for self.current_keyword, self.pages_per_keyword in self.jobs.items():
 
             self.search_input = self._wait_until_search_input_field_appears()
 
@@ -374,7 +375,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            for self.current_page in self.num_pages_per_keyword:
+            for self.current_page in self.pages_per_keyword:
 
                 self.wait_until_serp_loaded()
 
@@ -387,7 +388,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                 # Click the next page link not when leaving the loop
                 # in the next iteration.
-                if self.current_page in self.num_pages_per_keyword:
+                if self.current_page in self.pages_per_keyword:
                     self.next_url = self._goto_next_page()
                     self.current_request_time = datetime.datetime.utcnow()
                     

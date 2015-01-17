@@ -7,15 +7,15 @@ import sys
 import hashlib
 import os
 import logging
+import queue
 from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session, fixtures
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
-from GoogleScraper.http_mode import HttpScrape
-from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_name
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out
-from GoogleScraper.scrape_jobs import assign_elements_to_scrapers, default_scrape_jobs_for_keywords
+from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
+from GoogleScraper.scraping import ScrapeWorkerFactory
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -188,6 +188,7 @@ def main(return_results=False, parse_cmd_line=True):
     search_engines = list({search_engine.strip() for search_engine in se.split(',') if search_engine.strip()})
     assert search_engines, 'No search engine specified'
     num_search_engines = len(search_engines)
+    num_workers = Config['SCRAPING'].getint('num_workers')
     scrapemethod = Config['SCRAPING'].get('scrapemethod')
     pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
 
@@ -329,9 +330,6 @@ def main(return_results=False, parse_cmd_line=True):
         scrape_jobs = parse_all_cached_files(scrape_jobs, session, scraper_search)
 
     if scrape_jobs:
-        # Now process our scrape jobs suitable for SearchEngineScrape workers.
-        scraping_description = assign_elements_to_scrapers(scrape_jobs, proxies)
-        return
 
         # Create a lock to synchronize database access in the sqlalchemy session
         db_lock = threading.Lock()
@@ -354,55 +352,48 @@ def main(return_results=False, parse_cmd_line=True):
         if Config['SCRAPING'].get('scrapemethod') in ('selenium', 'http'):
             # A lock to prevent multiple threads from solving captcha.
             captcha_lock = threading.Lock()
-            browser_num = 0
-
             method = Config['SCRAPING'].get('scrapemethod', 'http')
+            workers = queue.Queue()
 
-            scrapejobs = []
+            for search_engine in search_engines:
 
-            for proxy, descr in scraping_description.items():
+                for proxy in proxies:
 
-                for search_engine, jobs in descr.items():
+                    for worker in range(num_workers):
 
-                    for i, job in enumerate(jobs):
-                        browser_num += 1
-
-                        if Config['SCRAPING'].get('scrapemethod', 'http') == 'selenium':
-                            scrapejobs.append(
-                                get_selenium_scraper_by_search_engine_name(
-                                    search_engine,
-                                    search_engine=search_engine,
-                                    session=session,
-                                    keywords=job['keywords'],
-                                    num_pages=job['pages'],
-                                    db_lock=db_lock,
-                                    cache_lock=cache_lock,
-                                    scraper_search=scraper_search,
-                                    captcha_lock=captcha_lock,
-                                    browser_num=browser_num,
-                                    proxy=proxy,
-                                    progress_queue=q
-                                )
+                        workers.put(
+                            ScrapeWorkerFactory(
+                                mode=method,
+                                proxy=proxy,
+                                search_engine=search_engine,
+                                session=session,
+                                db_lock=db_lock,
+                                cache_lock=cache_lock,
+                                scraper_search=scraper_search,
+                                captcha_lock=captcha_lock,
+                                progress_queue=q
                             )
-                        elif Config['SCRAPING'].get('scrapemethod') == 'http':
-                            scrapejobs.append(
-                                HttpScrape(
-                                    search_engine=search_engine,
-                                    keywords=job['keywords'],
-                                    num_pages=job['pages'],
-                                    session=session,
-                                    scraper_search=scraper_search,
-                                    cache_lock=cache_lock,
-                                    db_lock=db_lock,
-                                    proxy=proxy,
-                                    progress_queue=q,
-                                )
-                            )
+                        )
 
-            for t in scrapejobs:
+            for job in scrape_jobs:
+
+                while True:
+                    worker = workers.get()
+                    workers.put(worker)
+                    if worker.is_suitabe(job):
+                        worker.add_job(job)
+                        break
+
+            threads = []
+
+            while not workers.empty():
+                worker = workers.get()
+                threads.append(worker.get_worker())
+
+            for t in threads:
                 t.start()
 
-            for t in scrapejobs:
+            for t in threads:
                 t.join()
 
             # after threads are done, stop the progress queue.
