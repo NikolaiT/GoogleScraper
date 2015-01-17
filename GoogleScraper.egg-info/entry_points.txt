@@ -1,3 +1,0 @@
-[console_scripts]
-GoogleScraper = GoogleScraper.core:main
-
