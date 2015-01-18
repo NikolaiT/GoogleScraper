@@ -299,7 +299,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """
         return self.input_field_selectors[self.search_engine]
 
-    def _wait_until_search_input_field_appears(self, max_wait=10):
+    def _wait_until_search_input_field_appears(self, max_wait=5):
         """Waits until the search input field can be located for the current search engine
 
         Args:
@@ -340,7 +340,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                         next_element = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
                         webdriver.ActionChains(self.webdriver).move_to_element(next_element).perform()
                         # wait until the next page link emerges
-                        WebDriverWait(self.webdriver, 15).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                        WebDriverWait(self.webdriver, 8).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
                         element = self.webdriver.find_element_by_css_selector(selector)
                         next_url = element.get_attribute('href')
                         element.click()
@@ -361,7 +361,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             selector = self.next_page_selectors[self.search_engine]
             try:
                 # wait until the next page link emerges
-                WebDriverWait(self.webdriver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
                 return self.webdriver.find_element_by_css_selector(selector)
             except TimeoutException as te:
                 logger.warning('{}: Cannot locate next page element: {}'.format(self.name, te))
@@ -383,7 +383,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         if self.search_type == 'normal':
             selector = self.next_page_selectors[self.search_engine]
             try:
-                WebDriverWait(self.webdriver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
             except (TimeoutException, WebDriverException) as e:
                 self.wait_until_title_contains_keyword()
 
@@ -396,7 +396,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     def wait_until_title_contains_keyword(self):
         try:
-            WebDriverWait(self.webdriver, 10).until(EC.title_contains(self.current_keyword))
+            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
         except TimeoutException as e:
             logger.error(SeleniumSearchError('{}: Keyword "{}" not found in title: {}'.format(self.name, self.current_keyword, self.webdriver.title)))
 
@@ -541,7 +541,7 @@ class DuckduckgoSelScrape(SelScrape):
                 pass
 
         try:
-            WebDriverWait(self.webdriver, 10).until(new_results)
+            WebDriverWait(self.webdriver, 5).until(new_results)
         except TimeoutException as e:
             pass
 
@@ -572,5 +572,5 @@ class AskSelScrape(SelScrape):
             except WebDriverException as e:
                 pass
             
-        WebDriverWait(self.webdriver, 10).until(wait_until_keyword_in_url)
+        WebDriverWait(self.webdriver, 5).until(wait_until_keyword_in_url)
 

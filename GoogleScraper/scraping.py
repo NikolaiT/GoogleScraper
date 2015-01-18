@@ -323,15 +323,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
             serp = parse_serp(serp=serp, parser=self.parser)
 
-            if serp.num_results > 0:
-                self.session.add(serp)
-                self.session.commit()
-            else:
-                return False
-
+            self.session.add(serp)
+            self.session.commit()
             store_serp_result(serp)
 
-            return True
+            if serp.num_results:
+                return True
+            else:
+                return False
 
     def next_page(self):
         """Increment the page. The next search request will request the next page."""
@@ -405,9 +404,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         if not self.store():
             logger.error(
-                'No results to store, skip current keyword: "{}" in search engine: {}'.format(self.current_keyword,
+                'No results to store for keyword: "{}" in search engine: {}'.format(self.current_keyword,
                                                                                               self.search_engine))
-            return
 
         if self.progress_queue:
             self.progress_queue.put(1)
