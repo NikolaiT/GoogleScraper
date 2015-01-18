@@ -62,3 +62,12 @@
 
 
 
+19.01.2015
+
+    - add four different examples:
+        - a basic usage
+        - using selenium mode
+        - using http mode
+        - using async mode
+        - scraping images
+        - finding plagiarized content
