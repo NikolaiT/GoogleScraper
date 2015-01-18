@@ -1,15 +1,16 @@
 ## GoogleScraper - Scraping search engines professionally
 
-**You want to see GoogleScrape in action?! Look at this [video on vimeo](https://vimeo.com/112801073)**
+**Asynchronous mode implemented. Now you can scrape search engines with hundreds (even thousands) of requests at the same time. Proof in video will follow**
 
 ### Table of Contents
 
 1. [Installation](#install)
 2. [Quick Start](#quick)
-3. [About](#about)
-4. [Usage with Python](#usage)
-5. [Command line usage (read this!)](#cli-usage)
-6. [Contact](#contact)
+3. [Asynchronous mode](#async)
+4. [About](#about)
+5. [Usage with Python](#usage)
+6. [Command line usage (read this!)](#cli-usage)
+7. [Contact](#contact)
 
 
 <a name="install" \>
@@ -81,6 +82,25 @@ GoogleScraper -s "bing,baidu,yahoo,google,yandex" -q "K2 mountain" -t image -v2
 ```
 
 Have fun :D
+
+<a name="async" />
+
+## Asynchronous mode
+
+This is probably the most awesome feature of GoogleScraper. You can scrape with thousands of requests per second if either
+
++ The search engine doesn't block you (Bing didn't block me when requesting **100 keywords / second**)
++ You have enough proxies
+
+Example for Asynchronous mode:
+
+Search the keywords in the keyword file **keywords.txt** on bing and yahoo. By default asynchronous mode
+spawns 100 requests at the same time. This means around 100 requests per second (depends on the actual connection...).
+
+```
+GoogleScraper -s "bing,yahoo" --keyword-file keywords.txt -m http-async -v3
+```
+
 
 <a name="about" />
 ## What does GoogleScraper.py?

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from itertools import zip_longest
+import re
+import requests
+import os
 
 def grouper(iterable, n, fillvalue=None):
     """Collect data into fixed-length chunks or blocks.
@@ -49,6 +52,36 @@ def chunk_it(seq, num):
         last += avg
 
     return out
+
+def random_words(n=100, wordlength=range(10, 15)):
+    """Read a random english wiki article and extract some words.
+
+    Args:
+        n: The number of words to return. Returns all found ones, if n is more than we were able to found.
+        wordlength: A range that forces the words to have a specific length.
+
+    Returns:
+        Random words. What else you motherfucker?
+    """
+    valid_words = re.compile(r'[a-zA-Z]{{{},{}}}'.format(wordlength.start, wordlength.stop))
+    found = list(set(valid_words.findall(requests.get('http://en.wikipedia.org/wiki/Special:Random').text)))
+    try:
+        return found[:n]
+    except IndexError:
+        return found
+
+
+def get_some_words(n=100):
+    """Get some words. How the fuck know where we get them from."""
+
+    words = []
+
+    if os.path.exists('/usr/share/dict/words'):
+        words = open('/usr/share/dict/words').read().splitlines()
+    else:
+        words = random_words(n=n)
+
+    return words
 
 if __name__ == '__main__':
     import doctest

@@ -16,6 +16,7 @@ from GoogleScraper.log import out
 from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
 from GoogleScraper.scraping import ScrapeWorkerFactory
 from GoogleScraper.output_converter import init_outfile
+from GoogleScraper.async_mode import AsyncScrapeScheduler
 import GoogleScraper.config
 
 logger = logging.getLogger('GoogleScraper')
@@ -349,13 +350,14 @@ def main(return_results=False, parse_cmd_line=True):
             num_threads=num_search_engines
         ), lvl=1)
 
-        # Show the progress of the scraping
-        q = queue.Queue()
-        progress_thread = ShowProgressQueue(q, len(scrape_jobs))
-        progress_thread.start()
-
         # Let the games begin
         if method in ('selenium', 'http'):
+
+            # Show the progress of the scraping
+            q = queue.Queue()
+            progress_thread = ShowProgressQueue(q, len(scrape_jobs))
+            progress_thread.start()
+
             workers = queue.Queue()
             num_worker = 0
             for search_engine in search_engines:
@@ -378,8 +380,6 @@ def main(return_results=False, parse_cmd_line=True):
                                 browser_num=num_worker
                             )
                         )
-
-
 
             for job in scrape_jobs:
 
@@ -408,7 +408,11 @@ def main(return_results=False, parse_cmd_line=True):
             q.put('done')
 
         elif method == 'http-async':
-            raise NotImplemented('soon my dear friends :)')
+
+
+            scheduler = AsyncScrapeScheduler(scrape_jobs, session=session, scraper_search=scraper_search,
+                                             db_lock=db_lock)
+            scheduler.run()
 
         else:
             raise InvalidConfigurationException('No such scrapemethod {}'.format(Config['SCRAPING'].get('scrapemethod')))
@@ -417,7 +421,14 @@ def main(return_results=False, parse_cmd_line=True):
         session.add(scraper_search)
         session.commit()
 
-        progress_thread.join()
+        if method in ('selenium', 'http'):
+            progress_thread.join()
 
-        if return_results:
-            return session
+    # in the end, close the json file.
+    from GoogleScraper.output_converter import outfile, output_format
+
+    if output_format == 'json':
+        outfile.end()
+
+    if return_results:
+        return session

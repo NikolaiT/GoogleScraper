@@ -10,6 +10,7 @@ from urllib.parse import urlparse, unquote
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage, Link
 from GoogleScraper.config import Config
+from GoogleScraper.log import out
 from cssselect import HTMLTranslator
 
 logger = logging.getLogger('GoogleScraper')
@@ -136,13 +137,18 @@ class Parser():
 
         self.num_results = self.first_match(num_results_selector, self.dom)
         if not self.num_results:
-            logger.warning('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__, num_results_selector))
+            out('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__, num_results_selector), lvl=4)
 
         # get the current page we are at. Sometimes we search engines don't show this.
-        self.page_number = self.first_match(self.page_number_selectors, self.dom)
+        try:
+            self.page_number = int(self.first_match(self.page_number_selectors, self.dom))
+        except ValueError as e:
+            self.page_number = -1
 
         # let's see if the search query was shitty (no results for that query)
         self.effective_query = self.first_match(self.no_results_selectors, self.dom)
+        if self.effective_query:
+            out('{}: There was no search hit for the search query. Search engine used {} instead.'.format(self.__class__.__name__, self.effective_query), lvl=4)
 
         # get the stuff that is of interest in SERP pages.
         if not selector_dict and not isinstance(selector_dict, dict):
@@ -237,7 +243,7 @@ class Parser():
         Returns:
             The very first match or False if all selectors didn't match anything.
         """
-        assert isinstance(selectors, list), 'selectors must be a list type you motherfucker'
+        assert isinstance(selectors, list), 'selectors must be of type list you motherfucker'
 
         for selector in selectors:
             if selector:
@@ -418,9 +424,13 @@ class YandexParser(Parser):
     """Parses SERP pages of the Yandex search engine."""
 
     search_types = ['normal', 'image']
-    
-    num_results_search_selectors = ['.serp-item__wrap strong']
-    
+
+    no_results_selectors = ['.misspell__message .misspell__link']
+
+    num_results_search_selectors = ['.serp-adv .serp-item__wrap > strong']
+
+    page_number_selectors = ['.pager__group .button_checked_yes span::text']
+
     normal_search_selectors = {
         'results': {
             'de_ip': {
@@ -483,6 +493,10 @@ class BingParser(Parser):
     search_types = ['normal', 'image']
     
     num_results_search_selectors = ['.sb_count']
+
+    no_results_selectors = ['#sp_requery a > strong']
+
+    page_number_selectors = ['.sb_pagS::text']
     
     normal_search_selectors = {
         'results': {
@@ -570,8 +584,13 @@ class YahooParser(Parser):
     """Parses SERP pages of the Yahoo search engine."""
     
     search_types = ['normal', 'image']
-    
+
+    # yahooo doesn't have such a thing :D
+    no_results_selectors = ['']
+
     num_results_search_selectors = ['#pg > span:last-child']
+
+    page_number_selectors = ['#pg > strong::text']
     
     normal_search_selectors = {
         'results': {
@@ -636,7 +655,12 @@ class BaiduParser(Parser):
     search_types = ['normal', 'image']
     
     num_results_search_selectors = ['#container .nums']
-    
+
+    # no such thing for baidu
+    no_results_selectors = ['']
+
+    page_number_selectors = ['.fk_cur + .pc::text']
+
     normal_search_selectors = {
         'results': {
             'de_ip': {
@@ -699,6 +723,11 @@ class DuckduckgoParser(Parser):
     search_types = ['normal']
     
     num_results_search_selectors = []
+
+    no_results_selectors = ['']
+
+    # duckduckgo is loads next pages with ajax
+    page_number_selectors = ['']
     
     normal_search_selectors = {
         'results': {
@@ -721,6 +750,10 @@ class AskParser(Parser):
 
     num_results_search_selectors = []
 
+    no_results_selectors = ['#spell-check-result > a']
+
+    page_number_selectors = ['.pgcsel .pg::text']
+
     normal_search_selectors = {
         'results': {
             'de_ip': {
@@ -739,6 +772,8 @@ class BlekkoParser(Parser):
     """Parses SERP pages of the Blekko search engine."""
 
     search_types = ['normal']
+
+    no_results_selectors = ['']
 
     num_results_search_selectors = []
 

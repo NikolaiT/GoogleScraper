@@ -3,9 +3,8 @@
 
 import os
 import unittest
-import requests
-import re
 import random
+from GoogleScraper.utils import get_some_words
 from GoogleScraper import Config
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
@@ -13,32 +12,10 @@ from collections import Counter
 
 all_search_engines = [se.strip() for se in Config['SCRAPING'].get('supported_search_engines').split(',')]
 
-
-def random_words(n=100, wordlength=range(10, 15)):
-    """Read a random english wiki article and extract some words.
-
-    Arguments:
-    n -- The number of words to return. Returns all found ones, if n is more than we were able to found.
-    KeywordArguments:
-    wordlength -- A range that forces the words to have a specific length.
-    """
-    valid_words = re.compile(r'[a-zA-Z]{{{},{}}}'.format(wordlength.start, wordlength.stop))
-    found = list(set(valid_words.findall(requests.get('http://en.wikipedia.org/wiki/Special:Random').text)))
-    try:
-        return found[:n]
-    except IndexError:
-        return found
-
-
-if os.path.exists('/usr/share/dict/words'):
-    words = open('/usr/share/dict/words').read().splitlines()
-else:
-    words = random_words()
-
+words = get_some_words(n=100)
 
 def random_word():
     return random.choice(words)
-
 
 class GoogleScraperStaticTestCase(unittest.TestCase):
 
@@ -208,7 +185,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
             for item in notnull:
                 assert row[header.index(item)], '{} has a item that has no value: {}'.format(item, row)
 
-        self.assertAlmostEqual(number_search_engines * 2 * 10, rownum, delta=20)
+        self.assertAlmostEqual(number_search_engines * 2 * 10, rownum, delta=30)
 
     ### test json output
 
@@ -242,26 +219,29 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         assert os.path.exists(json_outfile), '{} does not exist'.format(json_outfile)
 
+        file = open(json_outfile, 'r')
         try:
-            results = json.load(open(json_outfile))
+            results = json.load(file)
         except ValueError as e:
             print('Cannot parse output json file {}. Reason: {}'.format(json_outfile, e))
             raise e
 
-        self.assertAlmostEqual(number_search_engines * 2 * 10, sum([len(i['results']) for i in results]), delta=20)
-
         # the items that should always have a value:
-        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name')
+        notnull = ('link', 'rank', 'domain', 'title', 'link_type')
+        num_results = 0
+        for item in results:
 
-        for key, value in results:
+            for k, v in item.items():
 
-            if key == 'results':
+                if k == 'results':
 
-                for result in results:
+                    for res in v:
+                        num_results += 1
 
-                    for item in notnull:
-                        assert result[item], '{} has a item that has no value: {}'.format(item, result)
+                        for item in notnull:
+                            assert res[item], '{} has a item that has no value: {}'.format(item, res)
 
+        self.assertAlmostEqual(number_search_engines * 2 * 10, num_results, delta=30)
 
     ### test correct handling of SERP page that has no results for search query.
 
@@ -270,7 +250,52 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         assert parser.effective_query == '"be dealt and be evaluated"', 'No effective query.'
 
+    def test_no_results_for_query_yandex(self):
+        parser = self.get_parser_for_file('yandex', 'data/uncompressed_no_results_serp_pages/yandex.html')
 
+        assert parser.effective_query == 'food', 'Wrong effective query. {}'.format(parser.effective_query)
+
+    def test_no_results_for_query_bing(self):
+        parser = self.get_parser_for_file('bing', 'data/uncompressed_no_results_serp_pages/bing.html')
+
+        assert parser.effective_query == 'food', 'Wrong effective query. {}'.format(parser.effective_query)
+
+    def test_no_results_for_query_ask(self):
+        parser = self.get_parser_for_file('ask', 'data/uncompressed_no_results_serp_pages/ask.html')
+
+        assert parser.effective_query == 'food', 'Wrong effective query. {}'.format(parser.effective_query)
+
+
+    ### test correct parsing of the current page number.
+
+    def test_page_number_selector_yandex(self):
+        parser = self.get_parser_for_file('yandex', 'data/page_number_selector/yandex_5.html')
+        assert parser.page_number == 5, 'Wrong page number. Got {}'.format(parser.page_number)
+
+    def test_page_number_selector_google(self):
+        """Google is a bitch in testing this. While saving the html file, the selected
+        page is set back to 1."""
+        parser = self.get_parser_for_file('google', 'data/page_number_selector/google_8.html')
+        assert parser.page_number == 1, 'Wrong page number. Got {}'.format(parser.page_number)
+
+    def test_page_number_selector_bing(self):
+        parser = self.get_parser_for_file('bing', 'data/page_number_selector/bing_5.html')
+        assert parser.page_number == 5, 'Wrong page number. Got {}'.format(parser.page_number)
+
+    def test_page_number_selector_yahoo(self):
+        parser = self.get_parser_for_file('yahoo', 'data/page_number_selector/yahoo_3.html')
+        assert parser.page_number == 3, 'Wrong page number. Got {}'.format(parser.page_number)
+
+    def test_page_number_selector_baidu(self):
+        parser = self.get_parser_for_file('baidu', 'data/page_number_selector/baidu_9.html')
+        assert parser.page_number == 9, 'Wrong page number. Got {}'.format(parser.page_number)
+
+    def test_page_number_selector_ask(self):
+        parser = self.get_parser_for_file('ask', 'data/page_number_selector/ask_7.html')
+        assert parser.page_number == 7, 'Wrong page number. Got {}'.format(parser.page_number)
+
+
+    ### test correct parsing of the number of results for the query..
 
 class GoogleScraperFunctionalTestCase(unittest.TestCase):
     # generic function for dynamic parsing

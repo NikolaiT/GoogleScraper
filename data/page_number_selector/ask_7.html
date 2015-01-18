@@ -1,0 +1,1484 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+    <title>wat - Ask.com Web-Suche</title>
+    <link REL="shortcut icon" HREF="http://sp.de.ask.com/sh/i/a14/favicon/favicon.ico">
+    
+
+<script type="text/javascript" charset="utf-8">
+    (function(G,o,O,g,L,e){G[g]=G[g]||function(){(G[g]['q']=G[g]['q']||[]).push( arguments)},G[g]['t']=1*new Date;L=o.createElement(O),e=o.getElementsByTagName( O)[0];L.async=1;L.src='//www.google.com/adsense/search/async-ads.js'; e.parentNode.insertBefore(L,e)})(window,document,'script','_googCsa');
+</script>
+
+<script type="text/javascript" charset="utf-8">
+var ask = ask || {};
+ask.CSA = {};
+
+(function(){
+    var _logInConsole = false,
+        _csaStartTime = new Date(),         _csaResponseTime = null,
+        _atfReady = false,
+        _domReady = false,
+        _syncAds = false,
+        _showSerpTimeoutCleared = false,
+        _showSerpTimeoutLength = 2000,
+        _showSerpTimer = null,
+        _log = function(){
+            if(('false' === 'true') && window.console && console.log) {
+                console.log(Array.prototype.slice.call(arguments));
+            }
+        },
+                _domCallbacks = [],
+                        _csaCallbacksObjects = [];
+
+        ask.CSA.startTime = _csaStartTime;
+    ask.CSA.responseReceived = false;
+    ask.CSA.adsShown = false;
+    ask.CSA.responseTime = null;     ask.CSA.adsShownTime = null;     ask.CSA.domReadyTime = null;     ask.CSA.serpShownTime = null;     ask.CSA.serpVisible = false;
+    ask.CSA.showSerpTimeoutFired = false;
+    ask.CSA.showSerpTimeoutLength = _showSerpTimeoutLength;
+    ask.CSA.showSerpStartTime = null;
+    ask.CSA.numTopAds = null;
+    ask.CSA.numBottomAds = null;
+    ask.CSA.numRightAds = null;
+    ask.CSA.adDepth = null;
+    ask.CSA.serpHiddenPreAds = null;
+    ask.CSA.serpShownPostAds = null;
+    ask.CSA.syncAdsRenderingWithResults = null;
+    ask.CSA.viewportHeight = null;
+    ask.CSA.viewportWidth = null;
+    ask.CSA.centerRailHeight = null;
+    ask.CSA.centerRailWidth = null;
+    ask.CSA.rightRailHeight = null;
+    ask.CSA.rightRailWidth = null;
+    ask.CSA.csaHeight = null;
+    ask.CSA.csaWidth = null;
+    ask.CSA.adContentRatio = null;
+    ask.CSA.optimizeAdRequest = null;
+
+    
+    
+    ask.CSA.addCSALoadCallback = function(adsCb, timeoutCb, timeoutValue){
+        _log("addCSALoadCallback", adsCb, timeoutCb, timeoutValue);
+        var callbackObj = null;
+
+        if(typeof adsCb !== "function") {
+            return;
+        }
+
+        callbackObj = { adsCb: adsCb, timeoutCb: timeoutCb, timeoutValue: timeoutValue, timeout: null };
+
+        if(ask.CSA.adsShown) {
+                        adsCb();
+        } else {
+
+            if(typeof timeoutCb === "function" && timeoutValue > 0) {
+
+                callbackObj.timeout = setTimeout(function(){
+                                        var idx = _csaCallbacksObjects.indexOf(callbackObj);
+                    if(idx > -1) {
+                        handleCallbackTimeout(callbackObj);
+                    }
+                }, timeoutValue);
+
+            }
+
+                        _csaCallbacksObjects.push(callbackObj);
+        }
+    };
+
+        ask.CSA.startShowSerpTimeout = function(){
+        _log("startShowSerpTimeout", _showSerpTimeoutLength);
+        _showSerpTimer = setTimeout(handleSerpTimeout, _showSerpTimeoutLength);
+        ask.CSA.showSerpStartTime = new Date() - _csaStartTime;
+    };
+
+        ask.CSA.domReady = function(){
+        _log("domReady");
+        _domReady = true;
+        ask.CSA.domReadyTime = new Date() - _csaStartTime;
+        invokeCallbacks(_domCallbacks);
+    };
+
+        ask.CSA.atfReady = function(){
+        _log("atfReady");
+        _atfReady = true;
+        ask.CSA.atfReadyTime = new Date() - _csaStartTime;
+        if (_syncAds) {
+            addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{display:block;}');
+        }
+    };
+
+        ask.CSA.syncAds = function(sync){
+        _log("syncAds");
+        ask.CSA.syncAdsRenderingWithResults = _syncAds = sync;
+        if (_syncAds) {
+            addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{display:none;}');
+        }
+    };
+
+    ask.CSA.showSerp = makeSerpVisible;
+
+    ask.CSA.handleTopAdsLoaded = function(containerName, adsLoaded){
+        _log("handleTopAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock1["colorBackground"]);
+
+        ask.CSA.adsShown = true;
+        ask.CSA.adsShownTime = new Date() - _csaStartTime;
+
+        makeSerpVisible();
+
+        fireCSACallbacks();
+    };
+
+    ask.CSA.handleNoTopAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleBottomAdsLoaded = function(containerName, adsLoaded){
+        _log("handleBottomAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock2["colorBackground"]);
+    };
+
+    ask.CSA.handleRightAdsLoaded = function(containerName, adsLoaded){
+        _log("handleRightAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock3["colorBackground"]);
+    };
+
+    ask.CSA.handleNoBottomAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleNoRightAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleCSAResponse = function(numAdsMap) {
+        _log("handleCSAResponse " + numAdsMap);
+        
+        ask.CSA.responseTime = new Date() - _csaStartTime;
+
+        if (numAdsMap["magic1"] != undefined) {
+            ask.CSA.numTopAds = numAdsMap["magic1"];
+            ask.CSA.adDepth = ask.CSA.numTopAds;
+        }
+
+        if (numAdsMap["magic2"] != undefined) {
+            ask.CSA.numBottomAds = numAdsMap["magic2"];
+        }
+
+        if (ask.CSA.adDepth < ask.CSA.numBottomAds) {
+            ask.CSA.adDepth = ask.CSA.numBottomAds;
+        }
+
+        if (numAdsMap["magic3"] != undefined) {
+            ask.CSA.numRightAds = numAdsMap["magic3"];
+        }
+
+        if(_domReady) {
+            processAdResponse();
+        } else {
+            _domCallbacks.push(processAdResponse);
+        }
+    };
+
+    function processAdResponse(){
+        _log("processAdResponse");
+
+        if (ask.CSA.numTopAds > 0 || ask.CSA.numBottomAds > 0) {
+
+            var img = new Image();
+            var matchImg = 'http://de.ask.com/match?c=a&qid=A0DE4C3E54907ECB20C7548F8CC699A1&o=312&l=dir&ip=5dce413f&page=7&ld=&q=wat&cl=aj-de&ac=0&qsrc=0&dqi=&ch=de-web' + '&topAds=' + ask.CSA.numTopAds + '&botAds=' + ask.CSA.numBottomAds + '&dr=' + ask.CSA.responseTime + '&lodid=eu&loaid=a16&losid=de&lid=&rightAds='+ask.CSA.numRightAds;
+
+            _log(matchImg);
+            img.src = matchImg;
+        }
+
+        ask.CSA.responseReceived = true;
+
+                setCSAMetaDataCookie();
+
+            }
+
+    function isSerpVisible() {
+                var visible = false,
+            selectors = ["#midblock", "#rightblock", "#mobile-footer", ".mobile-web-results", ".hcsa"],
+            elems = null;
+
+        for(var i = 0; i < selectors.length; i++) {
+            if(visible) continue;
+
+            try{
+                elems = document.querySelectorAll(selectors[i]);
+            } catch(e) {
+                _log("Error fetching serp elements: " + e);
+            }
+
+            if(elems) {
+                for(var j = 0; j < elems.length; j++) {
+                    visible=(visible || isVisible(elems[j]));
+                }
+            }
+        }
+
+        return visible;
+    }
+
+    function isVisible(elem) {
+        var outOfFlow = (elem.offsetWidth !== 0 || elem.offsetHeight !== 0),
+            invisible = false;
+        try {
+            invisible = (window.getComputedStyle(elem).getPropertyValue("visibility") === "hidden");
+        } catch(e) {
+            _log("Error getting style of elem: " + e);
+        }
+
+        return outOfFlow || invisible;
+    }
+
+    function addCssText(css) {
+        var head = document.getElementsByTagName('head')[0];
+        var style = document.createElement('style');
+        style.type = 'text/css';
+        if (style.styleSheet) {
+            style.styleSheet.cssText = css;
+        } else {
+            style.appendChild(document.createTextNode(css));
+        }
+        head.appendChild(style);
+    }
+
+    function makeSerpVisible() {
+        if(ask.CSA.serpVisible) return;
+        _log("makeSerpVisible");
+        addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{visibility:visible;}');
+
+                if (!_showSerpTimeoutCleared) {
+            clearTimeout(_showSerpTimer);
+            _showSerpTimeoutCleared = true;
+        }
+
+        ask.CSA.serpVisible = true;
+        ask.CSA.serpShownTime = new Date() - _csaStartTime;
+    }
+
+        function setCSAMetaDataCookie(){
+        document.cookie = 'adDepth=' + ask.CSA.adDepth + ";path=/;domain=.ask.com";
+        document.cookie = 'ad_cnt=' + (ask.CSA.numTopAds + ask.CSA.numBottomAds) + ";path=/;domain=.ask.com";
+    }
+
+    function updateMonitoringHash(){
+        _log("updateMonitoringHash");
+        var topAds = ask.CSA.numTopAds || 0,
+            bottomAds = ask.CSA.numBottomAds || 0,
+                rightAds = ask.CSA.numRightAds || 0,
+            hash = "num_ads_top=" + topAds +
+                    "&num_ads_bottom=" + bottomAds +
+                        "&num_ads_right=" + rightAds +
+                    "&total_num_ads=" + (topAds + bottomAds) +
+                    "&content_hidden_pre_ads=" + (ask.CSA.serpHiddenPreAds ? 1 : 0) +
+                    "&content_shown_post_ads=" + (ask.CSA.serpShownPostAds ? 1 : 0) +
+                    "&ads_response_time_ms=" + ask.CSA.responseTime;
+        window.location.hash = hash;
+    }
+
+    function updateMonitoringElement(){
+        _log("updateMonitoringElement");
+        var topAds = ask.CSA.numTopAds || 0,
+                bottomAds = ask.CSA.numBottomAds || 0,
+                rightAds = ask.CSA.numRightAds || 0,
+                body = document.getElementsByTagName("body")[0],
+                elem = document.createElement("div");
+
+                elem.setAttribute("id", "csa-monitor-data");
+        elem.setAttribute("style", "visibility: hidden;");
+        elem.setAttribute("data-num_ads_top", topAds);
+        elem.setAttribute("data-num_ads_bottom", bottomAds);
+        elem.setAttribute("data-num_ads_right", rightAds);
+        elem.setAttribute("data-total_num_ads", topAds + bottomAds + rightAds);
+        elem.setAttribute("data-content_hidden_pre_ads", ask.CSA.serpHiddenPreAds ? 1 : 0);
+        elem.setAttribute("data-content_shown_post_ads", ask.CSA.serpShownPostAds ? 1 : 0);
+        elem.setAttribute("data-ads_response_time_ms", ask.CSA.responseTime);
+
+                body.appendChild(elem);
+    }
+
+    function noAdLoadedCallback(containerName, adsLoaded) {
+        _log("noAdLoadedCallback");
+
+        function process(){
+            var adContainer = document.getElementById(containerName);
+
+            if(adContainer)
+                adContainer.style.display = "none";
+
+            makeSerpVisible();
+        }
+
+        if(_domReady) {
+            process();
+        } else {
+            _domCallbacks.push(process);
+        }
+
+    }
+
+    function addBackgroundColor(adsLoaded, containerName, shadeSelector) {
+        var adElement = document.getElementById(containerName);
+        if (adsLoaded && adElement) {
+            adElement.style.backgroundColor = shadeSelector;
+        }
+    }
+
+    function handleCallbackTimeout(callbackObj) {
+        _log("handleCallbackTimeout", callbackObj);
+        clearTimeout(callbackObj.timeout);
+        callbackObj.timeoutCb();
+    }
+
+    function handleSerpTimeout() {
+        _log("handleSerpTimeout");
+        makeSerpVisible();
+        ask.CSA.showSerpTimeoutFired = true;
+        _showSerpTimeoutCleared = true;
+    }
+
+    function fireCSACallbacks(){
+        _log("fireCSACallbacks");
+        var csaCallbacks = [];
+
+                for(var i = 0; i < _csaCallbacksObjects.length; i++) {
+            csaCallbacks.push(_csaCallbacksObjects[i].adsCb);
+            clearTimeout(_csaCallbacksObjects[i].timeout);
+        }
+
+                _csaCallbacksObjects = [];
+        _log("csaCallbacks: ", csaCallbacks);
+        invokeCallbacks(csaCallbacks);
+    }
+
+    function invokeCallbacks(callbacks) {
+        if(callbacks.length) {
+            for(var i = 0; i < callbacks.length; i++) {
+                if(typeof callbacks[i] == "function") {
+                    _log("invoking callback " + i);
+                    try{
+                        callbacks[i].call(null);
+                    } catch(e){
+                                            }
+                }
+            }
+                        callbacks.splice(0, callbacks.length);
+        }
+    }
+
+    //reduce the ad call by 1 if the client is a android tablet and meets orientation and size criteria
+    ask.CSA.optimizeAdRequest = function optimizeAdRequest(adblock) {
+        var h = (Math.max(document.documentElement.clientHeight, window.innerHeight || 0));
+        var w = (Math.max(document.documentElement.clientWidth, window.innerWidth || 0));
+        var enabledForOrientation = "" === "true" ? true : h > w;
+        var enabled = "";
+        if(enabled === "true" && 800 > h && enabledForOrientation) {
+            if(adblock && typeof adblock.maxTop !== "undefined") {
+                adblock.maxTop -= 1;
+            }
+        }
+    }
+
+})();
+
+
+
+_googCsa('jsLoadedCallback', function () {
+
+    var pageOptions = ask.CSA.pageOptions = {"instantPreviews":false,"adPage":"7","sellerRatings":true,"attributionSpacingBelow":7,"location":false,"plusOnes":false,"query":"wat","numRepeated":"5","domainLinkAboveDescription":true,"adtest":"off","rightHandAttribution":true,"offerExtension":false,"hl":"de","heightConstrained":true,"oe":"utf-8","adsafe":"medium","attributionText":"Anzeigen","pubId":"aj-de","isAndroidTablet":false,"ie":"utf-8","siteLinks":true,"linkTarget":"_blank","channel":"de-web","clickToCall":false};
+    if (pageOptions) {
+        pageOptions['adsResponseCallback'] = ask.CSA.handleCSAResponse;
+    }
+
+    var adblock1 = ask.CSA.adblock1 = {"lineHeightDomainLink":"16","colorAttribution":"#666666","colorBackground":"#FFFFFF","colorDomainLink":"#0E7744","colorTitleLink":"#3300B5","width":"99.5%","clicktrackUrl":"http://de.ask.com/clk?pos=top&q=wat&qid=A0DE4C3E54907ECB20C7548F8CC699A1&ip=5dce413f&o=312&l=dir&qsrc=0&page=7&dqi=&cl=aj-de&ch=de-web&c=a&p_uid=&p_clk_id=&lpurl=http%3A%2F%2Fde.ask.com%2Fweb%3Fq%3Dwat%26page%3D7%26qid%3DA0DE4C3E54907ECB20C7548F8CC699A1%26qsrc%3D0%26o%3D312%26l%3Ddir&lp_ref_url=&anxu=http%3A%2F%2Fde.ask.com%2Fweb&pl=6eafUl%3DOh%2B%26ABp%3D8fcax6ZepvISgdR%26ha%3DxrQFY%26TL%3DpjEQRIXW%2B4gvRJjwMieA%2BK1RUR8%25X537%26E6%3DZvl9R1m%26oL%3DoLEW%2Bh3BqrAPKWN9a%26GlK%25%3DIy-HB%26gI%25%3D%2B4-rQT%26nI%3D9QEFiW%26Ink%3D%26gY%3DAbHvHTcITtG%26zI%3DwG6TV%26CZV%3DTF%262Y%3DlYB%26dI%3Dh%26Hk%3D%26m8R%3D%26X%3DqAg&up=40e2J%3D%25LBo54%26Yi%3Dkiw%26j6%3DsDj%263l.HKH5Ci%3DDRp%26fV.DXVVZN%3DOC-%2BC%26hP.E9pRs1cz51Cxc%3Dhf-ac2%26k%3DDIiXN7","fontSizeDomainLink":"13","clickableBackgrounds":true,"colorText":"#333333","fontSizeDescription":"13","lineHeightDescription":"16","fontSizeTitle":"15","fontSizeAttribution":"10","maxTop":"5","container":"magic1","verticalSpacing":"9","lineHeightTitle":"18","longerHeadlines":true};
+    if (adblock1) {
+        adblock1['noAdLoadedCallback'] = ask.CSA.handleNoTopAdsLoaded;
+        adblock1['adLoadedCallback'] = ask.CSA.handleTopAdsLoaded;
+    }
+
+            var adblock2 = ask.CSA.adblock2 = {"lineHeightDomainLink":"16","colorAttribution":"#666666","colorBackground":"#FFFFFF","colorDomainLink":"#0E7744","colorTitleLink":"#3300B5","width":"99.5%","number":"5","clicktrackUrl":"http://de.ask.com/clk?pos=bottom&q=wat&qid=A0DE4C3E54907ECB20C7548F8CC699A1&ip=5dce413f&o=312&l=dir&qsrc=0&page=7&dqi=&cl=aj-de&ch=de-web&c=a&p_uid=&p_clk_id=&lpurl=http%3A%2F%2Fde.ask.com%2Fweb%3Fq%3Dwat%26page%3D7%26qid%3DA0DE4C3E54907ECB20C7548F8CC699A1%26qsrc%3D0%26o%3D312%26l%3Ddir&lp_ref_url=&anxu=http%3A%2F%2Fde.ask.com%2Fweb&pl=b04fRO%3DirI%26YHu%3DfwU%2Bgff8KBAFbcj%260H%3DqvqMM%26xg%3D82Ue%25jNe5AIKk%25mERDSCQ0dO%2B0W0O8rR%2684%3DZao0sz1%26%2BX%3DS0kIy8CZIS5NWXbHh%26hEU%25%3DVM-rv%265Qu%3D0r-sMB%26mE%3DFsdvqt%26U84%3D%26IJ%3Dew3SeNtFkZQ%2686%3DCLd%25B%26BI6%3D%2Bx%26l4%3DdLw%26ca%3D0%26cd%3D%26qIY%3D%26L%3D67Z&up=f542q%3Do%2BU1Vm%26SQ%3DMx1%26K9%3DAIE%26Fn.m0V2Tr%3DrHg%26ij.npTVEQ%3DFd-Jf%2641.8m7DRQNXlq7vo%3DiF-KjD%26D%3DNIvTx5HRu","fontSizeDomainLink":"13","clickableBackgrounds":true,"colorText":"#333333","fontSizeDescription":"13","lineHeightDescription":"16","fontSizeTitle":"15","fontSizeAttribution":"10","container":"magic2","verticalSpacing":"9","lineHeightTitle":"18","longerHeadlines":true};
+        if (adblock2) {
+            adblock2['noAdLoadedCallback'] = ask.CSA.handleNoBottomAdsLoaded;
+            adblock2['adLoadedCallback'] = ask.CSA.handleBottomAdsLoaded;
+        }
+    
+    
+    var pl_rqnum = parseInt(adblock1.maxTop);
+    var blocks = ['ads',pageOptions,adblock1];
+
+    if (typeof adblock2 != 'undefined' && null != adblock2) {
+        pl_rqnum = pl_rqnum + parseInt(adblock2.number);
+        blocks.push(adblock2);
+    }
+    if (typeof adblock3 != 'undefined' && null != adblock3) {
+        pl_rqnum = pl_rqnum + parseInt(adblock3.number);
+        blocks.push(adblock3);
+    }
+
+    /* ********* if android tablet, modify the ad request here ************** */
+    if(typeof ask.CSA.optimizeAdRequest === "function" && pageOptions.isAndroidTablet === true) {
+        ask.CSA.optimizeAdRequest(adblock1);
+    }
+
+    window['backfillParam'] = window.backfillParam || {};
+    window['backfillParam']['pl_hex'] = adblock1.colorBackground ? adblock1.colorBackground : "#FFFFFF";
+    window['backfillParam']['pl_cl'] = pageOptions.pubId;
+    window['backfillParam']['pl_ch'] = pageOptions.channel;
+    window['backfillParam']['pl_type'] = 'csa';
+    window['backfillParam']['pl_rp'] = (pageOptions.numRepeated) ? true : false;
+    window['backfillParam']['pl_clksp'] = adblock1.clickableBackgrounds;
+    window['backfillParam']['pl_rqnum'] = pl_rqnum;
+    window['backfillParam']['pl_timeout'] = ask.CSA.showSerpTimeoutLength ? ask.CSA.showSerpTimeoutLength : 0;
+
+    try {
+        _googCsa.apply(null, blocks);
+    } catch (err) {
+        ask.CSA.showSerp();
+    }
+});
+
+
+</script>
+<style type="text/css">
+    </style>
+<noscript>
+    <style type="text/css">
+        #midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa {
+            visibility:visible !important;
+        }
+    </style>
+</noscript>
+
+    <link href="http://saservice.uk.ask.com/c/css/sas-250ff81acb8aa5af302dc5405b6565019d7dbfe5.css" rel="stylesheet" type="text/css"/>
+    <script type="text/javascript">
+    var WZInfo = WZInfo||{};
+    var ss=function(){},cs=function(){};
+    var _docReadyFns = [];
+    $j = function(){return {ready:function(fn){_docReadyFns.push(fn);}};};
+
+    window.onload = function() {
+        for (var i = 0; i < _docReadyFns.length; i++) {
+            var fn = _docReadyFns[i];
+            if (typeof fn === 'function') fn.call(document, $j);
+        }
+    };
+
+    var ASKINT = ASKINT || {};
+    ASKINT.cfg = (function() {
+        return {
+            "ldomain":"http://de.ask.com" ,
+            "_ldomain":"de.ask.com"
+        };
+    })();
+
+        ASKINT.mapConstants = {
+        staticDomain:"http://sp.de.ask.com/",
+        ldDomain:"http://de.ask.com/",
+        mapProxyDomain:"http://mapx.iad.ask.com/",
+        userIP:"93.206.65.63",
+        channel:"web",
+        key: "AhD-mAuYvCfDIibv1ZaAqV5u5ETUovGCddVt7gAw-sbKtySC-mr9l4exFjSC4xbH",
+                cultureCode: "de",
+                isIE6: false    };
+
+    
+        var ENABLE_AD_CONTENT_RATIO = true;
+</script>            <link type="text/css" rel="stylesheet" href="/st/c/css/ask_web-61e8ab95b556c717bf1ee7216f2f48f3172323dc.css">
+        <style>
+        .vid_btn, .vid_btn2 {
+            background: url(http://sp.de.ask.com/sh/i/a10f/btn_play.png) no-repeat scroll 0 0 transparent;
+        }
+        .speech {
+            background-image: url(http://sp.de.ask.com/de/a16/Ask16HP_Germany_SPRITE.png);
+        }
+        #logo{
+            background-image: url(http://sp.de.ask.com/de/a16/Ask16HP_Germany_SPRITE.png);
+                            background-position:-113px 0;
+                    }
+                                    .hcsa {
+                visibility:hidden;
+            }
+                    </style>
+
+</head>
+<body class="a16 firefox de_DE">
+<div class="c2n">
+    
+    <style type="text/css">
+        .a16 .c2n {
+            height: 103px;
+        }
+    </style>
+    
+        <div id="nav" class="ur">
+                
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+
+
+        <div id="a16Cnb">
+            <div class="a16nb">
+                <div class="lm">
+                                                                    <div class="mi smi">
+                    <div style="float:left;">Antworten</div>
+            <div style="clear:both;"></div>
+            </div>
+                        
+                                    <div class="mi ">
+                    <a onmousedown="uaction(this,{up:'747fB=vnkndi&X=oX7iia&Aj=m&lt=j+Lmn%dMPG&OG=h%ICP+E4JJ&EU=h&d3=7GyeSXRVn'});" style="display:block;" href="http://de.ask.com/pictures?qsrc=167&qo=channelNavigation&q=wat&o=312&l=dir">
+                <div class="tu" style="float:left;">Bilder</div>
+                <div style="clear:both;"></div>
+            </a>
+            </div>
+    
+                    
+                                    <div class="mi ">
+                    <a onmousedown="uaction(this,{up:'eda2q=AvAvGE&%=EXsDuV&O0=h&1l=vFwHg2hnCJ&mm=+bXcY2Kmjb&OK=w&9p=hLJ3c35kG'});" style="display:block;" href="http://de.ask.com/youtube?qsrc=167&qo=channelNavigation&q=wat&o=312&l=dir">
+                <div class="tu" style="float:left;">Video</div>
+                <div style="clear:both;"></div>
+            </a>
+            </div>
+    
+                    
+                </div>
+
+            </div>
+        </div>
+        <div style="clear:both;"></div>
+    </div>
+
+        
+<div id="top_search">
+    <div id="logo" class="ur">
+                    <a onmousedown="uaction(this,{up:'3bafJ=GJFcsR&P=VcRIwu&xh=h&JD=QO+JquGkqJ&jr=rTfAvBecZS&ig=6&5J=G28ZEQ8Im'});" title="http://de.ask.com" href="http://de.ask.com/?o=312&l=dir&qsrc=14137&qo=channelNavigation">
+                <span style="display:none">askLogo</span>
+            </a>
+                    
+    </div>
+        <div id="searchBox" name="searchBoxContainer" class="ur">
+        <form id="topform" action="/web">
+                <input id="qsrc_top" type="hidden" value="1" name="qsrc">
+                <input id="origin" type="hidden" value="312" name="o">
+                <input id="partnerID" type="hidden" value="dir" name="l">
+                <input id="qo" type="hidden" value="serpSearchTopBox" name="qo">
+                                <input id="top_q_comm"  data-ordinal="3" class="sb-wr ac_input" type="text" style="border-color: rgb(211, 211, 211);" value="wat" name="q" autocomplete="off" maxlength="2048">
+            <input id="sbut" class="cssButton" type="submit" value="Suchen">
+
+        </form>
+
+                    <div class="qatextserp"></div>
+            </div>
+</div>
+</div>
+    
+<div class="c2c fh">
+    <div id="midblock" class="c2 hcsa">
+        
+
+
+
+        <div class="ccmid" id="ccbar">
+        <div class="ccpd">
+            <div class="ccbox">Durch die Nutzung unserer Dienste erklären Sie sich damit einverstanden, dass wir Cookies setzen.                <a onmousedown="uaction(this,{up:'e972S=Dor4%ozhB&M=hzIHDl&Eh=9&7Z=Qn5isO69tM&et=uFIRA8bJ58&M2=b&4I=F%QtSZzJ'});" href="http://sp.de.ask.com/de/a11/docs/legal/cookies.shtml" style="color: #3300B5" class="ur">Mehr erfahren</a>
+            </div>
+            <div class="ccok">
+                <input id="ccok" class="ccButton ur" type="button" value="OK" onclick="ASKINT.cookiecompliance.setEUCookie(event,5,'OK')"></div>
+            <div style="clear:both;"></div>
+        </div>
+    </div>
+            <div id="magic1" class="ad-top"></div>
+<script>
+    window['backfillParam'] = window['backfillParam'] || {};
+            window['backfillParam']['pl_tmodn'] = 1;
+        ask.CSA.startShowSerpTimeout();
+</script>
+    
+
+<div id="teoma-results" class="rmwi content-mid" style="clear:both;">
+    <div id="lindm" class="stm">
+        
+                
+             
+                                    
+            <div class="wresult tsrc_tled">
+                                                                    <div class="ptbs ur">
+    <div id="r_t0">
+        <div>
+                                                  <div class="txt_lg b"><KW>WAT</KW> Werkstatt Anlagen Vertriebs GmbH</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b0">
+        <span id="r$ordinal_u" class="txt3" style="">www.watgmbh.de/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        Die <KW>WAT</KW> GmbH ist DER Partner f&#252;r KFZ-Werkst&#228;tten in S&#252;dbayern. Wir bieten 
+Ihnen -Herstellerunabh&#228;ngig- Hebeb&#252;hnen, Bremspr&#252;fst&#228;nde und vorbildlichen
+&nbsp;...
+                    <a id="r0_t2" href="http://www.watgmbh.de/" onmousedown="pk(this,{en:'te',b:'a001',up:'652fI=+BTN2jEdya&l=mLi22z&MT=L&kQ=3hZ320JoGbsy&bv=IAQcc&jK=N',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                         </div>
+</div>
+
+
+    <div class="relmod rrItem content-mid" id="mrRSM" data-boss="RLT">
+        <div id="rlTitle_0" class="sectionheader ">Entdecken Sie Antworten zu</div>
+
+        <div class="fl relMargin" style="max-width:320px;">
+                                                                                            
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'c4827=lDtLGO5s56lZ7aCi&I=fiXh7B&vd=Q&3s=DaI8msIU+QovB&Ed=hrnh&Ev=W',tp:'rst',ec:'16'})" href="http://de.ask.com/web?q=remove+wat&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">remove <b>wat</b></a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'e42fN=sNhqnyniaAZaqDl5&5=SZrt31&W5=i&11=Xl5XXwedRYWvb&4z=%Kee&zk=q',tp:'rst',io:'2',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+1200&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> 1200</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'6592a=CYD6XSK1mTwLpIik&3=wvbD7j&0A=B&gb=0Et5KFZ7zMaX2&jw=XTN7&yY=5',tp:'rst',io:'4',ec:'16'})" href="http://de.ask.com/web?q=angkor+wat&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">angkor <b>wat</b></a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'081f8=Bf+hK20GN6i4g%qs&9=oNlNAy&lC=U&hX=IV6pY70b7zp0F&GN=%sTb&6g=6',tp:'rst',io:'6',ec:'16'})" href="http://de.ask.com/web?q=ankor+wat&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">ankor <b>wat</b></a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'0ca2S=E9ivvhp+rwdE0A2Y&9=Eeyer5&6I=c&32=EteDVIMoe40Zc&Rl=IAxX&4a=4',tp:'rst',io:'8',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+care+22&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> care 22</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'060fZ=Q0o%IhryuR1YIqmn&i=bXhHUY&if=L&WV=6gXn5Z7bWXL1e&zl=aMh1&9j=1',tp:'rst',io:'10',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+plus+512+di+bedienungsanleitung&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> plus 512 di bedienungsanleitung</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'f9b2V=IVKMzOnGwMHo7z1W&f=mKMnU6&wS=q&zH=Poiy6mlxrr5lq&ZX=kPo4&Uq=E',tp:'rst',io:'12',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+care+10+bedienungsanleitung&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> care 10 bedienungsanleitung</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'9dffB=VfJi3yvd3%O9uKU5&k=wcuXeY&2K=%&F%=PDp%2lis9lHNG&02=tqJp&Xd=s',tp:'rst',io:'14',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+care+30+sd+bedienungsanleitung&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> care 30 sd bedienungsanleitung</a><br/>
+                    </div>
+                                                                </div>
+        <div class="fl" style="max-width:320px;">
+                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'6cc24=34cEq+RhUnbJZpw1&E=qgAhcD&5h=1&9Z=L+SzynWhpHGQV&rz=yP8H&RX=A',tp:'rst',io:'1',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+waschmaschine+wat+eco+10+di+a&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht waschmaschine <b>wat</b> eco 10 di a</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'8feff=BhUZs8WUbdrQnjMN&Y=CkdiRi&MQ=+N&TG=u96hLmC46IQD4&vb=mqbN&I2=I',tp:'rst',io:'3',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+eco+10+di&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> eco 10 di</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'ae0fP=uQ40m97o%HFOmg2d&Y=3B9lKC&%V=w%&JM=juoq4MocR%6Ph&YV=B9HZ&Yb=e',tp:'rst',io:'5',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+star+1200&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> star 1200</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'342ft=MtB8HeH0ughSKjFL&n=yh9NJj&Cn=ZU&Fh=egOYrzgNIZqqC&QJ=dWAf&Ds=+',tp:'rst',io:'7',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+platinum+32+di&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> platinum 32 di</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'224fd=tczkprGGfXi2xsJn&b=+mdEOr&ag=w5&Gb=friVVNeMFdSq3&7D=gPUD&IP=v',tp:'rst',io:'9',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+4350&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> 4350</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'786f5=z3WEyK6spIKgJHa7&q=SSpUZZ&Qy=+D&Ow=m3Ufupi%ISoRy&ND=IOB7&ag=e',tp:'rst',io:'11',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+1200+star+bedienungsanleitung&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> 1200 star bedienungsanleitung</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'368f1=6YI469Tk0zzCk24V&4=FLHzeU&Af=UC&2e=z2A2+qsXRW2F+&SJ=zTJF&5P=o',tp:'rst',io:'13',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+eco+10+di+test&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> eco 10 di test</a><br/>
+                    </div>
+                                                                                                                                        
+
+        
+
+        
+                    <div class="relItem ur ">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'5caf2=0ZTy3B7iZwP4krjP&7=y55EBe&ql=J0&kn=SqmaWSI96nKUS&mV=P4fj&ls=X',tp:'rst',io:'15',ec:'16'})" href="http://de.ask.com/web?q=bauknecht+wat+platinum+62&qsrc=466&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> platinum 62</a><br/>
+                    </div>
+                                    </div>
+    </div>
+
+    <div class="midTitle" style="padding:10px 30px 0 10px;">
+        <span class="b txt_lg sectionheader"></span>
+    </div>
+
+
+<div id="teoma-results" class="rmwi content-mid" style="clear:both;">
+    <div id="lindm" class="stm">
+        
+                
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t0">
+        <div>
+                                                  <div class="txt_lg b">Lost City of Angkor <KW>Wat</KW> - National Geographic</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b0">
+        <span id="r$ordinal_u" class="txt3" style="">video.nationalgeographic.com/video/ancient-mysteries/an...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        In 1860, missionaries came across ruins in the Cambodian jungle&#8212;and 
+discovered a lost city twice as large as Manhattan. more. X. Lost City of Angkor 
+<KW>Wat</KW>.
+                    <a id="r0_t2" href="http://video.nationalgeographic.com/video/ancient-mysteries/angkor-wat-temples" onmousedown="pk(this,{en:'te',b:'a002',up:'eacf%=o6jP%o0RARCMXF7Y&x=xMx84Z&mS=E&9M=U4+kNBi5kFqA&JQ=5ZgoY&55=S',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t1">
+        <div>
+                                                  <div class="txt_lg b">&#8222;<KW>Wat</KW> woll&#39;n se von mir?&#8220;: Wut-Per: Diesen Fehler hat der ZDF <KW>...</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b1">
+        <span id="r$ordinal_u" class="txt3" style="">www.focus.de/kultur/experten/froberg/deutschland-per-me...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        1. Juli 2014 <KW>...</KW> &quot;<KW>Wat</KW> woll&#39;n Se?!&quot;, so Mertesacker auf die durchaus zurecht kritischen Fragen 
+B&#252;chlers. Und er betonte: &quot;Glauben Sie unter den letzten 16 ist&nbsp;...
+                    <a id="r1_t2" href="http://www.focus.de/kultur/experten/froberg/deutschland-per-mertesacker-boris-buechler-zdf-wm-achtelfinale-dfb-algerien-wut-per-diesen-fehler-hat-der-zdf-reporter-gemacht_id_3958568.html" onmousedown="pk(this,{en:'te',b:'a003',up:'d0f2e=wQeYU97S9m9ttLb%&f=3E3bMO&0t=o&7k=fDsE5R8XJmXP&qP=uosts&uW=Q',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t2">
+        <div>
+                                                  <div class="txt_lg b">&quot;<KW>Wat</KW> Arun&quot; in Bangkok: | thaizeit.de - Portal f&#252;r Thailand Reisen <KW>...</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b2">
+        <span id="r$ordinal_u" class="txt3" style="">www.thaizeit.de/thailand-themen/news/artikel/wat-arun-i...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        <KW>Wat</KW> Arun ist nach dem hindischen Gott Aruna, dem Gott der Morgenr&#246;te benannt, 
+und symbolisiert das buddhistische Universum. Er liegt im Ortsteil Bangkok Yai&nbsp;...
+                    <a id="r2_t2" href="http://www.thaizeit.de/thailand-themen/news/artikel/wat-arun-in-bangkok-tempel-aus-porzellanscherben.html" onmousedown="pk(this,{en:'te',b:'a004',up:'cabf1=LyWbLUjJqmH+1bVS&R=6jYFCf&iD=e&%e=VDVi3cNyOhEA&rt=2uc4E&7e=x',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t3">
+        <div>
+                                                  <div class="txt_lg b">Aktuelle Nachrichten aus Wattenscheid | WAZ.de</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b3">
+        <span id="r$ordinal_u" class="txt3" style="">www.derwesten.de/staedte/wattenscheid/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        <KW>WAT</KW> sch&#246;n - <KW>WAT</KW> sch&#228;big. Neues Halteverbot mindert R&#252;ckstaus. Aldi nimmt 
+Seife mit Moschee nach Protest aus dem Sortiment. Religion. Aldi nimmt Seife 
+mit&nbsp;...
+                    <a id="r3_t2" href="http://www.derwesten.de/staedte/wattenscheid/" onmousedown="pk(this,{en:'te',b:'a005',up:'7c02F=6fV8ZMOLIeR7zTWv&S=no9jlz&P9=f&SU=qGfXK9WZVUMA&9z=kUGsj&JF=5',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t4">
+        <div>
+                                                  <div class="txt_lg b">Judo Club <KW>WAT</KW>-Stadlau</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b4">
+        <span id="r$ordinal_u" class="txt3" style="">www.judo4kids.at/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        In der Vereinswertung &#252;ber beide Tage erreichte der <KW>WAT</KW> Stadlau den 4. Platz, 
+am ersten Tag mit den K&#228;mpfern der U18, U21 und AK sogar den 3. Platz.
+                    <a id="r4_t2" href="http://www.judo4kids.at/" onmousedown="pk(this,{en:'te',b:'a006',up:'04afS=JPn5sF2DSED6a05O&L=oJVirU&g1=D&1c=2v2iSA9znacC&LT=QxfZH&+2=Z',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t5">
+        <div>
+                                                  <div class="txt_lg b"><KW>wat</KW> 2014 vom 29.-30. September in Karlsruhe: DVGW</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b5">
+        <span id="r$ordinal_u" class="txt3" style="">www.dvgw.de/presse/pressemitteilungen/2014/dvgw-pressem...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        15. Juli 2014 <KW>...</KW> Wasserfachlichen Aussprachetagung (<KW>wat</KW> 2014). Das wichtigste 
+deutschsprachige Forum zu aktuellen ordnungspolitischen und technischen&nbsp;...
+                    <a id="r5_t2" href="http://www.dvgw.de/presse/pressemitteilungen/2014/dvgw-pressemitteilung/meldung/20418/liste/36250/link//7bf9e2823f8c48a9e63877f8f3c90df3/" onmousedown="pk(this,{en:'te',b:'a007',up:'ed12W=%MTD42gvPdQ5HBqJ&1=Qpztx7&ui=c&WP=BkQ6Xw1l92mc&mq=rKW4X&OW=o',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t6">
+        <div>
+                                                  <div class="txt_lg b">Fivers <KW>WAT</KW> Margareten Handballclub | Handball Faszination</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b6">
+        <span id="r$ordinal_u" class="txt3" style="">www.fivers.at/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        HBA Fivers <KW>WAT</KW> Margareten - UHC SISPO G&#228;nserndorf ... 2, HC Fivers <KW>WAT</KW> 
+Margareten, 18, 28. 3, SG INSIGNIS Handball WESTWIEN, 18, 28. 4, Bregenz&nbsp;...
+                    <a id="r6_t2" href="http://www.fivers.at/" onmousedown="pk(this,{en:'te',b:'a008',up:'589f2=46rK1YPOEY+Mcjk1&1=KJDNOD&vK=2&tZ=ZTdz505lPBTV&pj=el+qQ&u+=r',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t7">
+        <div>
+                                                  <div class="txt_lg b">Studium: Universit&#228;t Potsdam - Wirtschafts- und <KW>...</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b7">
+        <span id="r$ordinal_u" class="txt3" style="">www.uni-potsdam.de/wat/studium.html</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        20. Mai 2014 <KW>...</KW> Studienordnung. Studienordnung 2011. Modulhandbuch <KW>WAT</KW>. Studienordnung 
+2008. Studienordnung. Studienordnung 2004. Studienordnung.
+                    <a id="r7_t2" href="http://www.uni-potsdam.de/wat/studium.html" onmousedown="pk(this,{en:'te',b:'a009',up:'6422O=19leqDMQH5l%6FYx&V=%Y8U6F&Me=1&uQ=5lpQVMCQCu0q&m%=6Hr0B&uY=z',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t8">
+        <div>
+                                                  <div class="txt_lg b">Malerfachbetrieb Retzlaff</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b8">
+        <span id="r$ordinal_u" class="txt3" style="">www.retzlaff-wat.de/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        Harald Retzlaff - Gollheide 6 - 44866 Bochum - Wattenscheid Telefon: 02327/69 
+00- 0 - Telefax: 02327/69 00-10 - info@retzlaff-<KW>wat</KW>.de.
+                    <a id="r8_t2" href="http://www.retzlaff-wat.de/" onmousedown="pk(this,{en:'te',b:'a010',up:'868fH=tESp+3svxx3uQpsK&m=l5nTWc&gz=I&iK=x4gmmFl+RNpK&a2=0bFEP&lo=a',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                        </div>
+</div>
+
+
+
+
+<div id="magic2"></div>
+<script>
+    window['backfillParam'] = window['backfillParam'] || {};
+            window['backfillParam']['pl_bmodn'] = 5;
+    </script>
+    <div class="relmod rrItem content-mid" id="mrRSM" data-boss="RLT">
+                    <div id="rlTitle_1" class="sectionheader">Entdecken Sie weitere Antworten zu</div>
+                <div class="fl relMargin" style="max-width:320px;">
+                                                
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'21323=N7M2x8g4mdtUPYLOLeo&I=AJqA4I&IC=A&FA=XXFjppOoL+rty&y2=Vz3F&9B=y',tp:'rsb',ec:'8'})" href="http://de.ask.com/web?q=remove+wat&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">remove <b>wat</b></a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'7bc2y=ZG1o74phjvv0+CGLuec&w=I69fzr&h%=w&K4=ke8HF7CFSeBDw&2y=YoUy&4h=P',tp:'rsb',io:'2',ec:'8'})" href="http://de.ask.com/web?q=bauknecht+wat+1200&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> 1200</a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'bc52N=NdE1PsrfWMWiFKurTep&z=ZWJEJ%&gV=A&jq=sbxs9XUPIZLaJ&Ey=UXop&oc=c',tp:'rsb',io:'4',ec:'8'})" href="http://de.ask.com/web?q=angkor+wat&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">angkor <b>wat</b></a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'22e2v=vvXAW6DHqM1By7sB+Xf&A=F1swNA&VE=4&7Y=43HTAao92BCnU&FN=ZZP0&m7=1',tp:'rsb',io:'6',ec:'8'})" href="http://de.ask.com/web?q=ankor+wat&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">ankor <b>wat</b></a><br/>
+                    </div>
+                                                                </div>
+        <div class="fl" style="max-width:320px;">
+                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'ef72s=nf9UHHcl6eZD7qP0A92&j=Z4BD1u&r8=a&ST=S3jbM5UQzmYtN&j0=sem5&eJ=s',tp:'rsb',io:'1',ec:'8'})" href="http://de.ask.com/web?q=bauknecht+waschmaschine+wat+eco+10+di+a&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">bauknecht waschmaschine <b>wat</b> eco 10 di a</a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'6202n=EdtGl3r19X79xtPlqyV&x=bQoICC&94=b&ms=FqaFqR7a6yxI+&TW=Btjl&gP=O',tp:'rsb',io:'3',ec:'8'})" href="http://de.ask.com/web?q=bauknecht+wat+eco+10+di&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> eco 10 di</a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'ba923=zacG+RzmQCCS81KqUXc&0=z66wTJ&cc=m&kW=bt1wjMNrjm6lM&Bk=DrWC&H9=i',tp:'rsb',io:'5',ec:'8'})" href="http://de.ask.com/web?q=bauknecht+wat+star+1200&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> star 1200</a><br/>
+                    </div>
+                                                                                            
+                        
+
+        
+
+        
+                    <div class="relItem ur">
+                        <a class="txt4 title" onmousedown="pk(this,{en:'r1',b:'rlt',up:'3922+=nSBGmUQcq1Mz7MN1g5+&p=kyWO3z&Xm=W&xy=bpy2a8IQ36mEl&IY=PTqC&Mq=b',tp:'rsb',io:'7',ec:'8'})" href="http://de.ask.com/web?q=bauknecht+wat+platinum+32+di&qsrc=467&o=312&l=dir&qo=relatedSearchNarrow">bauknecht <b>wat</b> platinum 32 di</a><br/>
+                    </div>
+                                    </div>
+    </div>
+  
+         <div id="paging" class="p20">
+                            <div class="" style="float:left;padding:1px 8px 0 0;">
+                                        <a class="txt3 title l_nu" href="http://de.ask.com/web?q=wat&page=6&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir">&#171;&#160;Zurück</a>
+                </div>
+                        <div style="margin: 0 10px 0 0" class="dsi">
+                                                            <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=2&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">2</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=3&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">3</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=4&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">4</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=5&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">5</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=6&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">6</a></div>
+                
+                                                <div class="pgc pgcsel"><div class="pg">7</div></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=8&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">8</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=9&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">9</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=10&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">10</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=wat&page=11&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">11</a></div>
+                
+                        </div>
+                            <div style="padding:1px 0 0 8px;float:left">
+                                        <a class="txt3 title l_nu" href="http://de.ask.com/web?q=wat&page=8&amp;qid=A0DE4C3E54907ECB20C7548F8CC699A1&amp;qsrc=0&amp;o=312&amp;l=dir">Weitere&#160;&#187;</a>
+                </div>
+                        <div class="cl"></div>
+         </div>
+  
+    </div>
+    <div id="rightblock" class="c1 hcsa">
+        
+<div class="rrmod content-right">
+    <div class="sectionheader">Helpful Resources</div>
+
+                
+                        
+        <div class="wresult tsrc_tled">
+                            <div class="delta-rr ptbs rr-div ur">
+    <div id="r_t0">
+                    <span class="txt_lg b"><KW>Wat</KW> Tyler Country Park</span>
+            </div>
+    <div class="durl" id="r_b0">
+        <span id="r0_u">www.wattylercountrypark.org.uk/</span>
+    </div>
+    <div class="abstract txt3" id="r0_a">
+        <KW>Wat</KW> Tyler Country Park. So much to enjoy... <KW>Wat</KW> Tyler Country Park offers 125 
+acres of stunning parkland in the heart of the beautiful south Essex marshes in&nbsp;...  <a id="r0_t2" href="http://www.wattylercountrypark.org.uk/" onmousedown="pk(this,{en:'rrd',b:'rrd',up:'1db2w=q2J4Z9NMo+&Y=eLa9N&DF=E&r2=d21yEyGfJAkJ&EJ=v6JeW&%4=D',ec:'3',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>     </div>
+</div>                    </div>
+
+                    
+                        
+        <div class="wresult tsrc_tled">
+                            <div class="delta-rr ptbs rr-div ur">
+    <div id="r_t1">
+                    <span class="txt_lg b"><KW>WAT</KW> Technik Start</span>
+            </div>
+    <div class="durl" id="r_b1">
+        <span id="r1_u">www.wat-technik.de/</span>
+    </div>
+    <div class="abstract txt3" id="r1_a">
+        Der Name <KW>WAT</KW> ist ein Garant f&#252;r Kundenn&#228;he und Professionalit&#228;t. <KW>WAT</KW> ist Ihr 
+zuverl&#228;ssiger Partner f&#252;r innovative Individuall&#246;sungen rund um die Themen&nbsp;...  <a id="r1_t2" href="http://www.wat-technik.de/" onmousedown="pk(this,{en:'rrd',b:'rrd',up:'a2d2K=Al20WaSq9X&Q=CfFNT&VS=6&f6=+dyohxWT6li%&Kg=cgwAk&8z=K',ec:'3',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>     </div>
+</div>                    </div>
+
+                    
+                        
+        <div class="wresult tsrc_tled">
+                            <div class="delta-rr ptbs rr-div ur">
+    <div id="r_t2">
+                    <span class="txt_lg b">CHARIVARI Wattenscheid</span>
+            </div>
+    <div class="durl" id="r_b2">
+        <span id="r2_u">www.charivari-wat.de/</span>
+    </div>
+    <div class="abstract txt3" id="r2_a">
+        Herzlich Willkommen auf der Seite des CHARIVARI im Bahnhof Wattenscheid. 
+Pub, Whiskybar, Biergarten. Das Charivari ist von allem etwas. Genie&#223;en Sie ihr
+&nbsp;...  <a id="r2_t2" href="http://www.charivari-wat.de/" onmousedown="pk(this,{en:'rrd',b:'rrd',up:'bff2S=kBVRs9x0rC&h=Um52U&OZ=9&ZK=030QQ877lIa%&Jp=O5dvF&H0=s',ec:'3',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>     </div>
+</div>                    </div>
+
+            </div>
+    </div>
+</div>
+<div class="clr"></div>
+<div id="shadow"></div>
+<div id="serp_ftr" class="txt2">
+    <div class="pb10 ur">
+    
+    <a onmousedown="uaction(this,{up:'7512U=xGJlK1Nwe&i=23%zOM&g0=I&B1=EmFKmbNZsz&2J=ASAvMJaNk9&Qu=y&tT=xCFK9wO5u'});" href="http://sp.de.ask.com/de/a11/docs/legal/privacy.shtml" class="link grey ur" onmousedown="return ct(this,43491)" target="_top">Datenschutz</a>
+    <span class="separator">&middot;</span>
+    <a onmousedown="uaction(this,{up:'0b02F=mjx9iaRix&Z=jRaLkB&3I=s&rv=SlwY7pFXJ2&Vq=lzuX4F7Y%i&Mo=S&SQ=arhHvTF4B'});" href="http://sp.de.ask.com/de/a11/docs/legal/terms.shtml" class="link grey ur" onmousedown="return ct(this,43491)" target="_top">Nutzungsbedingungen</a>
+        <span class="pl30">&#169; 2015 Ask.com</span>
+</div>
+</div>
+
+            <script src="/st/c/js/ask_web-ae7f613049a9abb43eaa9e4461ff2121a7534454.js" type="text/javascript"></script>
+        
+
+
+<script type="text/javascript">
+    ASKINT.ssCfg = (function(){
+
+        return {
+                                        "topOffset":2,
+                                    
+            "channel":"web",
+            "path":"web",
+            "disableTurnOffLink":"true",
+            "disableSS": false,
+            "server":"ssde.dub.ask.com/solr",
+            "ldomain":"http://de.ask.com/",
+            "ssBold":"'false'",
+            "clearSearchHistory":"",
+            "max":"",
+            "ssFromQueryHistory":"false",
+            "queryHistory":"",
+            "txtTurnOffSuggestions": "Schalten Sie Vorschläge",
+            "queryHistoryContentColor":"",
+            "ssContentColor":"'false'",
+            "ssContentColorCode": "",
+            "ssItems":"",
+            "cid":"ask",
+            "token":"c3dcb4c4daa0ab7469f227817bd411b0",
+            "lang":"de",
+            "appendParams":(function(){
+                var appendParams = new Array();
+
+                return appendParams;
+            })()
+        };
+    })();
+
+</script>
+            
+<script type="text/javascript">
+    var WZInfo = window.WZInfo || {};
+    WZInfo.pickRedirectPrefix = "http://wzeu.ask.com/r?t=p&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&id=A0DE4C3E54907ECB20C7548F8CC699A1&q=wat&p=7&qs=0&ac=24&g=26f2+%+TZiIZQL&ocq=0&ocp=0&ocu=0&ocf=0&qa1=0&cu.wz=0&en=&io=&b=&tp=&ec=&ex=&pt=&u=";
+    WZInfo.pickNonRedirectPrefix = "http://wzeu.ask.com/i/b.html?t=p&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&id=A0DE4C3E54907ECB20C7548F8CC699A1&q=wat&p=7&qs=0&ac=24&g=c062rqTAob6Nne&ocq=0&ocp=0&ocu=0&ocf=0&qa1=0&cu.wz=0&en=&io=&b=&tp=&ec=&ex=&pt=&u=";
+    WZInfo.ctRedirectPrefix = "http://wzeu.ask.com/r?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&ti=1&ai=&u=";
+    WZInfo.ctPrefix = "http://wzeu.ask.com/i/b.html?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&ti=1&ai=&u=";
+    WZInfo.impressionURL = "http://wzeu.ask.com/i/i.gif?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&ti=2&ai=&ord=5973089&cu.wz=0";
+
+                var UInfo = window.UInfo || {};
+        UInfo.pl = "3fd2TM=6Sr&n7Y=wBJSS+kfvwJpWkk&xb=XcYSS&KZ=CUojR%pSOyg7WrFX6rK1xvtu%plaSCSI&6P=cU7cild&2e=Sy2fZQkzLx0fMovR8&lyx+=mq-pT&Krz=U%-dNf&UK=q3p8K+&yrK=Pmtj-d0Ew.ma6yxxN-CUb7u&Yh=P+uiDdjNH0g&JC=3X%4e&KLx=PQ&ke=Jnf&kl=9&vr=&4zC=&g=0QP";
+        </script>
+
+
+                
+                    <script type="text/javascript">
+var _AnemoneParams2 = {
+	appId: 'T2_AskInt',
+	appVersion: 'ff36838',
+	appDate: '2015-01-14T10:13:00Z',
+    serverName: 'askint037dub.io.askjeeves.info',
+	uniqueUser: '997A092C-6A97-4676-A334-897CF87FAAFA',
+	backFillRequired: true,
+    suppressCookies: false,
+	eventId: 'F9B86A64-DC33-4C90-A5AB-6A8336D1E51F',
+    browserLanguage: 'en-us',
+    maxSession: 30,
+	domain: '.ask.com',
+	url: '/ulog',
+	logPageView: false
+};
+</script>
+<script type="text/javascript" src="/st/c/js/ask_unified-846e61d9870534b40a64bd4c1252bf1d0f50c43f.js"></script>
+            <script type="text/javascript">
+        var ask = ask || {};
+
+        (function(){
+            var _timedOut = false,
+                    _fullPayload = window.backfillParam || {},                     _timeFromSerpStart = null,
+                                _adsLoggingTimeout = null,
+                    _dynamicLoggingTimeout = null;
+
+        
+
+            try{
+                _timeFromSerpStart = ((new Date() - ask.CSA.startTime) - ask.CSA.showSerpStartTime);
+                            _adsLoggingTimeout = parseInt('2000') - _timeFromSerpStart;
+                _dynamicLoggingTimeout = Math.max(_adsLoggingTimeout, 1);
+            }catch(e){
+                            _dynamicLoggingTimeout = 2000;
+            }
+
+            function mixinCSAAdData(payload){
+                var externalData = {
+                    csaInfo: {
+                                            domTime: ask.CSA.domReadyTime ? ask.CSA.domReadyTime : 0,
+                                            adsResponseTime: ask.CSA.responseTime ? ask.CSA.responseTime : 0,
+                                            adsShownTime: ask.CSA.adsShownTime ? ask.CSA.adsShownTime : 0,
+                                            serpShownTime: ask.CSA.serpShownTime ? ask.CSA.serpShownTime : 0,
+                                            supplement: _timedOut,
+                                            serpTimedOut: !!ask.CSA.showSerpTimeoutFired,
+                                            serpTimeoutStartTime: ask.CSA.showSerpStartTime ? ask.CSA.showSerpStartTime : 0,
+                                            pageReadyTime: ask.CSA.atfReadyTime ? ask.CSA.atfReadyTime : 0,
+                                            dynamicTimeout: _dynamicLoggingTimeout
+                    }
+                };
+                if (ENABLE_AD_CONTENT_RATIO) {
+                                    externalData.csaInfo.viewportHeight = ask.CSA.viewportHeight ? ask.CSA.viewportHeight : 0;
+                                    externalData.csaInfo.viewportWidth = ask.CSA.viewportWidth ? ask.CSA.viewportWidth : 0;
+                                    externalData.csaInfo.adContentRatio = ask.CSA.adContentRatio ? ask.CSA.adContentRatio : 0;
+                                    externalData.csaInfo.csaHeight = ask.CSA.csaHeight ? ask.CSA.csaHeight : 0;
+                                    externalData.csaInfo.csaWidth = ask.CSA.csaWidth ? ask.CSA.csaWidth : 0;
+                                    externalData.csaInfo.centerRailHeight = ask.CSA.centerRailHeight ? ask.CSA.centerRailHeight : 0;
+                                    externalData.csaInfo.centerRailWidth = ask.CSA.centerRailWidth ? ask.CSA.centerRailWidth : 0;
+                                    externalData.csaInfo.rightRailHeight = ask.CSA.rightRailHeight ? ask.CSA.rightRailHeight : 0;
+                                    externalData.csaInfo.rightRailWidth = ask.CSA.rightRailWidth ? ask.CSA.rightRailWidth : 0;
+                }
+                payload.pl_time = ask.CSA.responseTime ? ask.CSA.responseTime : 0;
+                payload.pl_tnum = ask.CSA.numTopAds ? ask.CSA.numTopAds : 0;
+                payload.pl_bnum = ask.CSA.numBottomAds ? ask.CSA.numBottomAds : 0;
+                payload.pl_rrnum = ask.CSA.numRightAds ? ask.CSA.numRightAds : 0;
+                payload.pl_rnum = parseInt(payload.pl_tnum) + parseInt(payload.pl_bnum) + parseInt(payload.pl_rrnum);
+
+                try{
+                    mixinNavigationTimingInfo(externalData);
+
+                    payload.pl_edata = JSON.stringify(externalData);
+                }catch(e){
+                                }
+            }
+
+                        function mixinNavigationTimingInfo(eData) {
+                if (typeof window.performance === 'undefined') {
+                    return;
+                }
+
+                var navInfo = eData["navInfo"] = {},
+                    csaInfo = eData.csaInfo,
+                    timing = window.performance.timing,
+                    navigation = window.performance.navigation,
+                    navStart = timing.navigationStart;
+
+                navInfo.redirectCount = navigation.redirectCount;
+                navInfo.navType = navigation.type;
+                csaInfo.csaStartTime = (ask.CSA.startTime.getTime() - navStart);
+
+                for (var k in timing) {
+                    if (timing.hasOwnProperty(k)) {
+                                                navInfo[k] = Math.max((timing[k] - navStart), 0);
+                    }
+                }
+            }
+
+            if (ask && ask.CSA) {
+                ask.CSA.addCSALoadCallback(function(){
+                                                    var payload = _timedOut ? { pl_supplement: true } : _fullPayload;
+                    if(typeof ask.CSA.calculateAdContentMetrics === "function") {
+                        ask.CSA.calculateAdContentMetrics();
+                    }
+                    mixinCSAAdData(payload);
+
+                    logBackfillEvent(payload);
+                }, function(){
+                                    _timedOut = true;
+
+                    logBackfillEvent(_fullPayload);
+                }, _dynamicLoggingTimeout);
+            } else {
+                logBackfillEvent(_fullPayload);
+            }
+
+            function logBackfillEvent(payload) {
+                if (ask && typeof ask.scriptLoader != "undefined") {
+                                        ask.scriptLoader.ready("unified", logEvent);
+                } else {
+                                        logEvent();
+                }
+
+                function logEvent(){
+                    payload['anxi'] = JSUtil.defaultVal(_AnemoneParams2.eventId, '');
+                    _Anemone.logEvent('BackFill', payload);
+                }
+            }
+        })();
+    </script>
+            <script type="text/javascript">
+    var st = new Image();
+    st.height = 1;
+    st.width = 1;
+    st.id = "SessionTracker";
+    st.src = "http://wzeu.ask.com/i/i.gif?t=v&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&p=%2Fweb&rf=0&ord=5931844&cu.wz=0";
+</script>
+<noscript>
+    <img src="http://wzeu.ask.com/i/i.gif?t=v&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d02db&ip=5dce413f&p=%2Fweb&rf=0&ord=5931844&cu.wz=0" height=1 width=1 id="SessionTracker" />
+</noscript>
+            
+    <span style="display:none">
+    <script type="text/javascript">
+        function addEvent(obj, evType, fn){
+            if (obj.addEventListener){
+                obj.addEventListener(evType, fn, false);
+                return true;
+            } else if (obj.attachEvent){
+                var r = obj.attachEvent("on"+evType, fn);
+                return r;
+            } else {
+                return false;
+            }
+        }
+
+        function comScore(){
+            var host = (("https:" == document.location.protocol) ? "https://sb" : "http://b");
+            var headTag = document.getElementsByTagName("head")[0];
+            var scanalytics = document.createElement("script");
+            scanalytics.setAttribute("type", "text/javascript");
+            scanalytics.setAttribute("async", "true");
+            scanalytics.setAttribute("src", host + ".scorecardresearch.com/beacon.js");
+            scanalytics.onload = scanalytics.onreadystatechange = function(){
+                try {
+                    COMSCORE.beacon({
+                        c1:2,
+                        c2:6034776,
+                        c3:"",
+                        c4:"",
+                        c5:"",
+                        c6:"",
+                        c15:""
+                    });
+                } catch(err) {
+                }
+            };
+            headTag.appendChild(scanalytics);
+        }
+        addEvent(window, 'load', comScore);
+        </script>
+    <noscript> <img src="http://b.scorecardresearch.com/p?c1=2&c2=6034776&c3=&c4=&c5=&c6=&c15=&cj=1" /> </noscript>
+</span>
+
+<script type="text/javascript">
+    var ask = ask || {},
+        sp = sp || {};
+    sp.site = '';
+    sp.gls_top = parseInt('$gslTop');
+    sp.gls_bottom = parseInt('$gslBottom');
+    sp.ad_count = (window['google_ads']) ? window['google_ads'].length : (sp.gls_top + sp.gls_bottom);
+    ask.adsPixelTimeout = 2000;
+
+    function initPixel(cb, cbTimeout) {
+        if (ask && ask.CSA) {
+            ask.CSA.addCSALoadCallback(function() {
+                cb(true);
+            }, function(){
+                cbTimeout();
+            }, ask.adsPixelTimeout);
+        } else {
+            cb(false);
+        }
+    }
+
+    function createDummyAdNodes(){
+        var numAds = (ask.CSA.numTopAds + ask.CSA.numBottomAds),
+            wrapperId = "ad_clone_wrapper",
+            adTemplate = "<div class='spl_ad_plus'><a/></div>",
+            elem = "<div id='" + wrapperId + "'/>";
+
+        $j(document.body).append(elem);
+        var wrapper = $j("#" + wrapperId)
+        wrapper.css("visibility", "hidden");
+
+        for(var i=0; i<numAds; i++) {
+            wrapper.append(adTemplate);
+        }
+    }
+
+    $j(document).ready(function(){
+        if (ask && ask.CSA && typeof ask.CSA.domReady == "function") {
+            ask.CSA.domReady();
+        }
+    });
+</script>
+
+
+
+
+
+
+
+    
+    
+</body>
+</html>
+
+    
+

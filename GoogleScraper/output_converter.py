@@ -25,16 +25,20 @@ class JsonStreamWriter():
     def __init__(self, filename):
         self.file = open(filename, 'wt')
         self.file.write('[')
+        self.last_object = None
 
     def write(self, obj):
-        json.dump(obj, self.file, indent=2, sort_keys=True, ensure_ascii=True)
-        self.file.write(',')
+        if self.last_object:
+            self.file.write(',')
+        json.dump(obj, self.file, indent=2, sort_keys=True)
+        self.last_object = id(obj)
 
-    def __del__(self):
+    def end(self):
         # remove the last written commata
         # self.file.seek(-1, os.SEEK_END)
         # self.file.truncate()
         self.file.write(']')
+        self.file.close()
 
 
 def init_outfile(force_reload=False):
