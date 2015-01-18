@@ -78,6 +78,8 @@ def get_some_words(n=100):
 
     if os.path.exists('/usr/share/dict/words'):
         words = open('/usr/share/dict/words').read().splitlines()
+        if n < len(words):
+            words = words[:n]
     else:
         words = random_words(n=n)
 

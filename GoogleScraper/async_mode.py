@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import datetime
 from urllib.parse import urlencode
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 from GoogleScraper.http_mode import get_GET_params_for_search_engine, headers
@@ -7,6 +8,7 @@ from GoogleScraper.scraping import get_base_search_url_by_search_engine
 from GoogleScraper.utils import get_some_words
 from GoogleScraper.config import Config
 from GoogleScraper.output_converter import store_serp_result
+from GoogleScraper.database import SearchEngineResultsPage
 
 class AsyncHttpScrape():
     
@@ -35,14 +37,28 @@ class AsyncHttpScrape():
             response = yield from aiohttp.request('GET', self.base_search_url + urlencode(self.params),
                                                         params=self.params, headers=self.headers)
 
+            self.requested_at = datetime.datetime.utcnow()
+
             if response.status == 200:
                 body = yield from response.read_and_close(decode=False)
                 self.parser = self.parser(body)
-                return self.parser
+                return self
 
             return None
             
         return request
+
+
+    def get_serp_obj(self):
+        return SearchEngineResultsPage(
+            search_engine_name=self.search_engine,
+            scrapemethod='http-async',
+            page_number=self.page_number,
+            requested_at=self.requested_at,
+            query=self.query,
+            effective_query=self.parser.effective_query,
+            num_results_for_keyword=self.parser.num_results,
+        )
 
 
 class AsyncScrapeScheduler():
@@ -82,23 +98,28 @@ class AsyncScrapeScheduler():
 
     def run(self):
 
-        self.get_requests()
 
-        self.results = self.loop.run_until_complete(asyncio.wait([r()() for r in self.requests]))
+        while True:
+            self.get_requests()
 
-        for task in self.results[0]:
-            parser = task.result()
+            if not self.requests:
+                break
 
-            if parser:
-                serp = parse_serp(parser=parser)
+            self.results = self.loop.run_until_complete(asyncio.wait([r()() for r in self.requests]))
 
-                if serp.num_results > 0:
-                    self.session.add(serp)
-                    self.session.commit()
-                else:
-                    return False
+            for task in self.results[0]:
+                scrape = task.result()
+                serp = scrape.get_serp_obj()
+                parser = scrape.parser
 
-                store_serp_result(serp)
+                if parser:
+                    serp = parse_serp(serp=serp,parser=parser)
+
+                    if serp.num_results > 0:
+                        self.session.add(serp)
+                        self.session.commit()
+
+                    store_serp_result(serp)
 
 
 if __name__ == '__main__':

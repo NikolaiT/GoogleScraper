@@ -417,6 +417,7 @@ def main(return_results=False, parse_cmd_line=True):
         else:
             raise InvalidConfigurationException('No such scrapemethod {}'.format(Config['SCRAPING'].get('scrapemethod')))
 
+
         scraper_search.stopped_searching = datetime.datetime.utcnow()
         session.add(scraper_search)
         session.commit()

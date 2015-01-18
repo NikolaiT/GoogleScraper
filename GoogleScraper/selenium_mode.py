@@ -17,6 +17,7 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
     from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
+    from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 except ImportError as ie:
     print(ie)
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
@@ -24,6 +25,7 @@ except ImportError as ie:
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, SeleniumMisconfigurationError, get_base_search_url_by_search_engine, MaliciousRequestDetected
+from GoogleScraper.user_agents import random_user_agent
 
 logger = logging.getLogger('GoogleScraper')
 
@@ -222,7 +224,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                         '--proxy-auth={}:{}'.format(self.proxy.username, self.proxy.password)
                     )
 
-            self.webdriver = webdriver.PhantomJS(service_args=service_args)
+            dcap = dict(DesiredCapabilities.PHANTOMJS)
+            dcap["phantomjs.page.settings.userAgent"] = random_user_agent()
+
+            self.webdriver = webdriver.PhantomJS(service_args=service_args, desired_capabilities=dcap)
             return True
         except WebDriverException as e:
             logger.error(e)
@@ -286,7 +291,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.webdriver.get(self.starting_point)
 
-
     def _get_search_input_field(self):
         """Get the search input field for the current search_engine.
 
@@ -305,7 +309,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 or the handle to the search input field.
         """
         def find_visible_search_input(driver):
-            print(driver.page_source)
             input = driver.find_element(*self._get_search_input_field())
             if input.is_displayed():
                 return input
@@ -507,11 +510,19 @@ class DuckduckgoSelScrape(SelScrape):
     """
     Duckduckgo is a little special since new results are obtained by ajax.
     next page thus is then to scroll down.
+
+    Furthermore duckduckgo.com doesn't seem to work with Phantomjs. Maybe they block it, but I
+    don't know how ??!
+
+    It cannot be the User-Agent, because I already tried this.
     """
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        SelScrape.__init__(self, *args, **kwargs)
         self.largest_id = 0
+
+        if self.browser_type == 'phantomjs':
+            self.startable = False
 
     def _goto_next_page(self):
         super().page_down()
@@ -543,14 +554,14 @@ class DuckduckgoSelScrape(SelScrape):
 
 class BlekkoSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        SelScrape.__init__(self, *args, **kwargs)
         
     def _goto_next_page(self):
         pass
 
 class AskSelScrape(SelScrape):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        SelScrape.__init__(self, *args, **kwargs)
 
     def wait_until_serp_loaded(self):
         

@@ -61,14 +61,13 @@
     - reade 20 minutes about asyncio built in moduel and decide whether if feets my needs [done]
 
 
-
-19.01.2015
+18.01.2015
 
     - add four different examples:
         - a basic usage [done]
-        - using selenium mode
-        - using http mode
-        - using async mode
+        - using selenium mode [done]
+        - using http mode [done]
+        - using async mode [done]
         - scraping with a keywords.py module
         - scraping images [done]
         - finding plagiarized content

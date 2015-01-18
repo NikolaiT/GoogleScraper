@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import random
+
 # Several different User-Agents to diversify the requests.
 # Keep the User-Agents updated. Last update: 13th November 2014
 # Get them here: http://techblog.willshouse.com/2012/01/03/most-common-user-agents/
@@ -84,3 +86,7 @@ user_agents = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.10; rv:35.0) Gecko/20100101 Firefox/35.0',
     'Mozilla/5.0 (X11; Linux x86_64; rv:31.0) Gecko/20100101 Firefox/31.0',
     'Mozilla/5.0 (Windows NT 6.1; rv:35.0) Gecko/20100101 Firefox/35.0']
+
+
+def random_user_agent():
+    return random.choice(user_agents)

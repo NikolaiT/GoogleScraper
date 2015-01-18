@@ -150,6 +150,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         super().instance_creation_info(self.__class__.__name__)
 
+        if self.search_engine == 'blekko':
+            logger.critical('blekko doesnt support http mode.')
+            self.startable = False
+
 
     def set_proxy(self):
         """Setup a socks connection for the socks module bound to this instance.
@@ -207,7 +211,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         return online
 
 
-    def handle_request_denied(self, status_code):
+    def handle_request_denied(self, status_code=''):
         """Handle request denied by the search engine.
 
         This is the perfect place to distinguish the different responses
