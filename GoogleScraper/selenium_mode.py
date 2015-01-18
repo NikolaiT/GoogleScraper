@@ -56,7 +56,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'bing': '.sb_pagN',
         'yahoo': '#pg-next',
         'baidu': '.n',
-        'ask': '#paging div a.txt3.l_nu'
+        'ask': '#paging div a.txt3.l_nu',
+        'blekko': '',
+        'duckduckgo': ''
     }
 
     input_field_selectors = {
@@ -293,7 +295,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """
         return self.input_field_selectors[self.search_engine]
 
-    def _wait_until_search_input_field_appears(self, max_wait=5):
+    def _wait_until_search_input_field_appears(self, max_wait=10):
         """Waits until the search input field can be located for the current search engine
 
         Args:
@@ -303,39 +305,66 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 or the handle to the search input field.
         """
         def find_visible_search_input(driver):
-            inputs = driver.find_elements(*self._get_search_input_field())
-            for input in inputs:
-                if input.is_displayed():
-                    return input
+            print(driver.page_source)
+            input = driver.find_element(*self._get_search_input_field())
+            if input.is_displayed():
+                return input
+
             return False
             
         try:
             search_input = WebDriverWait(self.webdriver, max_wait).until(find_visible_search_input)
             return search_input
         except TimeoutException as e:
-            logger.error("TimeoutException waiting for search input field: {0}".format(e))
+            logger.error('{}: TimeoutException waiting for search input field: {}'.format(self.name, e))
             return False
 
     def _goto_next_page(self):
-        """Finds the url that locates the next page for any search_engine.
+        """Click the next page element.
+        """
+        element = self._find_next_page_element()
+
+        if hasattr(element, 'click'):
+            next_url = element.get_attribute('href')
+            try:
+                element.click()
+            except WebDriverException:
+                # See http://stackoverflow.com/questions/11908249/debugging-element-is-not-clickable-at-point-error
+                # first move mouse to the next element, some times the element is not visibility, like blekko.com
+                selector = self.next_page_selectors[self.search_engine]
+                if selector:
+                    try:
+                        next_element = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
+                        webdriver.ActionChains(self.webdriver).move_to_element(next_element).perform()
+                        # wait until the next page link emerges
+                        WebDriverWait(self.webdriver, 15).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                        element = self.webdriver.find_element_by_css_selector(selector)
+                        next_url = element.get_attribute('href')
+                        element.click()
+                    except WebDriverException:
+                        pass
+
+            return next_url
+
+        return element
+
+    def _find_next_page_element(self):
+        """Finds the element that locates the next page for any search engine.
 
         Returns:
-            The href attribute of the next_url for further results.
+            The element that needs to be clicked to get to the next page.
         """
         if self.search_type == 'normal':
             selector = self.next_page_selectors[self.search_engine]
             try:
                 # wait until the next page link emerges
-                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
-                element = self.webdriver.find_element_by_css_selector(selector)
-                next_url = element.get_attribute('href')
-                element.click()
-                return next_url
+                WebDriverWait(self.webdriver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+                return self.webdriver.find_element_by_css_selector(selector)
             except TimeoutException as te:
-                logger.warning('Cannot locate next page element: {}'.format(te))
+                logger.warning('{}: Cannot locate next page element: {}'.format(self.name, te))
                 return False
             except WebDriverException as e:
-                logger.warning('Cannot locate next page element: {}'.format(e))
+                logger.warning('{} Cannot locate next page element: {}'.format(self.name, e))
                 return False
 
         elif self.search_type == 'image':
@@ -343,12 +372,31 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             return True
 
     def wait_until_serp_loaded(self):
-        # Waiting until the keyword appears in the title may
-        # not be enough. The content may still be from the old page.
+        """
+        First tries to wait until next page selector is located. If this fails, waits
+        until the title contains the query.
+
+        """
+        if self.search_type == 'normal':
+            selector = self.next_page_selectors[self.search_engine]
+            try:
+                WebDriverWait(self.webdriver, 10).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
+            except (TimeoutException, WebDriverException) as e:
+                self.wait_until_title_contains_keyword()
+
+        elif self.search_type == 'image':
+            self.wait_until_title_contains_keyword()
+
+        else:
+            self.wait_until_title_contains_keyword()
+
+
+    def wait_until_title_contains_keyword(self):
         try:
-            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
+            WebDriverWait(self.webdriver, 10).until(EC.title_contains(self.current_keyword))
         except TimeoutException as e:
-            logger.error(SeleniumSearchError('Keyword "{}" not found in title: {}'.format(self.current_keyword, self.webdriver.title)))
+            logger.error(SeleniumSearchError('{}: Keyword "{}" not found in title: {}'.format(self.name, self.current_keyword, self.webdriver.title)))
+
 
     def search(self):
         """Search with webdriver.
@@ -369,7 +417,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_input.send_keys(self.current_keyword + Keys.ENTER)
                 self.current_request_time = datetime.datetime.utcnow()
             else:
-                logger.warning('Cannot get handle to the input form for keyword {}.'.format(self.current_keyword))
+                logger.warning('{}: Cannot get handle to the input form for keyword {}.'.format(self.name, self.current_keyword))
                 continue
 
             super().detection_prevention_sleep()
@@ -418,13 +466,13 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """Run the SelScraper."""
 
         if not self._get_webdriver():
-            raise SeleniumMisconfigurationError('Aborting due to no available selenium webdriver.')
+            raise SeleniumMisconfigurationError('{}: Aborting due to no available selenium webdriver.'.format(self.name))
 
         try:
             self.webdriver.set_window_size(400, 400)
             self.webdriver.set_window_position(400*(self.browser_num % 4), 400*(math.floor(self.browser_num//4)))
         except WebDriverException as e:
-            logger.error(e)
+            logger.error('Cannot set window size: {}'.format(e))
 
         super().before_search()
 
@@ -456,9 +504,13 @@ The following functionality may differ in particular:
 """
 
 class DuckduckgoSelScrape(SelScrape):
+    """
+    Duckduckgo is a little special since new results are obtained by ajax.
+    next page thus is then to scroll down.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
         self.largest_id = 0
 
     def _goto_next_page(self):
@@ -478,7 +530,7 @@ class DuckduckgoSelScrape(SelScrape):
                 pass
 
         try:
-            WebDriverWait(self.webdriver, 5).until(new_results)
+            WebDriverWait(self.webdriver, 10).until(new_results)
         except TimeoutException as e:
             pass
 
@@ -509,5 +561,5 @@ class AskSelScrape(SelScrape):
             except WebDriverException as e:
                 pass
             
-        WebDriverWait(self.webdriver, 5).until(wait_until_keyword_in_url)
+        WebDriverWait(self.webdriver, 10).until(wait_until_keyword_in_url)
 

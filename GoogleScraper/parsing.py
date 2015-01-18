@@ -282,7 +282,7 @@ class Parser():
 
 
     def iter_serp_items(self):
-        """Yields the key and index of any item in the serp results if it has a link value"""
+        """Yields the key and index of any item in the serp results that has a link value"""
 
         for key, value in self.search_results.items():
             if isinstance(value, list):
@@ -634,9 +634,10 @@ class YahooParser(Parser):
         """
         super().after_parsing()
 
-        for key, i in self.iter_serp_items():
-            if self.search_results[key][i]['visible_link'] is None:
-                del self.search_results[key][i]
+        if self.searchtype == 'normal':
+            for key, i in self.iter_serp_items():
+                if self.search_results[key][i]['visible_link'] is None:
+                    del self.search_results[key][i]
 
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():

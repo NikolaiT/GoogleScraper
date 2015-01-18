@@ -224,6 +224,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # the current request time
         self.current_request_time = None
 
+        # The name of the scraper
+        self.name = '[{}]'.format(self.search_engine) + self.__class__.__name__
+
         # How long to sleep (in seconds) after every n-th request
         self.sleeping_ranges = dict()
         sleep_ranges_option = Config['GLOBAL'].get(
