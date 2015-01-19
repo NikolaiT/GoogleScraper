@@ -10,7 +10,7 @@ config = {
         'keyword': 'Let\'s go bubbles!',
         'search_engines': 'yandex, bing',
         'num_pages_for_keyword': 1,
-        'scrapemethod': 'selenium',
+        'scrape_method': 'selenium',
     },
     'SELENIUM': {
         'sel_browser': 'chrome',
@@ -32,7 +32,7 @@ search = sqlalchemy_session.query(ScraperSearch).all()[-1]
 for serp in search.serps:
     print(serp)
     print(serp.search_engine_name)
-    print(serp.scrapemethod)
+    print(serp.scrape_method)
     print(serp.page_number)
     print(serp.requested_at)
     print(serp.num_results)

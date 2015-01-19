@@ -71,3 +71,22 @@
         - scraping with a keywords.py module
         - scraping images [done]
         - finding plagiarized content [done]
+
+
+- Add dynamic tests for selenium mode:
+
+    - Add event: No results for this query.
+
+    - Test Impossible query:
+        -> Cannot have next_results page
+        -> No results [done]
+        -> But still save serp page. [done]
+        -> add to missed keywords []
+
+    - What is the best way to detect that the page loaded????
+        -> Research, read about selenium
+
+    - Add test for duckduckgo
+
+
+- Fix: If there's no internet connection, Malicious request detected is show. Show no internet connection instead.

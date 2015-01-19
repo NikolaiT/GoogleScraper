@@ -112,10 +112,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.browser_type = Config['SELENIUM'].get('sel_browser', 'chrome').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
-        self.scrape_mode = 'selenium'
+        self.scrape_method = 'selenium'
 
         # get the base search url based on the search engine.
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrape_mode)
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
         super().instance_creation_info(self.__class__.__name__)
 
     def set_proxy(self):
@@ -251,7 +251,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         # selenium webdriver objects have no status code :/
         super().handle_request_denied('400')
 
-        needles = self.malicious_request_needles[self.search_engine]
+        needles = self.malicious_request_needles[self.search_engine_name]
 
         if needles and needles['inurl'] in self.webdriver.current_url and needles['inhtml'] in self.webdriver.page_source:
 
@@ -285,7 +285,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.starting_point = None
 
         if Config['SCRAPING'].get('search_type', 'normal') == 'image':
-            self.starting_point = self.image_search_locations[self.search_engine]
+            self.starting_point = self.image_search_locations[self.search_engine_name]
         else:
             self.starting_point = self.base_search_url
 
@@ -297,7 +297,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Returns:
             A tuple to locate the search field as used by seleniums function presence_of_element_located()
         """
-        return self.input_field_selectors[self.search_engine]
+        return self.input_field_selectors[self.search_engine_name]
 
     def _wait_until_search_input_field_appears(self, max_wait=5):
         """Waits until the search input field can be located for the current search engine
@@ -334,7 +334,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             except WebDriverException:
                 # See http://stackoverflow.com/questions/11908249/debugging-element-is-not-clickable-at-point-error
                 # first move mouse to the next element, some times the element is not visibility, like blekko.com
-                selector = self.next_page_selectors[self.search_engine]
+                selector = self.next_page_selectors[self.search_engine_name]
                 if selector:
                     try:
                         next_element = WebDriverWait(self.webdriver, 5).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
@@ -358,7 +358,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             The element that needs to be clicked to get to the next page.
         """
         if self.search_type == 'normal':
-            selector = self.next_page_selectors[self.search_engine]
+            selector = self.next_page_selectors[self.search_engine_name]
             try:
                 # wait until the next page link emerges
                 WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
@@ -381,7 +381,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         """
         if self.search_type == 'normal':
-            selector = self.next_page_selectors[self.search_engine]
+            selector = self.next_page_selectors[self.search_engine_name]
             try:
                 WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
             except (TimeoutException, WebDriverException) as e:
@@ -396,9 +396,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     def wait_until_title_contains_keyword(self):
         try:
-            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.current_keyword))
+            WebDriverWait(self.webdriver, 5).until(EC.title_contains(self.query))
         except TimeoutException as e:
-            logger.error(SeleniumSearchError('{}: Keyword "{}" not found in title: {}'.format(self.name, self.current_keyword, self.webdriver.title)))
+            logger.error(SeleniumSearchError('{}: Keyword "{}" not found in title: {}'.format(self.name, self.query, self.webdriver.title)))
 
 
     def search(self):
@@ -407,7 +407,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Fills out the search form of the search engine for each keyword.
         Clicks the next link while pages_per_keyword is not reached.
         """
-        for self.current_keyword, self.pages_per_keyword in self.jobs.items():
+        for self.query, self.pages_per_keyword in self.jobs.items():
 
             self.search_input = self._wait_until_search_input_field_appears()
 
@@ -417,16 +417,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             if self.search_input:
                 self.search_input.clear()
                 time.sleep(.25)
-                self.search_input.send_keys(self.current_keyword + Keys.ENTER)
-                self.current_request_time = datetime.datetime.utcnow()
+                self.search_input.send_keys(self.query + Keys.ENTER)
+                self.requested_at = datetime.datetime.utcnow()
             else:
-                logger.warning('{}: Cannot get handle to the input form for keyword {}.'.format(self.name, self.current_keyword))
+                logger.warning('{}: Cannot get handle to the input form for keyword {}.'.format(self.name, self.query))
                 continue
 
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            for self.current_page in self.pages_per_keyword:
+            for self.page_number in self.pages_per_keyword:
 
                 self.wait_until_serp_loaded()
 
@@ -439,9 +439,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
                 # Click the next page link not when leaving the loop
                 # in the next iteration.
-                if self.current_page in self.pages_per_keyword:
+                if self.page_number in self.pages_per_keyword:
                     self.next_url = self._goto_next_page()
-                    self.current_request_time = datetime.datetime.utcnow()
+                    self.requested_at = datetime.datetime.utcnow()
                     
                     if not self.next_url:
                         break
@@ -567,8 +567,8 @@ class AskSelScrape(SelScrape):
         
         def wait_until_keyword_in_url(driver):
             try:
-                return quote(self.current_keyword) in driver.current_url or\
-                       self.current_keyword.replace(' ', '+') in driver.current_url
+                return quote(self.query) in driver.current_url or\
+                       self.query.replace(' ', '+') in driver.current_url
             except WebDriverException as e:
                 pass
             

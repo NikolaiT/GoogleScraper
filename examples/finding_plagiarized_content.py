@@ -76,7 +76,7 @@ config = {
         'keyword_file': 'chunks.txt',
         'search_engines': 'google',
         'num_pages_for_keyword': 1,
-        'scrapemethod': 'selenium',
+        'scrape_method': 'selenium',
     },
     'SELENIUM': {
         'sel_browser': 'chrome',

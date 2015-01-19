@@ -4,7 +4,7 @@ from GoogleScraper import scrape_with_config, GoogleSearchError
 from GoogleScraper.database import ScraperSearch
 from GoogleScraper.utils import get_some_words
 
-keywords = get_some_words(50)
+keywords = get_some_words(10)
 with open('keywords.txt', 'wt') as f:
     for word in keywords:
         f.write(word + '\n')
@@ -16,7 +16,7 @@ config = {
         'keyword_file': 'keywords.txt',
         'search_engines': 'bing,duckduckgo',
         'num_pages_for_keyword': 2,
-        'scrapemethod': 'http-async',
+        'scrape_method': 'http-async',
     },
     'GLOBAL': {
         'verbosity': 3,

@@ -16,7 +16,7 @@ config = {
         'keywords': '\n'.join(keywords),
         'search_engines': 'bing',
         'num_pages_for_keyword': 1,
-        'scrapemethod': 'http',
+        'scrape_method': 'http',
     },
     'GLOBAL': {
         'do_caching': 'True'

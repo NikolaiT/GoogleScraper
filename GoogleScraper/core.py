@@ -192,9 +192,9 @@ def main(return_results=False, parse_cmd_line=True):
     assert search_engines, 'No search engine specified'
     num_search_engines = len(search_engines)
     num_workers = Config['SCRAPING'].getint('num_workers')
-    scrapemethod = Config['SCRAPING'].get('scrapemethod')
+    scrape_method = Config['SCRAPING'].get('scrape_method')
     pages = Config['SCRAPING'].getint('num_pages_for_keyword', 1)
-    method = Config['SCRAPING'].get('scrapemethod', 'http')
+    method = Config['SCRAPING'].get('scrape_method', 'http')
 
     if Config['GLOBAL'].getboolean('shell', False):
         namespace = {}
@@ -243,7 +243,7 @@ def main(return_results=False, parse_cmd_line=True):
                 keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
 
     if not scrape_jobs:
-        scrape_jobs = default_scrape_jobs_for_keywords(keywords, search_engines, scrapemethod, pages)
+        scrape_jobs = default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, pages)
 
     scrape_jobs = list(scrape_jobs)
 
@@ -287,7 +287,7 @@ def main(return_results=False, parse_cmd_line=True):
         if proxies:
             logger.info('The following proxies are used: \n\t\t{}'.format('\n\t\t'.join([proxy.host + ':' + proxy.port for proxy in proxies if proxy])))
 
-        logger.info('By using {} mode with {} worker instances'.format(Config['SCRAPING'].get('scrapemethod'), Config['SCRAPING'].getint('num_workers')))
+        logger.info('By using {} mode with {} worker instances'.format(Config['SCRAPING'].get('scrape_method'), Config['SCRAPING'].getint('num_workers')))
         return
 
     # get a scoped sqlalchemy session
@@ -415,7 +415,7 @@ def main(return_results=False, parse_cmd_line=True):
             scheduler.run()
 
         else:
-            raise InvalidConfigurationException('No such scrapemethod {}'.format(Config['SCRAPING'].get('scrapemethod')))
+            raise InvalidConfigurationException('No such scrape_method {}'.format(Config['SCRAPING'].get('scrape_method')))
 
 
         scraper_search.stopped_searching = datetime.datetime.utcnow()

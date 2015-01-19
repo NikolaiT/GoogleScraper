@@ -14,8 +14,8 @@ Config = {
     'SCRAPING': {
         # Whether to scrape with own ip address or just with proxies
         'use_own_ip': True,
-        # which scrapemethod to use
-        'scrapemethod': 'http'
+        # which scrape_method to use
+        'scrape_method': 'http'
     },
     'GLOBAL': {
         # The directory path for cached google results

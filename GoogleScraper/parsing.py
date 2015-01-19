@@ -83,9 +83,13 @@ class Parser():
         self.html = html
         self.dom = None
         self.search_results = {}
-        self.num_results = ''
+        self.num_results_for_query = ''
+        self.num_results = 0
         self.effective_query = ''
         self.page_number = -1
+
+        # to be set by the implementing sub classes
+        self.search_engine = ''
 
         # short alias because we use it so extensively
         self.css_to_xpath = HTMLTranslator().css_to_xpath
@@ -135,8 +139,8 @@ class Parser():
         # get the appropriate css selectors for the num_results for the keyword
         num_results_selector = getattr(self, 'num_results_search_selectors', None)
 
-        self.num_results = self.first_match(num_results_selector, self.dom)
-        if not self.num_results:
+        self.num_results_for_query = self.first_match(num_results_selector, self.dom)
+        if not self.num_results_for_query:
             out('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__, num_results_selector), lvl=4)
 
         # get the current page we are at. Sometimes we search engines don't show this.
@@ -195,6 +199,7 @@ class Parser():
                     if 'link' in serp_result and serp_result['link'] and \
                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
+                        self.num_results += 1
 
 
     def advanced_css(self, selector, element):
@@ -289,7 +294,7 @@ class Parser():
                 for i, item in enumerate(value):
                     if isinstance(item, dict) and item['link']:
                         yield (key, i)
-                
+
 """
 Here follow the different classes that provide CSS selectors 
 for different types of SERP pages of several common search engines.
@@ -318,6 +323,8 @@ it very easy to grab all data the site has to offer.
 
 class GoogleParser(Parser):
     """Parses SERP pages of the Google search engine."""
+
+    search_engine = 'google'
     
     search_types = ['normal', 'image']
 
@@ -423,6 +430,8 @@ class GoogleParser(Parser):
 class YandexParser(Parser):
     """Parses SERP pages of the Yandex search engine."""
 
+    search_engine = 'yandex'
+
     search_types = ['normal', 'image']
 
     no_results_selectors = ['.misspell__message .misspell__link']
@@ -489,6 +498,8 @@ class YandexParser(Parser):
     
 class BingParser(Parser):
     """Parses SERP pages of the Bing search engine."""
+
+    search_engine = 'bing'
     
     search_types = ['normal', 'image']
     
@@ -582,7 +593,9 @@ class BingParser(Parser):
 
 class YahooParser(Parser):
     """Parses SERP pages of the Yahoo search engine."""
-    
+
+    search_engine = 'yahoo'
+
     search_types = ['normal', 'image']
 
     # yahooo doesn't have such a thing :D
@@ -652,6 +665,8 @@ class YahooParser(Parser):
 
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""
+
+    search_engine = 'baidu'
     
     search_types = ['normal', 'image']
     
@@ -720,6 +735,8 @@ class BaiduParser(Parser):
 
 class DuckduckgoParser(Parser):
     """Parses SERP pages of the Duckduckgo search engine."""
+
+    search_engine = 'duckduckgo'
     
     search_types = ['normal']
     
@@ -747,6 +764,8 @@ class DuckduckgoParser(Parser):
 class AskParser(Parser):
     """Parses SERP pages of the Ask search engine."""
 
+    search_engine = 'ask'
+
     search_types = ['normal']
 
     num_results_search_selectors = []
@@ -771,6 +790,8 @@ class AskParser(Parser):
 
 class BlekkoParser(Parser):
     """Parses SERP pages of the Blekko search engine."""
+
+    search_engine = 'blekko'
 
     search_types = ['normal']
 
@@ -861,10 +882,14 @@ def get_parser_by_search_engine(search_engine):
         raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
 
 
-def parse_serp(html=None, search_engine=None,
-                    scrapemethod=None, current_page=None, requested_at=None,
-                    requested_by='127.0.0.1', current_keyword=None, parser=None, serp=None):
+def parse_serp(html=None, parser=None, scraper=None, search_engine=None):
         """Store the parsed data in the sqlalchemy session.
+
+        If no parser is supplied then we are expected to parse again with
+        the provided html.
+
+        This function may be called from scraping and caching.
+        When called from caching, some info is lost (like current page number).
 
         Args:
             TODO: A whole lot
@@ -878,44 +903,10 @@ def parse_serp(html=None, search_engine=None,
             parser = parser()
             parser.parse(html)
 
-        num_results = 0
-
-        if not serp:
-            serp = SearchEngineResultsPage(
-                search_engine_name=search_engine,
-                scrapemethod=scrapemethod,
-                page_number=current_page,
-                requested_at=requested_at,
-                requested_by=requested_by,
-                query=current_keyword,
-                effective_query=parser.effective_query,
-                num_results_for_keyword=parser.num_results,
-            )
-
-        for key, value in parser.search_results.items():
-            if isinstance(value, list):
-                for link in value:
-                    parsed = urlparse(link['link'])
-
-                    # fill with nones to prevent key errors
-                    [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
-
-
-                    # sqlalchemy will automatically add this link to
-                    # the serp object.
-                    l = Link(
-                        link=link['link'],
-                        snippet=link['snippet'],
-                        title=link['title'],
-                        visible_link=link['visible_link'],
-                        domain=parsed.netloc,
-                        rank=link['rank'],
-                        serp=serp,
-                        link_type=key
-                    )
-                    num_results += 1
-
-        serp.num_results = num_results
+        serp = SearchEngineResultsPage()
+        serp.set_values_from_parser(parser)
+        if scraper:
+            serp.set_values_from_scraper(scraper)
 
         return serp
 

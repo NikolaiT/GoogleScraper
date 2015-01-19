@@ -16,6 +16,7 @@ can be assigned to more than one ScraperSearch. Therefore we need a n:m relation
 
 import datetime
 from GoogleScraper.config import Config
+from urllib.parse import urlparse
 from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime, Enum, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, backref
@@ -59,11 +60,17 @@ class SearchEngineResultsPage(Base):
 
     id = Column(Integer, primary_key=True)
     search_engine_name = Column(String)
-    scrapemethod = Column(String)
+    scrape_method = Column(String)
     page_number = Column(Integer)
     requested_at = Column(DateTime, default=datetime.datetime.utcnow)
     requested_by = Column(String, default='127.0.0.1')
-    num_results = Column(Integer)
+    
+    # The string in the SERP that indicates how many results we got for the search term.
+    num_results_for_query = Column(String)
+    
+    # Whether we got any results at all. This is the same as len(serp.links)
+    num_results = Column(Integer, default=-1)
+     
     query = Column(String)
 
     # if the query was modified by the search engine because there weren't any
@@ -71,13 +78,66 @@ class SearchEngineResultsPage(Base):
     # Otherwise it remains empty.
     effective_query = Column(String, default='')
 
-    num_results_for_keyword = Column(String)
-
     def __str__(self):
         return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(**self.__dict__)
 
     def __repr__(self):
         return self.__str__()
+
+    def has_no_results_for_query(self):
+        return self.num_results == 0 or self.effective_query
+
+
+    def set_values_from_parser(self, parser):
+        """Populate itself from a parser object.
+
+        Args:
+            A parser object.
+        """
+
+        self.num_results_for_query = parser.num_results_for_query
+        self.num_results = parser.num_results
+        self.effective_query = parser.effective_query
+
+        for key, value in parser.search_results.items():
+            if isinstance(value, list):
+                for link in value:
+                    parsed = urlparse(link['link'])
+
+                    # fill with nones to prevent key errors
+                    [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
+
+                    l = Link(
+                        link=link['link'],
+                        snippet=link['snippet'],
+                        title=link['title'],
+                        visible_link=link['visible_link'],
+                        domain=parsed.netloc,
+                        rank=link['rank'],
+                        serp=self,
+                        link_type=key
+                    )
+
+    def set_values_from_scraper(self, scraper):
+        """Populate itself from a scraper object.
+
+        A scraper may be any object of type:
+
+            - SelScrape
+            - HttpScrape
+            - AsyncHttpScrape
+
+        Args:
+            A scraper object.
+        """
+
+        self.query = scraper.query
+        self.search_engine_name = scraper.search_engine_name
+        self.scrape_method = scraper.scrape_method
+        self.page_number = scraper.page_number
+        self.requested_at = scraper.requested_at
+        self.requested_by = scraper.requested_by
+
 
 # Alias as a shorthand for working in the shell
 SERP = SearchEngineResultsPage

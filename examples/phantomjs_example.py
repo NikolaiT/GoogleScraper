@@ -16,7 +16,7 @@ config = {
         'keywords': '\n'.join(keywords),
         'search_engines': 'google,duckduckgo',
         'num_pages_for_keyword': 2,
-        'scrapemethod': 'selenium',
+        'scrape_method': 'selenium',
     },
     'SELENIUM': {
         # this makes scraping with browsers headless

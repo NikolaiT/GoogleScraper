@@ -8,7 +8,7 @@ from GoogleScraper.scraping import get_base_search_url_by_search_engine
 from GoogleScraper.utils import get_some_words
 from GoogleScraper.config import Config
 from GoogleScraper.output_converter import store_serp_result
-from GoogleScraper.database import SearchEngineResultsPage
+from GoogleScraper.caching import cache_results
 
 class AsyncHttpScrape():
     
@@ -23,11 +23,14 @@ class AsyncHttpScrape():
     def __init__(self, query='', page_number=1, search_engine='google', **kwargs):
         self.query = query
         self.page_number = page_number
-        self.search_engine = search_engine
+        self.search_engine_name = search_engine
         self.search_type = 'normal'
-        self.parser = get_parser_by_search_engine(self.search_engine)
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, 'http')
-        self.params = get_GET_params_for_search_engine(self.query, self.search_engine, search_type=self.search_type)
+        self.scrape_method = 'http-async'
+        self.requested_at = None
+        self.requested_by = ''
+        self.parser = get_parser_by_search_engine(self.search_engine_name)
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, 'http')
+        self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name, search_type=self.search_type)
         self.headers = headers
         
     def __call__(self):
@@ -49,18 +52,6 @@ class AsyncHttpScrape():
         return request
 
 
-    def get_serp_obj(self):
-        return SearchEngineResultsPage(
-            search_engine_name=self.search_engine,
-            scrapemethod='http-async',
-            page_number=self.page_number,
-            requested_at=self.requested_at,
-            query=self.query,
-            effective_query=self.parser.effective_query,
-            num_results_for_keyword=self.parser.num_results,
-        )
-
-
 class AsyncScrapeScheduler():
 
     """Processes the single requests in an asynchroneous way.
@@ -74,7 +65,7 @@ class AsyncScrapeScheduler():
         self.session = session
         self.scraper_search = scraper_search
         self.db_lock = db_lock
-        self.scrapemethod = 'async'
+        self.scrape_method = 'async'
 
         self.loop = asyncio.get_event_loop()
 
@@ -109,15 +100,15 @@ class AsyncScrapeScheduler():
 
             for task in self.results[0]:
                 scrape = task.result()
-                serp = scrape.get_serp_obj()
-                parser = scrape.parser
 
-                if parser:
-                    serp = parse_serp(serp=serp,parser=parser)
+                cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method, scrape.page_number)
 
-                    if serp.num_results > 0:
-                        self.session.add(serp)
-                        self.session.commit()
+                if scrape.parser:
+                    serp = parse_serp(parser=scrape.parser, scraper=scrape)
+
+                    self.scraper_search.serps.append(serp)
+                    self.session.add(serp)
+                    self.session.commit()
 
                     store_serp_result(serp)
 

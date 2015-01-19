@@ -14,7 +14,7 @@ config = {
         'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
         'search_engines': 'yandex,google,bing,yahoo', # duckduckgo not supported
         'search_type': 'image',
-        'scrapemethod': 'selenium'
+        'scrape_method': 'selenium'
     },
     'GLOBAL': {
         'do_caching': 'True'

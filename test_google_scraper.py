@@ -8,6 +8,7 @@ from GoogleScraper.utils import get_some_words
 from GoogleScraper import Config
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
+from GoogleScraper.database import ScraperSearch
 from collections import Counter
 
 all_search_engines = [se.strip() for se in Config['SCRAPING'].get('supported_search_engines').split(',')]
@@ -57,7 +58,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     def test_parse_google(self):
         parser = self.get_parser_for_file('google', 'data/uncompressed_serp_pages/abrakadabra_google_de_ip.html')
 
-        assert '232.000.000 Ergebnisse' in parser.num_results
+        assert '232.000.000 Ergebnisse' in parser.num_results_for_query
         assert len(parser.search_results['results']) == 12, len(parser.search_results)
         assert all([v['visible_link'] for v in parser.search_results['results']])
         assert all([v['link'] for v in parser.search_results['results']])
@@ -70,7 +71,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         parser = self.get_parser_for_file('bing', 'data/uncompressed_serp_pages/hello_bing_de_ip.html')
 
-        assert '16.900.000 results' == parser.num_results
+        assert '16.900.000 results' == parser.num_results_for_query
         assert len(parser.search_results['results']) == 12, len(parser.search_results['results'])
         assert all([v['visible_link'] for v in parser.search_results['results']])
         assert all([v['link'] for v in parser.search_results['results']])
@@ -82,7 +83,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
         
         parser = self.get_parser_for_file('yahoo', 'data/uncompressed_serp_pages/snow_yahoo_de_ip.html')
 
-        assert '19,400,000 Ergebnisse' == parser.num_results
+        assert '19,400,000 Ergebnisse' == parser.num_results_for_query
         assert len(parser.search_results['results']) >= 10, len(parser.search_results['results'])
         assert len([v['visible_link'] for v in parser.search_results['results'] if v['visible_link']]) == 10, 'Not 10 elements with a visible link in yahoo serp page'
         assert all([v['link'] for v in parser.search_results['results']])
@@ -94,7 +95,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     def test_parse_yandex(self):
         parser = self.get_parser_for_file('yandex', 'data/uncompressed_serp_pages/game_yandex_de_ip.html')
 
-        assert '2 029 580' in parser.num_results
+        assert '2 029 580' in parser.num_results_for_query
         assert len(parser.search_results['results']) == 10, len(parser.search_results['results'])
         assert len([v['visible_link'] for v in parser.search_results['results'] if v['visible_link']]) == 10, 'Not 10 elements with a visible link in yandex serp page'
         assert all([v['link'] for v in parser.search_results['results']])
@@ -106,7 +107,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         parser = self.get_parser_for_file('baidu', 'data/uncompressed_serp_pages/number_baidu_de_ip.html')
 
-        assert '100,000,000' in parser.num_results
+        assert '100,000,000' in parser.num_results_for_query
         assert len(parser.search_results['results']) >= 6, len(parser.search_results['results'])
         assert all([v['link'] for v in parser.search_results['results']])
         self.assert_around_10_results_with_snippets(parser, delta=5)
@@ -156,7 +157,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'keyword': 'some words',
                 'search_engines': ','.join(all_search_engines),
                 'num_pages_for_keyword': 2,
-                'scrapemethod': 'selenium'
+                'scrape_method': 'selenium'
             },
             'GLOBAL': {
                 'cachedir': 'data/csv_tests/',
@@ -174,7 +175,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
         reader = csv.reader(open(csv_outfile, 'rt'))
 
         # the items that should always have a value:
-        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrapemethod', 'page_number', 'search_engine_name', 'snippet')
+        notnull = ('link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrape_method', 'page_number', 'search_engine_name', 'snippet')
 
         for rownum, row in enumerate(reader):
             if rownum == 0:
@@ -204,7 +205,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'keyword': 'some words',
                 'search_engines': ','.join(all_search_engines),
                 'num_pages_for_keyword': 2,
-                'scrapemethod': 'selenium'
+                'scrape_method': 'selenium'
             },
             'GLOBAL': {
                 'cachedir': 'data/json_tests/',
@@ -293,9 +294,43 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     def test_page_number_selector_ask(self):
         parser = self.get_parser_for_file('ask', 'data/page_number_selector/ask_7.html')
         assert parser.page_number == 7, 'Wrong page number. Got {}'.format(parser.page_number)
+        
+        
+    ### test all SERP object indicate no results for all search engines.
+    
+    def test_no_results_serp_object(self):
+        
+        config = {
+            'SCRAPING': {
+                'keyword': 'asdfasdfa7654567654345654343sdfasd',
+                'search_engines': '*', # all available search engines
+                'num_pages_for_keyword': 1,
+                'scrape_method': 'selenium'
+            },
+            'GLOBAL': {
+                'cachedir': 'data/no_results/',
+                'do_caching': 'True',
+                'verbosity': 1
+            }
+        }
+        session = scrape_with_config(config)
+    
+        search = session.query(ScraperSearch).all()[-1]
+        
+        assert len(all_search_engines) == len(search.serps), 'Not enough results. Expected: {}, got {}'.format(len(all_search_engines), len(search.serps))
 
+        for serp in search.serps:
+            assert serp.has_no_results_for_query(), 'num_results must be 0 but is {}. {}'.format(serp.num_results, serp.links)
+
+            # some search engine do alternative searches instead of yielding
+            # nothing at all.
+
+            if serp.search_engine_name in ('google', 'bing'):
+                assert serp.effective_query, '{} must have an effective query when a keyword has no results.'.format(serp.search_engine_name)
 
     ### test correct parsing of the number of results for the query..
+
+
 
 class GoogleScraperFunctionalTestCase(unittest.TestCase):
     # generic function for dynamic parsing
@@ -308,9 +343,9 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             'SCRAPING': {
                 'use_own_ip': 'True',
                 'keyword': query,
-                'search_engines': ','.join(search_engines),
+                'search_engines': '*',
                 'num_pages_for_keyword': 1,
-                'scrapemethod': mode,
+                'scrape_method': mode,
             },
             'GLOBAL': {
                 'do_caching': 'False',
@@ -334,7 +369,7 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
      ### test dynamic parsing for selenium with phantomsjs
 
-    def test_selenium_phantomjs_all_engines(self):
+    def __test_selenium_phantomjs_all_engines(self):
 
         session = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
 

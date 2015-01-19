@@ -143,14 +143,14 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.headers = headers
 
         # the mode
-        self.scrape_mode = 'http'
+        self.scrape_method = 'http'
 
         # get the base search url based on the search engine.
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine, self.scrape_mode)
+        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
 
         super().instance_creation_info(self.__class__.__name__)
 
-        if self.search_engine == 'blekko':
+        if self.search_engine_name == 'blekko':
             logger.critical('blekko doesnt support http mode.')
             self.startable = False
 
@@ -227,11 +227,11 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
     def build_search(self):
         """Build the headers and params for the search request for the search engine."""
 
-        self.search_params = get_GET_params_for_search_engine(self.current_keyword, self.search_engine,
-                                                              self.current_page, self.num_results_per_page,
+        self.search_params = get_GET_params_for_search_engine(self.query, self.search_engine_name,
+                                                              self.page_number, self.num_results_per_page,
                                                               self.search_type)
 
-        self.parser = get_parser_by_search_engine(self.search_engine)
+        self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.parser = self.parser()
 
     def search(self, *args, rand=False, **kwargs):
@@ -253,7 +253,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
             request = self.requests.get(self.base_search_url + urlencode(self.search_params), headers=self.headers, timeout=5)
 
-            self.current_request_time = datetime.datetime.utcnow()
+            self.requested_at = datetime.datetime.utcnow()
             self.html = request.text
 
             out('[HTTP - {url}, headers={headers}, params={params}'.format(

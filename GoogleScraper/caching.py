@@ -136,7 +136,7 @@ def maybe_create_cache_dir():
 def if_caching(f):
     @functools.wraps(f)
     def wraps(*args, **kwargs):
-        if Config['GLOBAL'].getboolean('do_caching'):
+        if Config['GLOBAL'].getboolean('do_caching', False):
             maybe_create_cache_dir()
             return f(*args, **kwargs)
 
@@ -274,36 +274,49 @@ def read_cached_file(path):
 
 
 @if_caching
-def cache_results(data, keyword, search_engine, scrape_mode, page_number):
-    """Stores the data in a file.
+def cache_results(parser, query, search_engine, scrape_mode, page_number, db_lock=None):
+    """Stores the html of an parser in a file.
 
-    The file name is determined by the parameters kw, url and params.
+    The file name is determined by the parameters query, search_engine, scrape_mode and page_number.
     See cached_file_name() for more information.
 
     This will always write(overwrite) the cached file. If compress_cached_files is
     True, the page is written in bytes (obviously).
 
     Args:
-        data: The data to cache.
-        keyword: The keyword that was used in the search.
+        parser: A parser with the data to cache.
+        query: The keyword that was used in the search.
         search_engine: The search engine the keyword was scraped for.
         scrape_mode: The scrapemode that was used.
         page_number: The page number that the serp page is.
+        db_lock: If an db_lock is given, all action are wrapped in this lock.
     """
-    fname = cached_file_name(keyword, search_engine, scrape_mode, page_number)
+
+    if db_lock:
+        db_lock.acquire()
+
+    if Config['GLOBAL'].getboolean('minimize_caching_files', True):
+        html = parser.cleaned_html
+    else:
+        html = parser.html
+
+    fname = cached_file_name(query, search_engine, scrape_mode, page_number)
     cachedir = Config['GLOBAL'].get('cachedir', '.scrapecache')
     path = os.path.join(cachedir, fname)
 
     if Config['GLOBAL'].getboolean('compress_cached_files'):
         algorithm = Config['GLOBAL'].get('compressing_algorithm', 'gz')
         f = CompressedFile(path, algorithm=algorithm)
-        f.write(data)
+        f.write(html)
     else:
         with open(path, 'w') as fd:
-            if isinstance(data, bytes):
-                fd.write(data.decode())
+            if isinstance(html, bytes):
+                fd.write(html.decode())
             else:
-                fd.write(data)
+                fd.write(html)
+
+    if db_lock:
+        db_lock.release()
 
 
 def _get_all_cache_files():
@@ -368,7 +381,7 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
         cache_name = cached_file_name(
             job['query'],
             job['search_engine'],
-            job['scrapemethod'],
+            job['scrape_method'],
             job['page_number']
         )
         mapping[cache_name] = job
@@ -388,10 +401,10 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            serp = get_serp_from_database(session, job['query'], job['search_engine'], job['scrapemethod'], job['page_number'])
+            serp = get_serp_from_database(session, job['query'], job['search_engine'], job['scrape_method'], job['page_number'])
 
             if not serp:
-                serp = parse_again(fname, job['search_engine'], job['scrapemethod'], job['query'])
+                serp = parse_again(fname, job['search_engine'], job['scrape_method'], job['query'])
 
             serp.scraper_searches.append(scraper_search)
             session.add(serp)
@@ -413,22 +426,19 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
     return scrape_jobs
 
 
-def parse_again(fname, search_engine, scrapemethod, query):
+def parse_again(fname, search_engine, scrape_method, query):
     html = read_cached_file(get_path(fname))
     return parse_serp(
         html=html,
         search_engine=search_engine,
-        scrapemethod=scrapemethod,
-        current_page=-1,
-        current_keyword=query
     )
 
-def get_serp_from_database(session, query, search_engine, scrapemethod, page_number):
+def get_serp_from_database(session, query, search_engine, scrape_method, page_number):
     try:
         serp = session.query(SearchEngineResultsPage).filter(
                 SearchEngineResultsPage.query == query,
                 SearchEngineResultsPage.search_engine_name == search_engine,
-                SearchEngineResultsPage.scrapemethod == scrapemethod,
+                SearchEngineResultsPage.scrape_method == scrape_method,
                 SearchEngineResultsPage.page_number == page_number).first()
         return serp
     except NoResultFound as e:
@@ -436,8 +446,6 @@ def get_serp_from_database(session, query, search_engine, scrapemethod, page_num
         # we have a cache file that matches the above identifying information
         # but it was never stored to the database.
         return False
-
-    return False
 
 
 def clean_cachefiles():
