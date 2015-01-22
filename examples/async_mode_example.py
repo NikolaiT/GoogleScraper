@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
-from GoogleScraper.database import ScraperSearch
 from GoogleScraper.utils import get_some_words
 
 keywords = get_some_words(10)
@@ -28,14 +27,11 @@ config = {
 }
 
 try:
-    sqlalchemy_session = scrape_with_config(config)
+    search = scrape_with_config(config)
 except GoogleSearchError as e:
     print(e)
 
 # let's inspect what we got. Get the last search:
-
-search = sqlalchemy_session.query(ScraperSearch).all()[-1]
-
 for serp in search.serps:
     print(serp)
     for link in serp.links:

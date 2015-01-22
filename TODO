@@ -57,7 +57,7 @@
   - add function in fabfile that pushes to cheeseshop only after all tests were successful []
   - Add functionality that distinguishes the page number of serp pages when caching []
 
-  - implement async mode []
+  - implement async mode [done]
     - reade 20 minutes about asyncio built in moduel and decide whether if feets my needs [done]
 
 

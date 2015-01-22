@@ -48,7 +48,9 @@ def scrape_with_config(config, **kwargs):
         kwargs: Further options that cannot be handled by the configuration.
 
     Returns:
-        The result of the main() function. May be sqlalchemy session.
+        The result of the main() function. Is a scraper search object.
+        In case you want to access the session, import it like this:
+        ```from GoogleScraper database import session```4
     """
     if not isinstance(config, dict):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
@@ -418,10 +420,6 @@ def main(return_results=False, parse_cmd_line=True):
             raise InvalidConfigurationException('No such scrape_method {}'.format(Config['SCRAPING'].get('scrape_method')))
 
 
-        scraper_search.stopped_searching = datetime.datetime.utcnow()
-        session.add(scraper_search)
-        session.commit()
-
         if method in ('selenium', 'http'):
             progress_thread.join()
 
@@ -431,5 +429,9 @@ def main(return_results=False, parse_cmd_line=True):
     if output_format == 'json':
         outfile.end()
 
+    scraper_search.stopped_searching = datetime.datetime.utcnow()
+    session.add(scraper_search)
+    session.commit()
+
     if return_results:
-        return session
+        return scraper_search

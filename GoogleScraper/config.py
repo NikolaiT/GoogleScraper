@@ -46,7 +46,7 @@ Config = {
 class InvalidConfigurationException(Exception):
     pass
 
-def parse_config():
+def parse_config(parse_command_line=True):
     """Parse and normalize the config file and return a dictionary with the arguments.
 
     There are several places where GoogleScraper can be configured. The configuration is
@@ -66,11 +66,13 @@ def parse_config():
     # Add internal configuration
     cfg_parser.read_dict(Config)
 
-    cargs = get_command_line()
+    if parse_command_line:
+        cargs = get_command_line()
 
-    cfg_file_cargs = cargs['GLOBAL'].get('config_file')
-    if cfg_file_cargs and os.path.exists(cfg_file_cargs):
-        CONFIG_FILE = cfg_file_cargs
+    if parse_command_line:
+        cfg_file_cargs = cargs['GLOBAL'].get('config_file')
+        if cfg_file_cargs and os.path.exists(cfg_file_cargs):
+            CONFIG_FILE = cfg_file_cargs
 
     # Parse the config file
     try:
@@ -82,26 +84,27 @@ def parse_config():
     logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
 
     # add configuration parameters retrieved from command line
-    cfg_parser = update_config(cargs, cfg_parser)
+    if parse_command_line:
+        cfg_parser = update_config(cargs, cfg_parser)
 
     # and replace the global Config variable with the real thing
     Config = cfg_parser
 
     # if we got extended config via command line, update the Config
     # object accordingly.
+    if parse_command_line:
+        if cargs['GLOBAL'].get('extended_config'):
+            d = {}
+            for option in cargs['GLOBAL'].get('extended_config').split('|'):
 
-    if cargs['GLOBAL'].get('extended_config'):
-        d = {}
-        for option in cargs['GLOBAL'].get('extended_config').split('|'):
+                assert ':' in option, '--extended_config "key:option, key2: option"'
+                key, value = option.strip().split(':')
+                d[key.strip()] = value.strip()
 
-            assert ':' in option, '--extended_config "key:option, key2: option"'
-            key, value = option.strip().split(':')
-            d[key.strip()] = value.strip()
-
-        for section, section_proxy in Config.items():
-            for key, option in section_proxy.items():
-                if key in d and key != 'extended_config':
-                    Config.set(section, key, str(d[key]))
+            for section, section_proxy in Config.items():
+                for key, option in section_proxy.items():
+                    if key in d and key != 'extended_config':
+                        Config.set(section, key, str(d[key]))
 
 
 def update_config_with_file(external_cfg_file):
@@ -124,7 +127,7 @@ def parse_cmd_args():
     global Config
     update_config(get_command_line(), Config)
 
-def get_config(force_reload=False):
+def get_config(force_reload=False, parse_command_line=True):
     """Returns the GoogleScraper configuration.
 
     Args:
@@ -135,7 +138,7 @@ def get_config(force_reload=False):
     global already_parsed
     if not already_parsed or force_reload:
         already_parsed = True
-        parse_config()
+        parse_config(parse_command_line=parse_command_line)
     return Config
 
 def update_config(d, target=None):
@@ -169,4 +172,4 @@ def update_config(d, target=None):
     return Config
 
 
-Config = get_config()
+Config = get_config(parse_command_line=False)

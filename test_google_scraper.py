@@ -8,8 +8,8 @@ from GoogleScraper.utils import get_some_words
 from GoogleScraper import Config
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
-from GoogleScraper.database import ScraperSearch
 from collections import Counter
+import argparse
 
 all_search_engines = [se.strip() for se in Config['SCRAPING'].get('supported_search_engines').split(',')]
 
@@ -168,7 +168,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'output_filename': csv_outfile
             }
         }
-        session = scrape_with_config(config)
+        search = scrape_with_config(config)
 
         assert os.path.exists(csv_outfile), '{} does not exist'.format(csv_outfile)
 
@@ -216,7 +216,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'output_filename': json_outfile
             }
         }
-        session = scrape_with_config(config)
+        search = scrape_with_config(config)
 
         assert os.path.exists(json_outfile), '{} does not exist'.format(json_outfile)
 
@@ -275,7 +275,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
     def test_page_number_selector_google(self):
         """Google is a bitch in testing this. While saving the html file, the selected
-        page is set back to 1."""
+        page is set back to 1. So page_number is always one."""
         parser = self.get_parser_for_file('google', 'data/page_number_selector/google_8.html')
         assert parser.page_number == 1, 'Wrong page number. Got {}'.format(parser.page_number)
 
@@ -313,10 +313,14 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
                 'verbosity': 1
             }
         }
-        session = scrape_with_config(config)
+        search = scrape_with_config(config)
+
+        assert search.number_search_engines_used == len(all_search_engines)
+        assert len(search.used_search_engines.split(',')) == len(search.used_search_engines.split(','))
+        assert search.number_proxies_used == 1
+        assert search.number_search_queries == 1
+        assert search.started_searching < search.stopped_searching
     
-        search = session.query(ScraperSearch).all()[-1]
-        
         assert len(all_search_engines) == len(search.serps), 'Not enough results. Expected: {}, got {}'.format(len(all_search_engines), len(search.serps))
 
         for serp in search.serps:
@@ -333,8 +337,9 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
 
 class GoogleScraperFunctionalTestCase(unittest.TestCase):
+
     # generic function for dynamic parsing
-    def scrape_query(self, mode, search_engines, query='', random_query=False, sel_browser='Chrome'):
+    def scrape_query(self, mode, search_engines='*', query='', random_query=False, sel_browser='Chrome'):
 
         if random_query:
             query = random_word()
@@ -343,7 +348,7 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             'SCRAPING': {
                 'use_own_ip': 'True',
                 'keyword': query,
-                'search_engines': '*',
+                'search_engines': search_engines,
                 'num_pages_for_keyword': 1,
                 'scrape_method': mode,
             },
@@ -355,49 +360,57 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
                 'sel_browser': sel_browser
             }
         }
-        session = scrape_with_config(config)
+        search = scrape_with_config(config)
 
-        return session
+        if search_engines == '*':
+            assert search.number_search_engines_used == len(all_search_engines)
+        else:
+            assert search.number_search_engines_used == len(search_engines.split(','))
+
+        if search_engines == '*':
+            assert len(search.used_search_engines.split(',')) == len(all_search_engines)
+        else:
+            assert len(search.used_search_engines.split(',')) == len(search_engines.split(','))
+
+        assert search.number_proxies_used == 1
+        assert search.number_search_queries == 1
+        assert search.started_searching < search.stopped_searching
+
+        return search
 
     ### test dynamic parsing for http mode
 
-
     def test_http_mode_all_engines(self):
 
-        session = self.scrape_query('http', all_search_engines, random_query=True)
+        search = self.scrape_query('http', all_search_engines, random_query=True)
 
 
      ### test dynamic parsing for selenium with phantomsjs
 
-    def __test_selenium_phantomjs_all_engines(self):
+    def test_selenium_phantomjs_all_engines(self):
 
-        session = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
+        search = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
 
 
     ### test dynamic parsing for selenium mode with Chrome
 
     def test_selenium_chrome_all_engines(self):
 
-        session = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
+        search = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
 
     ### test proxies
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('testtype', help='The testtype.', choices=('fast', 'long'))
+    args = parser.parse_args()
 
-    suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
-    unittest.TextTestRunner().run(suite)
+    if args.testtype == 'fast':
 
-    # import sys
-    # if len(sys.argv) > 1:
-    #     if sys.argv[1] == 'fast':
-    #
-    #         suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
-    #
-    #     else:
-    #
-    #         suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperFunctionalTestCase)
-    #
-    #     unittest.TextTestRunner().run(suite)
-    #
-    # else:
-    #     unittest.main()
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
+        unittest.TextTestRunner().run(suite)
+
+    elif args.testtype == 'long':
+        import sys
+        sys.argv = ['test_google_scraper.py']
+        unittest.main()

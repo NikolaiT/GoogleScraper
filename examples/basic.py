@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
-from GoogleScraper.database import ScraperSearch
 
 # See in the config.cfg file for possible values
 config = {
@@ -21,13 +20,11 @@ config = {
 }
 
 try:
-    sqlalchemy_session = scrape_with_config(config)
+    search = scrape_with_config(config)
 except GoogleSearchError as e:
     print(e)
 
 # let's inspect what we got
-
-search = sqlalchemy_session.query(ScraperSearch).all()[-1]
 
 for serp in search.serps:
     print(serp)

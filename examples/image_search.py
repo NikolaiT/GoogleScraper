@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
-from GoogleScraper.database import ScraperSearch
 
 # simulating a image search for all search engines that support image search.
 # Then download all found images :)
@@ -22,12 +21,11 @@ config = {
 }
 
 try:
-    sqlalchemy_session = scrape_with_config(config)
+    search = scrape_with_config(config)
 except GoogleSearchError as e:
     print(e)
 
 image_urls = []
-search = sqlalchemy_session.query(ScraperSearch).all()[-1]
 
 for serp in search.serps:
     image_urls.extend(
