@@ -43,10 +43,14 @@ class Parser():
         search_results: The results after parsing.
     """
 
+    # this selector specified the element that notifies the user whether the search
+    # had any results.
+    no_results_selector = []
+
     # if subclasses specify an value for this attribute and the attribute
     # targets an element in the serp page, then there weren't any results
     # for the original query.
-    no_results_selectors = []
+    effective_query_selector = []
 
     # the selector that gets the number of results (guessed) as shown by the search engine.
     num_results_search_selectors = []
@@ -65,7 +69,7 @@ class Parser():
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
 
-    def __init__(self, html=None):
+    def __init__(self, html=None, query=''):
         """Create new Parser instance and parse all information.
 
         Args:
@@ -79,7 +83,8 @@ class Parser():
         """
         self.searchtype = Config['SCRAPING'].get('search_type', 'normal')
         assert self.searchtype in self.search_types, 'search type "{}" is not supported in {}'.format(self.searchtype, self.__class__.__name__)
-        
+
+        self.query = query
         self.html = html
         self.dom = None
         self.search_results = {}
@@ -87,6 +92,7 @@ class Parser():
         self.num_results = 0
         self.effective_query = ''
         self.page_number = -1
+        self.no_results = False
 
         # to be set by the implementing sub classes
         self.search_engine = ''
@@ -150,9 +156,12 @@ class Parser():
             self.page_number = -1
 
         # let's see if the search query was shitty (no results for that query)
-        self.effective_query = self.first_match(self.no_results_selectors, self.dom)
+        self.effective_query = self.first_match(self.effective_query_selector, self.dom)
         if self.effective_query:
             out('{}: There was no search hit for the search query. Search engine used {} instead.'.format(self.__class__.__name__, self.effective_query), lvl=4)
+
+        # the element that notifies the user about no results.
+        self.no_results_text = self.first_match(self.no_results_selector, self.dom)
 
         # get the stuff that is of interest in SERP pages.
         if not selector_dict and not isinstance(selector_dict, dict):
@@ -328,7 +337,9 @@ class GoogleParser(Parser):
     
     search_types = ['normal', 'image']
 
-    no_results_selectors = ['#topstuff .med > b::text']
+    effective_query_selector = ['#topstuff .med > b::text']
+
+    no_results_selector = []
 
     num_results_search_selectors = ['#resultStats']
 
@@ -413,6 +424,9 @@ class GoogleParser(Parser):
         """
         super().after_parsing()
 
+        if self.searchtype == 'normal':
+            self.no_results = self.num_results <= 0
+
         clean_regexes = {
             'normal': r'/url\?q=(?P<url>.*?)&sa=U&ei=',
             'image': r'imgres\?imgurl=(?P<url>.*?)&'
@@ -434,7 +448,9 @@ class YandexParser(Parser):
 
     search_types = ['normal', 'image']
 
-    no_results_selectors = ['.misspell__message .misspell__link']
+    no_results_selector = ['.message .misspell__message::text']
+
+    effective_query_selector = ['.misspell__message .misspell__link']
 
     num_results_search_selectors = ['.serp-adv .serp-item__wrap > strong']
 
@@ -484,6 +500,12 @@ class YandexParser(Parser):
         """
         super().after_parsing()
 
+        if self.searchtype == 'normal':
+            if self.no_results_text:
+                self.no_results = self.query in self.no_results_text
+            else:
+                self.no_results = False
+
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
@@ -502,10 +524,12 @@ class BingParser(Parser):
     search_engine = 'bing'
     
     search_types = ['normal', 'image']
+
+    no_results_selector = ['#b_results > .b_ans::text']
     
     num_results_search_selectors = ['.sb_count']
 
-    no_results_selectors = ['#sp_requery a > strong']
+    effective_query_selector = ['#sp_requery a > strong']
 
     page_number_selectors = ['.sb_pagS::text']
     
@@ -580,6 +604,13 @@ class BingParser(Parser):
         """
         super().after_parsing()
 
+        if self.searchtype == 'normal':
+            if self.no_results_text:
+                self.no_results = self.query in self.no_results_text\
+                                  or 'Do you want results only for' in self.no_results_text
+            else:
+                self.no_results = False
+
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
@@ -598,8 +629,10 @@ class YahooParser(Parser):
 
     search_types = ['normal', 'image']
 
+    no_results_selector = []
+
     # yahooo doesn't have such a thing :D
-    no_results_selectors = ['']
+    effective_query_selector = ['']
 
     num_results_search_selectors = ['#pg > span:last-child']
 
@@ -672,8 +705,10 @@ class BaiduParser(Parser):
     
     num_results_search_selectors = ['#container .nums']
 
+    no_results_selector = []
+
     # no such thing for baidu
-    no_results_selectors = ['']
+    effective_query_selector = ['']
 
     page_number_selectors = ['.fk_cur + .pc::text']
 
@@ -742,7 +777,9 @@ class DuckduckgoParser(Parser):
     
     num_results_search_selectors = []
 
-    no_results_selectors = ['']
+    no_results_selector = []
+
+    effective_query_selector = ['']
 
     # duckduckgo is loads next pages with ajax
     page_number_selectors = ['']
@@ -760,6 +797,16 @@ class DuckduckgoParser(Parser):
         },
     }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
+    def after_parsing(self):
+        super().after_parsing()
+
+        if self.searchtype == 'normal':
+            self.no_results = self.num_results <= 0
+
 
 class AskParser(Parser):
     """Parses SERP pages of the Ask search engine."""
@@ -770,7 +817,9 @@ class AskParser(Parser):
 
     num_results_search_selectors = []
 
-    no_results_selectors = ['#spell-check-result > a']
+    no_results_selector = []
+
+    effective_query_selector = ['#spell-check-result > a']
 
     page_number_selectors = ['.pgcsel .pg::text']
 
@@ -795,7 +844,9 @@ class BlekkoParser(Parser):
 
     search_types = ['normal']
 
-    no_results_selectors = ['']
+    effective_query_selector = ['']
+
+    no_results_selector = []
 
     num_results_search_selectors = []
 
@@ -882,7 +933,7 @@ def get_parser_by_search_engine(search_engine):
         raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
 
 
-def parse_serp(html=None, parser=None, scraper=None, search_engine=None):
+def parse_serp(html=None, parser=None, scraper=None, search_engine=None, query=''):
         """Store the parsed data in the sqlalchemy session.
 
         If no parser is supplied then we are expected to parse again with
@@ -900,7 +951,7 @@ def parse_serp(html=None, parser=None, scraper=None, search_engine=None):
 
         if not parser:
             parser = get_parser_by_search_engine(search_engine)
-            parser = parser()
+            parser = parser(query=query)
             parser.parse(html)
 
         serp = SearchEngineResultsPage()

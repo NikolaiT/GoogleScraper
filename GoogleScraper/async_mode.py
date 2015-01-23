@@ -104,7 +104,7 @@ class AsyncScrapeScheduler():
                 cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method, scrape.page_number)
 
                 if scrape.parser:
-                    serp = parse_serp(parser=scrape.parser, scraper=scrape)
+                    serp = parse_serp(parser=scrape.parser, scraper=scrape, query=scrape.query)
 
                     self.scraper_search.serps.append(serp)
                     self.session.add(serp)

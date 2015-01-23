@@ -18,7 +18,7 @@ All objects imported here are exposed as the public API of GoogleScraper
 """
 
 from GoogleScraper.core import scrape_with_config
-from GoogleScraper.scraping import GoogleSearchError
+from GoogleScraper.scraping import GoogleSearchError, MaliciousRequestDetected
 
 Config = get_config(parse_command_line=False)
 setup_logger()

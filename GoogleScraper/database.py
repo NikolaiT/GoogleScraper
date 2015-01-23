@@ -78,6 +78,14 @@ class SearchEngineResultsPage(Base):
     # Otherwise it remains empty.
     effective_query = Column(String, default='')
 
+    # Whether the search engine has no results.
+    # This is not the same as num_results, because some search engines
+    # automatically search other similar search queries when they find no results.
+    # Sometimes they have results for the query, but detect a spelling mistake and only
+    # suggest an alternative. This is another case!
+    # If no_results is true, then there weren't ANY RESULTS FOUND FOR THIS QUERY!!!
+    no_results = Column(Boolean, default=False)
+
     def __str__(self):
         return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(**self.__dict__)
 
@@ -98,6 +106,7 @@ class SearchEngineResultsPage(Base):
         self.num_results_for_query = parser.num_results_for_query
         self.num_results = parser.num_results
         self.effective_query = parser.effective_query
+        self.no_results = parser.no_results
 
         for key, value in parser.search_results.items():
             if isinstance(value, list):

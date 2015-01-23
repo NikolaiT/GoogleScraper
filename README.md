@@ -39,9 +39,30 @@ source env/bin/activate
 pip install git+git://github.com/NikolaiT/GoogleScraper/
 ```
 
-Please note however, that some features and examples might not work as expected. I also don't guarantee that 
-the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a 
+Please note however, that some features and examples might not work as expected. I also don't guarantee that
+the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a
 usable version.
+
+### On Windows
+
+On windows, you need to install some extensions manually: Lxml and Chromedriver:
+
+#### lxml
+
+Download the correct wheel file here: http://www.lfd.uci.edu/~gohlke/pythonlibs/#lxml
+
+Then copy the downloaded file in your python root directory: C:\Python34\Scripts\
+Then from this directory, issue the command in a cmd shell: ```pip install wheel_file.whl```
+Of course the file has the name as it was downloaded.
+
+#### chromedriver
+
+Download the latest chromedriver from here: https://sites.google.com/a/chromium.org/chromedriver/downloads
+Then copy the **chromedriver.exe** in the C:\Python34\ directory.
+
+Then go back to C:\Python34\Scripts\ and issue the command: ```pip install GoogleScraper```
+
+This should be it.
 
 <a name="quick" />
 ## Quick Start

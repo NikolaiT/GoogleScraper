@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
+## run specific tests:
+## python3 -m unittest test_google_scraper.GoogleScraperFunctionalTestCase.test_no_results
+
 import os
 import unittest
 import random
@@ -399,6 +402,18 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
         search = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
 
     ### test proxies
+
+
+    ### test no results
+
+    def test_no_results(self):
+
+        query = 'kajkld85049nmbBBAAAbvan857438VAVATRE6543vaVTYUYTRE73739klahbnvc'
+        search_engines = 'google,duckduckgo,bing'
+        search = self.scrape_query(mode='selenium', sel_browser='phantomjs', search_engines=search_engines, query=query)
+
+        for serp in search.serps:
+            assert serp.no_results is True, 'There should be no results, but got: {} {} for {}'.format(serp.no_results, len(serp.links), serp.search_engine_name)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

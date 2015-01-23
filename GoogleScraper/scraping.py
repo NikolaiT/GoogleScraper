@@ -9,9 +9,9 @@ import abc
 
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.caching import cache_results
-from GoogleScraper.database import SearchEngineResultsPage, db_Proxy
+from GoogleScraper.database import db_Proxy
 from GoogleScraper.config import Config
-from GoogleScraper.log import out
+from GoogleScraper.log import out, raise_or_log
 from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 
@@ -273,7 +273,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 except StopScrapingException as e:
                     # Leave search when search engines detected us
                     # add the rest of the keywords as missed one
-                    logger.critical(e)
+                    raise_or_log(e, exception_obj=GoogleSearchError)
                     continue
 
     @abc.abstractmethod
@@ -297,7 +297,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         Args:
             status_code: The status code of the http response.
         """
-        logger.warning('Malicious request detected: {}'.format(status_code))
+        raise_or_log('Malicious request detected: {}'.format(status_code), exception_obj=GoogleSearchError)
 
         # cascade
         timeout = Config['PROXY_POLICY'].getint('{search_engine}_proxy_detected_timeout'.format(
@@ -310,7 +310,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         with self.db_lock:
 
-            serp = parse_serp(parser=self.parser, scraper=self)
+            serp = parse_serp(parser=self.parser, scraper=self, query=self.query)
 
             self.scraper_search.serps.append(serp)
             self.session.add(serp)
@@ -386,7 +386,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.search_number += 1
 
         if not self.store():
-            logger.error(
+            logger.warning(
                 'No results to store for keyword: "{}" in search engine: {}'.format(self.query,
                                                                                               self.search_engine_name))
 

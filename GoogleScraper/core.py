@@ -12,7 +12,7 @@ from GoogleScraper.database import ScraperSearch, SERP, Link, get_session, fixtu
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
 from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one, parse_all_cached_files, clean_cachefiles
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
-from GoogleScraper.log import out
+from GoogleScraper.log import out, raise_or_log
 from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
 from GoogleScraper.scraping import ScrapeWorkerFactory
 from GoogleScraper.output_converter import init_outfile
@@ -50,10 +50,13 @@ def scrape_with_config(config, **kwargs):
     Returns:
         The result of the main() function. Is a scraper search object.
         In case you want to access the session, import it like this:
-        ```from GoogleScraper database import session```4
+        ```from GoogleScraper database import session```
     """
     if not isinstance(config, dict):
         raise ValueError('The config parameter needs to be a configuration dictionary. Given parameter has type: {}'.format(type(config)))
+
+    # make exceptions from GoogleScraper catchable.
+    config['SCRAPING'].update({'raise_exceptions_while_scraping': True})
 
     GoogleScraper.config.update_config(config)
     return main(return_results=True, parse_cmd_line=False, **kwargs)
@@ -216,7 +219,7 @@ def main(return_results=False, parse_cmd_line=True):
         return
 
     if not (keyword or keywords) and not kwfile:
-        logger.error('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
+        raise_or_log('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and keyword with --keyword.')
         # Just print the help.
         get_command_line(True)
         return
@@ -230,7 +233,7 @@ def main(return_results=False, parse_cmd_line=True):
     scrape_jobs = {}
     if kwfile:
         if not os.path.exists(kwfile):
-            raise InvalidConfigurationException('The keyword file {} does not exist.'.format(kwfile))
+            raise_or_log('The keyword file {} does not exist.'.format(kwfile), exception_obj=InvalidConfigurationException)
         else:
             if kwfile.endswith('.py'):
                 # we need to import the variable "scrape_jobs" from the module.
@@ -242,7 +245,7 @@ def main(return_results=False, parse_cmd_line=True):
                     logger.warning(e)
             else:
                 # Clean the keywords of duplicates right in the beginning
-                keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n')])
+                keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n') if line.strip()])
 
     if not scrape_jobs:
         scrape_jobs = default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, pages)
@@ -257,7 +260,7 @@ def main(return_results=False, parse_cmd_line=True):
         _caching_is_one_to_one(keyword)
 
     if Config['SCRAPING'].getint('num_results_per_page') > 100:
-        raise InvalidConfigurationException('Not more that 100 results per page available for searches.')
+        raise_or_log('Not more that 100 results per page available for searches.', exception_obj=InvalidConfigurationException)
 
     proxies = []
 
@@ -274,7 +277,7 @@ def main(return_results=False, parse_cmd_line=True):
 
     valid_search_types = ('normal', 'video', 'news', 'image')
     if Config['SCRAPING'].get('search_type') not in valid_search_types:
-        InvalidConfigurationException('Invalid search type! Select one of {}'.format(repr(valid_search_types)))
+        raise_or_log('Invalid search type! Select one of {}'.format(repr(valid_search_types)), exception_obj=InvalidConfigurationException)
 
     if Config['GLOBAL'].getboolean('simulate', False):
         print('*' * 60 + 'SIMULATION' + '*' * 60)

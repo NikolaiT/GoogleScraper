@@ -416,9 +416,9 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
             num_cached += 1
             scrape_jobs.remove(job)
 
-    out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=1)
+    out('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir')), lvl=2)
     out('{}/{} objects have been read from the cache. {} remain to get scraped.'.format(
-        num_cached, num_total, num_total - num_cached), lvl=1)
+        num_cached, num_total, num_total - num_cached), lvl=2)
 
     session.add(scraper_search)
     session.commit()
@@ -431,6 +431,7 @@ def parse_again(fname, search_engine, scrape_method, query):
     return parse_serp(
         html=html,
         search_engine=search_engine,
+        query=query
     )
 
 def get_serp_from_database(session, query, search_engine, scrape_method, page_number):

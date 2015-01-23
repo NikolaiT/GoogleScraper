@@ -90,3 +90,5 @@
 
 
 - Fix: If there's no internet connection, Malicious request detected is show. Show no internet connection instead.
+
+- FIGURE OUT: WHY THE HELLO DOES DUCKDUCKGO NOT WORK IN PHANTOMJS?

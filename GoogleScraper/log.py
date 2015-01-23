@@ -23,3 +23,11 @@ def out(msg, lvl=2):
     level = Config['GLOBAL'].getint('verbosity', 2)
     if lvl <= level:
         logger.info(msg)
+
+
+def raise_or_log(msg, exception_obj=Exception):
+    if Config['SCRAPING'].getboolean('raise_exceptions_while_scraping', False):
+        raise exception_obj(msg)
+    else:
+        logger.warning(msg)
+
