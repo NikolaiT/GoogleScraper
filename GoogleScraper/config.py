@@ -62,7 +62,7 @@ def parse_config(parse_command_line=True):
     """
     global Config, CONFIG_FILE
 
-    cfg_parser = configparser.ConfigParser()
+    cfg_parser = configparser.RawConfigParser()
     # Add internal configuration
     cfg_parser.read_dict(Config)
 
@@ -115,7 +115,7 @@ def update_config_with_file(external_cfg_file):
         external_cfg_file: The external configuration file to update from.
     """
     if external_cfg_file and os.path.exists(external_cfg_file):
-        external = configparser.ConfigParser()
+        external = configparser.RawConfigParser()
         external.read_file(open(external_cfg_file, 'rt'))
         external.remove_section('DEFAULT')
         update_config(dict(external))

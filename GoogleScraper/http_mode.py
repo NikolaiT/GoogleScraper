@@ -41,7 +41,7 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
     search_params = {}
 
     # Don't set the offset parameter explicitly if the default search (no offset) is correct.
-    start_search_position = None if page_number == 1 else str(int(num_results_per_page) * int(page_number))
+    start_search_position = '1' if page_number == 1 else str(int(num_results_per_page) * int(page_number))
 
     if search_engine == 'google':
         search_params['q'] = query
@@ -234,7 +234,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.parser = self.parser()
 
-    def search(self, *args, rand=False, **kwargs):
+    def search(self, *args, rand=False, timeout=15, **kwargs):
         """The actual search for the search engine.
 
         When raising StopScrapingException, the scraper will stop.
@@ -251,7 +251,8 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             super().detection_prevention_sleep()
             super().keyword_info()
 
-            request = self.requests.get(self.base_search_url + urlencode(self.search_params), headers=self.headers, timeout=5)
+            request = self.requests.get(self.base_search_url + urlencode(self.search_params),
+                                                                headers=self.headers, timeout=timeout)
 
             self.requested_at = datetime.datetime.utcnow()
             self.html = request.text

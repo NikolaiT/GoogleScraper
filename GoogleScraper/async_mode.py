@@ -9,6 +9,7 @@ from GoogleScraper.utils import get_some_words
 from GoogleScraper.config import Config
 from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.caching import cache_results
+from GoogleScraper.log import out
 
 class AsyncHttpScrape():
     
@@ -27,7 +28,7 @@ class AsyncHttpScrape():
         self.search_type = 'normal'
         self.scrape_method = 'http-async'
         self.requested_at = None
-        self.requested_by = ''
+        self.requested_by = 'localhost'
         self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, 'http')
         self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name, search_type=self.search_type)
@@ -37,10 +38,24 @@ class AsyncHttpScrape():
         
         @asyncio.coroutine
         def request():
-            response = yield from aiohttp.request('GET', self.base_search_url + urlencode(self.params),
+            url = self.base_search_url + urlencode(self.params)
+
+            response = yield from aiohttp.request('GET', url,
                                                         params=self.params, headers=self.headers)
 
             self.requested_at = datetime.datetime.utcnow()
+
+            out('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
+                self.requested_by,
+                self.query,
+                self.search_engine_name,
+                response.status
+            ),lvl=2)
+
+            out('[i] URL: {} HEADERS: {}'.format(
+                url,
+                self.headers
+            ), lvl=3)
 
             if response.status == 200:
                 body = yield from response.read_and_close(decode=False)
@@ -101,16 +116,18 @@ class AsyncScrapeScheduler():
             for task in self.results[0]:
                 scrape = task.result()
 
-                cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method, scrape.page_number)
+                if scrape:
 
-                if scrape.parser:
-                    serp = parse_serp(parser=scrape.parser, scraper=scrape, query=scrape.query)
+                    cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method, scrape.page_number)
 
-                    self.scraper_search.serps.append(serp)
-                    self.session.add(serp)
-                    self.session.commit()
+                    if scrape.parser:
+                        serp = parse_serp(parser=scrape.parser, scraper=scrape, query=scrape.query)
 
-                    store_serp_result(serp)
+                        self.scraper_search.serps.append(serp)
+                        self.session.add(serp)
+                        self.session.commit()
+
+                        store_serp_result(serp)
 
 
 if __name__ == '__main__':

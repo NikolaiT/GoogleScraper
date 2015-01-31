@@ -34,9 +34,6 @@ class JsonStreamWriter():
         self.last_object = id(obj)
 
     def end(self):
-        # remove the last written commata
-        # self.file.seek(-1, os.SEEK_END)
-        # self.file.truncate()
         self.file.write(']')
         self.file.close()
 
