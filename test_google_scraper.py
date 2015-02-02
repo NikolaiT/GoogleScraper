@@ -34,11 +34,11 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     # way to assert that a certain url or piece must be in the results.
     # If the SERP format changes, update accordingly (after all, this shouldn't happen that often).
 
-    def get_parser_for_file(self, se, file):
+    def get_parser_for_file(self, se, file, **kwargs):
         with open(file, 'r') as f:
             html = f.read()
             parser = get_parser_by_search_engine(se)
-            parser = parser(html)
+            parser = parser(html, **kwargs)
 
         return parser
 
@@ -334,6 +334,17 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
             if serp.search_engine_name in ('google', 'bing'):
                 assert serp.effective_query, '{} must have an effective query when a keyword has no results.'.format(serp.search_engine_name)
+
+
+    def test_no_results2_static(self):
+
+        query = '"Find ich besser als einfach nur den Propheten zu zeichnen, denn das ist nur reine Provokation. Was Titanic macht ist Satire."'
+
+        for search_engine in ('google', 'duckduckgo', 'bing', 'yahoo'):
+
+            parser = self.get_parser_for_file(search_engine, 'data/no_results_literal/{}.html'.format(search_engine), query=query)
+
+            assert parser.no_results, 'No results must be true for search engine {}!'.format(search_engine)
 
     ### test correct parsing of the number of results for the query..
 

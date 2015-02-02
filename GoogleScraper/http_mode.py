@@ -24,7 +24,7 @@ headers = {
             'Connection': 'keep-alive',
 }
 
-def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_results_per_page=50, search_type='normal'):
+def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_results_per_page=10, search_type='normal'):
     """Returns the params of the url for the search engine and the search mode.
 
     Args:
@@ -40,13 +40,14 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
     
     search_params = {}
 
-    # Don't set the offset parameter explicitly if the default search (no offset) is correct.
-    start_search_position = '1' if page_number == 1 else str(int(num_results_per_page) * int(page_number))
-
     if search_engine == 'google':
         search_params['q'] = query
-        search_params['num'] = str(num_results_per_page)
-        search_params['start'] = start_search_position
+        # only set when other num results than 10.
+        if num_results_per_page != 10:
+            search_params['num'] = str(num_results_per_page)
+
+        if page_number > 1:
+            search_params['start'] = str((page_number - 1) * int(num_results_per_page))
 
         if search_type == 'image':
             search_params.update({
@@ -75,23 +76,28 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
 
     elif search_engine == 'yandex':
         search_params['text'] = query
-        search_params['p'] = start_search_position
+        if page_number > 1:
+            search_params['p'] = str(page_number-1)
 
         if search_type == 'image':
             base_search_url = 'http://yandex.ru/images/search?'
 
     elif search_engine == 'bing':
         search_params['q'] = query
-        search_params['first'] = start_search_position
+        # bing doesn't support variable number of results (As far as I know).
+        if page_number > 1:
+            search_params['first'] = str(1 + ((page_number - 1) * 10))
 
     elif search_engine == 'yahoo':
         search_params['p'] = query
-        search_params['b'] = start_search_position
+        if page_number > 1:
+            search_params['b'] = str(1 + ((page_number - 1) * 10))
         search_params['ei'] = 'UTF-8'
 
     elif search_engine == 'baidu':
         search_params['wd'] = query
-        search_params['pn'] = start_search_position
+        if page_number > 1:
+            search_params['pn'] = str((page_number - 1) * 10)
         search_params['ie'] = 'utf-8'
     elif search_engine == 'duckduckgo':
         search_params['q'] = query
@@ -100,6 +106,8 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
         search_params['qsrc'] = '0'
         search_params['l'] = 'dir'
         search_params['qo'] = 'homepageSearchBox'
+        if page_number > 1:
+            search_params['page'] = str(page_number)
     elif search_engine == 'blekko':
         search_params['q'] = query
 

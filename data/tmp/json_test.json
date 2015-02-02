@@ -1,12 +1,12 @@
 [{
   "effective_query": "0",
-  "id": "99",
+  "id": "70",
   "no_results": "False",
   "num_results": "0",
   "num_results_for_query": "0",
   "page_number": "None",
   "query": "None",
-  "requested_at": "2015-01-24 13:29:53.626072",
+  "requested_at": "2015-02-02 16:02:44.861607",
   "requested_by": "127.0.0.1",
   "results": [],
   "scrape_method": "None",
@@ -14,33 +14,7 @@
 },{
   "effective_query": "False",
   "id": "None",
-  "no_results": "False",
-  "num_results": "0",
-  "num_results_for_query": "False",
-  "page_number": "None",
-  "query": "None",
-  "requested_at": "None",
-  "requested_by": "None",
-  "results": [],
-  "scrape_method": "None",
-  "search_engine_name": "None"
-},{
-  "effective_query": "False",
-  "id": "None",
   "no_results": "True",
-  "num_results": "0",
-  "num_results_for_query": "False",
-  "page_number": "None",
-  "query": "None",
-  "requested_at": "None",
-  "requested_by": "None",
-  "results": [],
-  "scrape_method": "None",
-  "search_engine_name": "None"
-},{
-  "effective_query": "False",
-  "id": "None",
-  "no_results": "False",
   "num_results": "10",
   "num_results_for_query": "33,800 Ergebnisse",
   "page_number": "None",
@@ -159,6 +133,32 @@
       "visible_link": "plus.google.com/104652501835957338958"
     }
   ],
+  "scrape_method": "None",
+  "search_engine_name": "None"
+},{
+  "effective_query": "False",
+  "id": "None",
+  "no_results": "False",
+  "num_results": "0",
+  "num_results_for_query": "False",
+  "page_number": "None",
+  "query": "None",
+  "requested_at": "None",
+  "requested_by": "None",
+  "results": [],
+  "scrape_method": "None",
+  "search_engine_name": "None"
+},{
+  "effective_query": "False",
+  "id": "None",
+  "no_results": "True",
+  "num_results": "0",
+  "num_results_for_query": "False",
+  "page_number": "None",
+  "query": "None",
+  "requested_at": "None",
+  "requested_by": "None",
+  "results": [],
   "scrape_method": "None",
   "search_engine_name": "None"
 },{
@@ -288,7 +288,7 @@
 },{
   "effective_query": "False",
   "id": "None",
-  "no_results": "False",
+  "no_results": "True",
   "num_results": "0",
   "num_results_for_query": "False",
   "page_number": "None",

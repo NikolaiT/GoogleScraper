@@ -257,7 +257,7 @@ class Parser():
         Returns:
             The very first match or False if all selectors didn't match anything.
         """
-        assert isinstance(selectors, list), 'selectors must be of type list you motherfucker'
+        assert isinstance(selectors, list), 'selectors must be of type list!'
 
         for selector in selectors:
             if selector:
@@ -425,7 +425,27 @@ class GoogleParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
-            self.no_results = self.num_results <= 0
+            if self.num_results == 0:
+                self.no_results = True
+
+            if len(self.dom.xpath(self.css_to_xpath('#topstuff div.med'))) >= 2:
+                self.no_results = True
+
+            # maybe this is dangerous
+            try:
+                if self.query in self.dom.xpath(self.css_to_xpath('#topstuff'))[0].text_content():
+                    self.no_results = True
+            except:
+                pass
+
+            # finally try in the snippets
+            if self.no_results is True:
+                for key, i in self.iter_serp_items():
+
+                    if 'snippet' in self.search_results[key][i]:
+                        if self.query.replace('"', '') in self.search_results[key][i]['snippet']:
+                            self.no_results = False
+
 
         clean_regexes = {
             'normal': r'/url\?q=(?P<url>.*?)&sa=U&ei=',
@@ -501,10 +521,13 @@ class YandexParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
+            self.no_results = False
+
             if self.no_results_text:
-                self.no_results = self.query in self.no_results_text
-            else:
-                self.no_results = False
+                self.no_results = 'По вашему запросу ничего не нашлось' in self.no_results_text
+
+            if self.num_results == 0:
+                self.no_results = True
 
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
@@ -605,11 +628,11 @@ class BingParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
+
+            self.no_results = False
             if self.no_results_text:
                 self.no_results = self.query in self.no_results_text\
                                   or 'Do you want results only for' in self.no_results_text
-            else:
-                self.no_results = False
 
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
@@ -681,6 +704,14 @@ class YahooParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
+
+            self.no_results = False
+            if self.num_results == 0:
+                self.no_results = True
+
+            if len(self.dom.xpath(self.css_to_xpath('#cquery'))) >= 1:
+                self.no_results = True
+
             for key, i in self.iter_serp_items():
                 if self.search_results[key][i]['visible_link'] is None:
                     del self.search_results[key][i]
@@ -757,6 +788,10 @@ class BaiduParser(Parser):
         """
         super().after_parsing()
 
+        if self.search_engine == 'normal':
+            if len(self.dom.xpath(self.css_to_xpath('.hit_top_new'))) >= 1:
+                self.no_results = True
+
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
@@ -805,7 +840,14 @@ class DuckduckgoParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
+            self.no_results = False
             self.no_results = self.num_results <= 0
+
+            try:
+                if 'No more results.' in self.dom.xpath(self.css_to_xpath('.no-results'))[0].text_content():
+                    self.no_results = True
+            except:
+                pass
 
 
 class AskParser(Parser):

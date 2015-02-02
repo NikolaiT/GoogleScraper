@@ -38,7 +38,7 @@ def get_command_line(print_help=False):
     parser.add_argument('--shell', action='store_true', default=False, help='Fire up a shell with a loaded sqlalchemy session.')
 
     parser.add_argument('-n', '--num-results-per-page', type=int,
-                         action='store', default=50,
+                         action='store', default=10,
                         help='The number of results per page. Must be smaller than 100, by default 50 for raw mode and 10 for selenium mode. Some search engines ignore this setting.')
 
     parser.add_argument('-p', '--num-pages-for-keyword', type=int, action='store',
