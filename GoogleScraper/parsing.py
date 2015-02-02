@@ -442,7 +442,7 @@ class GoogleParser(Parser):
             if self.no_results is True:
                 for key, i in self.iter_serp_items():
 
-                    if 'snippet' in self.search_results[key][i]:
+                    if 'snippet' in self.search_results[key][i] and self.query:
                         if self.query.replace('"', '') in self.search_results[key][i]['snippet']:
                             self.no_results = False
 
