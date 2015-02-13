@@ -427,6 +427,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
             self.search_input = self._wait_until_search_input_field_appears()
 
+            if self.search_input is False and Config['PROXY_POLICY'].getboolean('stop_on_detection'):
+                self.status = 'Malicious request detected'
+                super().after_search()
+                return
+
             if self.search_input is False:
                 self.search_input = self.handle_request_denied()
 

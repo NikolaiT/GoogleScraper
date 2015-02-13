@@ -41,6 +41,9 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
     search_params = {}
 
     if search_engine == 'google':
+        # always use the english interface, such that we can detect
+        # state by some hard coded needles.
+        search_params['hl'] = 'en'
         search_params['q'] = query
         # only set when other num results than 10.
         if num_results_per_page != 10:
@@ -242,13 +245,15 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.parser = self.parser()
 
-    def search(self, *args, rand=False, timeout=15, **kwargs):
+    def search(self, rand=False, timeout=15):
         """The actual search for the search engine.
 
         When raising StopScrapingException, the scraper will stop.
 
         When return False, the scraper tries to continue with next keyword.
         """
+
+        success = True
 
         self.build_search()
 
@@ -272,29 +277,31 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             lvl=3)
 
         except self.requests.ConnectionError as ce:
-            reason = 'Network problem occurred {}'.format(ce)
-            raise StopScrapingException('Stopping scraping because {}'.format(reason))
+            self.status = 'Network problem occurred {}'.format(ce)
+            success = False
         except self.requests.Timeout as te:
-            reason = 'Connection timeout {}'.format(te)
-            raise StopScrapingException('Stopping scraping because {}'.format(reason))
+            self.status = 'Connection timeout {}'.format(te)
+            success = False
         except self.requests.exceptions.RequestException as e:
             # In case of any http networking exception that wasn't caught
             # in the actual request, just end the worker.
-            raise StopScrapingException('Stopping scraping because {}'.format(e))
+            self.status = 'Stopping scraping because {}'.format(e)
 
         if not request.ok:
             self.handle_request_denied(request.status_code)
-            return False
+            success = False
 
         super().after_search()
 
-        return True
+        return success
 
     def run(self):
         super().before_search()
 
         if self.startable:
-            args = []
-            kwargs = {}
-            kwargs['rand'] = False
-            SearchEngineScrape.blocking_search(self, self.search, *args, **kwargs)
+            for self.query, self.pages_per_keyword in self.jobs.items():
+
+                for self.page_number in self.pages_per_keyword:
+
+                    if not self.search(rand=True):
+                        self.missed_keywords.add(self.query)

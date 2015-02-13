@@ -33,6 +33,7 @@ class AsyncHttpScrape():
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, 'http')
         self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name, search_type=self.search_type)
         self.headers = headers
+        self.status = 'successful'
         
     def __call__(self):
         
@@ -40,8 +41,10 @@ class AsyncHttpScrape():
         def request():
             url = self.base_search_url + urlencode(self.params)
 
-            response = yield from aiohttp.request('GET', url,
-                                                        params=self.params, headers=self.headers)
+            response = yield from aiohttp.request('GET', url, params=self.params, headers=self.headers)
+
+            if response.status != 200:
+                self.status = 'not successful: ' + response.status
 
             self.requested_at = datetime.datetime.utcnow()
 
@@ -50,7 +53,7 @@ class AsyncHttpScrape():
                 self.query,
                 self.search_engine_name,
                 response.status
-            ),lvl=2)
+            ), lvl=2)
 
             out('[i] URL: {} HEADERS: {}'.format(
                 url,

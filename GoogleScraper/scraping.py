@@ -127,7 +127,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     sophisticated input format and more tricky engineering.
     """
 
-    # TODO: How to get this information? Be evil :)
     malicious_request_needles = {
         'google': {
             'inurl': '/sorry/',
@@ -138,7 +137,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         'baidu': {},
         'yandex': {},
         'ask': {},
-        'blekko': {}
+        'blekko': {},
+        'duckduckgo': {}
     }
 
     def __init__(self, jobs={}, scraper_search=None, session=None, db_lock=None, cache_lock=None,
@@ -242,39 +242,15 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # the default timeout
         self.timeout = 5
 
+        # the status of the thread after finishing or failing
+        self.status = 'successful'
+
+        self.html = ''
+
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
         """Send the search request(s) over the transport."""
-
-
-    def blocking_search(self, callback, *args, **kwargs):
-        """Similar transports have the same search loop layout.
-
-        The SelScrape and HttpScrape classes have the same search loops. Just
-        the transport mechanism is quite different (In HttpScrape class we replace
-        the browsers functionality with our own for example).
-
-        Args:
-            callback: A callable with the search functionality.
-            args: Arguments for the callback
-            kwargs: Keyword arguments for the callback.
-        """
-        for self.query, self.pages_per_keyword in self.jobs.items():
-
-            for self.page_number in self.pages_per_keyword:
-
-                # set the actual search code in the derived class
-                try:
-
-                    if not callback(*args, **kwargs):
-                        self.missed_keywords.add(self.query)
-
-                except StopScrapingException as e:
-                    # Leave search when search engines detected us
-                    # add the rest of the keywords as missed one
-                    raise_or_log(e, exception_obj=GoogleSearchError)
-                    continue
 
     @abc.abstractmethod
     def set_proxy(self):
@@ -297,16 +273,16 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         Args:
             status_code: The status code of the http response.
         """
-        raise_or_log('Malicious request detected: {}'.format(status_code), exception_obj=GoogleSearchError)
-
-        # cascade
-        timeout = Config['PROXY_POLICY'].getint('{search_engine}_proxy_detected_timeout'.format(
-            search_engine=self.search_engine_name), Config['PROXY_POLICY'].getint('proxy_detected_timeout'))
-        time.sleep(timeout)
+        self.status = 'Malicious request detected: {}'.format(status_code)
 
     def store(self):
         """Store the parsed data in the sqlalchemy scoped session."""
         assert self.session, 'No database session.'
+
+        if self.html:
+            self.parser.parse(self.html)
+        else:
+            self.parser = None
 
         with self.db_lock:
 
@@ -330,9 +306,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def keyword_info(self):
         """Print a short summary where we are in the scrape and what's the next keyword."""
         out(
-            '[{thread_name}][{ip}][{search_engine}]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before scraping. {done}/{all} already scraped.'.format(
+            '[{thread_name}][{ip}]]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before scraping. {done}/{all} already scraped.'.format(
                 thread_name=self.name,
-                search_engine=self.search_engine_name,
                 ip=self.requested_by,
                 keyword=self.query,
                 num_pages=self.pages_per_keyword,
@@ -382,7 +357,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         Notify the progress queue if necessary.
         """
-        self.parser.parse(self.html)
         self.search_number += 1
 
         if not self.store():

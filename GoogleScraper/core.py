@@ -14,7 +14,7 @@ from GoogleScraper.caching import fix_broken_cache_names, _caching_is_one_to_one
 from GoogleScraper.config import InvalidConfigurationException, parse_cmd_args, Config, update_config_with_file
 from GoogleScraper.log import out, raise_or_log
 from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
-from GoogleScraper.scraping import ScrapeWorkerFactory
+from GoogleScraper.scraping import ScrapeWorkerFactory, GoogleSearchError
 from GoogleScraper.output_converter import init_outfile
 from GoogleScraper.async_mode import AsyncScrapeScheduler
 import GoogleScraper.config
@@ -309,7 +309,7 @@ def main(return_results=False, parse_cmd_line=True):
     # previously established scrape, if the keyword-file is the same and unmodified since
     # the beginning of the last scrape.
     scraper_search = None
-    if kwfile:
+    if kwfile and Config['GLOBAL'].getboolean('continue_last_scrape', False):
         searches = session.query(ScraperSearch).\
             filter(ScraperSearch.keyword_file == kwfile).\
             order_by(ScraperSearch.started_searching).\

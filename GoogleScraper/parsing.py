@@ -425,18 +425,13 @@ class GoogleParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
-            if self.num_results == 0:
+            if self.num_results > 0:
+                self.no_results = False
+            elif self.num_results <= 0:
                 self.no_results = True
 
-            if len(self.dom.xpath(self.css_to_xpath('#topstuff div.med'))) >= 2:
+            if 'No results found for' in self.html or 'did not match any documents' in self.html:
                 self.no_results = True
-
-            # maybe this is dangerous
-            try:
-                if self.query in self.dom.xpath(self.css_to_xpath('#topstuff'))[0].text_content():
-                    self.no_results = True
-            except:
-                pass
 
             # finally try in the snippets
             if self.no_results is True:
@@ -840,14 +835,17 @@ class DuckduckgoParser(Parser):
         super().after_parsing()
 
         if self.searchtype == 'normal':
-            self.no_results = False
-            self.no_results = self.num_results <= 0
 
             try:
                 if 'No more results.' in self.dom.xpath(self.css_to_xpath('.no-results'))[0].text_content():
                     self.no_results = True
             except:
                 pass
+
+            if self.num_results > 0:
+                self.no_results = False
+            elif self.num_results <= 0:
+                self.no_results = True
 
 
 class AskParser(Parser):
@@ -991,13 +989,18 @@ def parse_serp(html=None, parser=None, scraper=None, search_engine=None, query='
             The parsed SERP object.
         """
 
-        if not parser:
+        if not parser and html:
             parser = get_parser_by_search_engine(search_engine)
             parser = parser(query=query)
             parser.parse(html)
 
         serp = SearchEngineResultsPage()
-        serp.set_values_from_parser(parser)
+
+        if query:
+            serp.query = query
+
+        if parser:
+            serp.set_values_from_parser(parser)
         if scraper:
             serp.set_values_from_scraper(scraper)
 

@@ -59,6 +59,7 @@ class SearchEngineResultsPage(Base):
     __tablename__ = 'serp'
 
     id = Column(Integer, primary_key=True)
+    status = Column(String, default='successful')
     search_engine_name = Column(String)
     scrape_method = Column(String)
     page_number = Column(Integer)
@@ -146,6 +147,10 @@ class SearchEngineResultsPage(Base):
         self.page_number = scraper.page_number
         self.requested_at = scraper.requested_at
         self.requested_by = scraper.requested_by
+        self.status = scraper.status
+
+    def was_correctly_requested(self):
+        return self.status == 'successful'
 
 
 # Alias as a shorthand for working in the shell
