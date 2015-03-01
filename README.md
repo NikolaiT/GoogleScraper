@@ -1,6 +1,8 @@
 ## GoogleScraper - Scraping search engines professionally
 
-**Asynchronous mode implemented. Now you can scrape search engines with hundreds (even thousands) of requests at the same time. Proof in video will follow**
+Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/googlescraper-260-keywords-in-a-second.html).
+
+**Important: I need [your help](http://incolumitas.com/2015/03/01/a-lot-of-work-to-do-for-googlescraper-in-the-future-and-request-for-comments/)**
 
 ### Table of Contents
 

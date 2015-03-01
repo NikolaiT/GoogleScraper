@@ -439,4 +439,4 @@ if __name__ == '__main__':
     elif args.testtype == 'long':
         import sys
         sys.argv = ['test_google_scraper.py']
-        unittest.main()
+        unittest.main(warnings='ignore')
