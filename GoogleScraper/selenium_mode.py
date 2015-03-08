@@ -9,6 +9,7 @@ import time
 import math
 import re
 import sys
+import os
 
 try:
     from selenium import webdriver
@@ -115,6 +116,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.captcha_lock = captcha_lock
         self.scrape_method = 'selenium'
 
+        self.xvfb_display = Config['SELENIUM'].get('xvfb_display', None)
+
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
         super().instance_creation_info(self.__class__.__name__)
@@ -152,6 +155,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         super().update_proxy_status(status, ipinfo, online)
 
         return online
+
+    def _set_xvfb_display(self):
+        # TODO: should we check the format of the config?
+        if self.xvfb_display:
+            os.environ['DISPLAY'] = self.xvfb_display
 
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
@@ -494,6 +502,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     def run(self):
         """Run the SelScraper."""
+
+        self._set_xvfb_display()
 
         if not self._get_webdriver():
             raise_or_log('{}: Aborting due to no available selenium webdriver.'.format(self.name), exception_obj=SeleniumMisconfigurationError)
