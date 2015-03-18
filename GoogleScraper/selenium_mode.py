@@ -137,7 +137,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.xvfb_display = Config['SELENIUM'].get('xvfb_display', None)
 
         for param_key in self.param_values:
-            cfg = Config['SEARCH'].get(param_key, None):
+            cfg = Config['SEARCH'].get(param_key, None)
             if cfg:
                 self.param_values[param_key] = cfg
 
