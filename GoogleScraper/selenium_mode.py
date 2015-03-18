@@ -86,7 +86,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         },
     }
 
-    param_values = {
+    search_params = {
         'googleimg': {
             'image_type': None,
             'image_size': None,
@@ -136,10 +136,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.xvfb_display = Config['SELENIUM'].get('xvfb_display', None)
 
-        for param_key in self.param_values:
-            cfg = Config['SEARCH'].get(param_key, None)
-            if cfg:
-                self.param_values[param_key] = cfg
+        self._get_search_param_values()
 
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
@@ -323,6 +320,13 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.webdriver.get(self.starting_point)
 
+    def _get_search_param_values(self):
+        self.search_param_values = {}
+        for param_key in self.search_params:
+            cfg = Config['SCRAPING'].get(param_key, None)
+            if cfg:
+                self.search_param_values[param_key] = cfg
+
     def _get_search_input_field(self):
         """Get the search input field for the current search_engine.
 
@@ -490,17 +494,18 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_input.clear()
                 time.sleep(.25)
 
-                self.search_params = self._get_search_param_fields()
-                if self.search_params:
+                self.search_param_fields = self._get_search_param_fields()
+
+                if self.search_param_fields:
                     wait_res = self._wait_until_search_param_fields_appears()
                     if wait_res is False:
                         raise Exception('Waiting search param input fields time exceeds')
-                    for param, field in self.search_params.items():
+                    for param, field in self.search_param_fields.items():
                         js_tpl = 'document.getElementBy%s("%s").setAttribute("value", "%s")';
                         if field[0] == By.ID:
-                            js_str = js_tpl % ('Id', field[1], self.param_values[param])
+                            js_str = js_tpl % ('Id', field[1], self.search_param_values[param])
                         elif field[0] == By.NAME:
-                            js_str = js_tpl % ('Name', field[1], self.param_values[param])
+                            js_str = js_tpl % ('Name', field[1], self.search_param_values[param])
                         webdriver.executeScript(js_str)
 
                 try:
