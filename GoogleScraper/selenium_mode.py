@@ -62,7 +62,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'baidu': '.n',
         'ask': '#paging div a.txt3.l_nu',
         'blekko': '',
-        'duckduckgo': ''
+        'duckduckgo': '',
+        'googleimg': '#pnnext',
     }
 
     input_field_selectors = {
@@ -74,6 +75,22 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'duckduckgo': (By.NAME, 'q'),
         'ask': (By.NAME, 'q'),
         'blekko': (By.NAME, 'q'),
+        'google': (By.NAME, 'q'),
+        'googleimg': (By.NAME, 'as_q'),
+    }
+
+    param_field_selectors = {
+        'googleimg': {
+            'image_type': (By.NAME, 'imgtype'),
+            'image_size': (By.NAME, 'imgsz'),
+        },
+    }
+
+    param_values = {
+        'googleimg': {
+            'image_type': None,
+            'image_size': None,
+        },
     }
 
     normal_search_locations = {
@@ -84,7 +101,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'baidu': 'http://baidu.com/',
         'duckduckgo': 'https://duckduckgo.com/',
         'ask': 'http://ask.com/',
-        'blekko': 'http://blekko.com/'
+        'blekko': 'http://blekko.com/',
     }
 
     image_search_locations = {
@@ -96,6 +113,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'duckduckgo': None, # duckduckgo doesnt't support direct image search
         'ask': 'http://www.ask.com/pictures/',
         'blekko': None,
+        'googleimg':'https://www.google.com/advanced_image_search',
     }
 
     def __init__(self, *args, captcha_lock=None, browser_num=1, **kwargs):
@@ -117,6 +135,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.scrape_method = 'selenium'
 
         self.xvfb_display = Config['SELENIUM'].get('xvfb_display', None)
+
+        for param_key in self.param_values:
+            cfg = Config['SEARCH'].get(param_key, None):
+            if cfg:
+                self.param_values[param_key] = cfg
 
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
@@ -308,6 +331,12 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         """
         return self.input_field_selectors[self.search_engine_name]
 
+    def _get_search_param_fields(self):
+        if self.search_engine_name in self.param_field_selectors:
+            return self.param_field_selectors[self.search_engine_name]
+        else:
+            return {}
+
     def _wait_until_search_input_field_appears(self, max_wait=5):
         """Waits until the search input field can be located for the current search engine
 
@@ -329,6 +358,20 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             logger.error('{}: TimeoutException waiting for search input field: {}'.format(self.name, e))
             return False
 
+    def _wait_until_search_param_fields_appears(self, max_wait=5):
+        def find_visible_search_param(driver):
+            for param, field in self._get_search_param_fields().items():
+                input_field = driver.find_element(*field)
+                if not input_field:
+                    return False
+            return True
+
+        try:
+            fields = WebDriverWait(self.webdriver, max_wait).until(find_visible_search_param)
+            return fields
+        except TimeoutException as e:
+            logger.error('{}: TimeoutException waiting for search param field: {}'.format(self.name, e))
+            return False
 
     def _wait_until_search_input_field_contains_query(self, max_wait=5):
         """Waits until the search input field contains the query.
@@ -446,6 +489,19 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             if self.search_input:
                 self.search_input.clear()
                 time.sleep(.25)
+
+                self.search_params = self._get_search_param_fields()
+                if self.search_params:
+                    wait_res = self._wait_until_search_param_fields_appears()
+                    if wait_res is False:
+                        raise Exception('Waiting search param input fields time exceeds')
+                    for param, field in self.search_params.items():
+                        js_tpl = 'document.getElementBy%s("%s").setAttribute("value", "%s")';
+                        if field[0] == By.ID:
+                            js_str = js_tpl % ('Id', field[1], self.param_values[param])
+                        elif field[0] == By.NAME:
+                            js_str = js_tpl % ('Name', field[1], self.param_values[param])
+                        webdriver.executeScript(js_str)
 
                 try:
                     self.search_input.send_keys(self.query + Keys.ENTER)
