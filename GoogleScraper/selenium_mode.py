@@ -81,8 +81,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     param_field_selectors = {
         'googleimg': {
-            'image_type': (By.ID, 'input_imgtype'),
-            'image_size': (By.ID, 'input_imgsz'),
+            'image_type': (By.ID, 'imgtype_input'),
+            'image_size': (By.ID, 'imgsz_input'),
         },
     }
 
