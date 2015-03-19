@@ -516,7 +516,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                             }
                             '''
                         js_str = js_tpl % (field[1], self.search_param_values[param])
-                        webdriver.executeScript(js_str)
+                        raise Exception(js_str)
+                        self.webdriver.execute_script(js_str)
 
                 try:
                     self.search_input.send_keys(self.query + Keys.ENTER)
