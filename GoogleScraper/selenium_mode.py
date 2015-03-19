@@ -516,7 +516,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                             }
                             '''
                         js_str = js_tpl % (field[1], self.search_param_values[param])
-                        raise Exception(js_str)
                         self.webdriver.execute_script(js_str)
 
                 try:
