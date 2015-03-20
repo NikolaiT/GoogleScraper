@@ -27,9 +27,9 @@ from sqlalchemy.orm import sessionmaker
 Base = declarative_base()
 
 scraper_searches_serps = Table('scraper_searches_serps', Base.metadata,
-    Column('scraper_search_id', Integer, ForeignKey('scraper_search.id')),
-    Column('serp_id', Integer, ForeignKey('serp.id'))
-)
+                               Column('scraper_search_id', Integer, ForeignKey('scraper_search.id')),
+                               Column('serp_id', Integer, ForeignKey('serp.id')))
+
 
 class ScraperSearch(Base):
     __tablename__ = 'scraper_search'
@@ -50,10 +50,12 @@ class ScraperSearch(Base):
     )
 
     def __str__(self):
-        return '<ScraperSearch[{id}] scraped for {number_search_queries} unique keywords. Started scraping: {started_searching} and stopped: {stopped_searching}>'.format(**self.__dict__)
+        return '<ScraperSearch[{id}] scraped for {number_search_queries} unique keywords. Started scraping: {started_' \
+               'searching} and stopped: {stopped_searching}>'.format(**self.__dict__)
 
     def __repr__(self):
         return self.__str__()
+
 
 class SearchEngineResultsPage(Base):
     __tablename__ = 'serp'
@@ -65,13 +67,13 @@ class SearchEngineResultsPage(Base):
     page_number = Column(Integer)
     requested_at = Column(DateTime, default=datetime.datetime.utcnow)
     requested_by = Column(String, default='127.0.0.1')
-    
+
     # The string in the SERP that indicates how many results we got for the search term.
     num_results_for_query = Column(String)
-    
+
     # Whether we got any results at all. This is the same as len(serp.links)
     num_results = Column(Integer, default=-1)
-     
+
     query = Column(String)
 
     # if the query was modified by the search engine because there weren't any
@@ -88,14 +90,14 @@ class SearchEngineResultsPage(Base):
     no_results = Column(Boolean, default=False)
 
     def __str__(self):
-        return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(**self.__dict__)
+        return '<SERP[{search_engine_name}] has [{num_results}] link results for query "{query}">'.format(
+            **self.__dict__)
 
     def __repr__(self):
         return self.__str__()
 
     def has_no_results_for_query(self):
         return self.num_results == 0 or self.effective_query
-
 
     def set_values_from_parser(self, parser):
         """Populate itself from a parser object.
@@ -117,7 +119,7 @@ class SearchEngineResultsPage(Base):
                     # fill with nones to prevent key errors
                     [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
 
-                    l = Link(
+                    Link(
                         link=link['link'],
                         snippet=link['snippet'],
                         title=link['title'],
@@ -156,8 +158,9 @@ class SearchEngineResultsPage(Base):
 # Alias as a shorthand for working in the shell
 SERP = SearchEngineResultsPage
 
+
 class Link(Base):
-    __tablename__= 'link'
+    __tablename__ = 'link'
 
     id = Column(Integer, primary_key=True)
     title = Column(String)
@@ -179,7 +182,7 @@ class Link(Base):
 
 
 class Proxy(Base):
-    __tablename__= 'proxy'
+    __tablename__ = 'proxy'
 
     id = Column(Integer, primary_key=True)
     ip = Column(String)
@@ -209,27 +212,28 @@ class Proxy(Base):
     def __repr__(self):
         return self.__str__()
 
+
 db_Proxy = Proxy
 
 
 class SearchEngine(Base):
     __tablename__ = 'search_engine'
-    
+
     id = Column(Integer, primary_key=True)
     name = Column(String, unique=True)
     http_url = Column(String)
     selenium_url = Column(String)
     image_url = Column(String)
-    
-    
+
+
 class SearchEngineProxyStatus(Base):
     """Stores last proxy status for the given search engine.
     
     A proxy can either work on a search engine or not.
-    """  
-    
+    """
+
     __tablename__ = 'search_engine_proxy_status'
-    
+
     id = Column(Integer, primary_key=True)
     proxy_id = Column(Integer, ForeignKey('proxy.id'))
     search_engine_id = Column(Integer, ForeignKey('search_engine.id'))
@@ -269,15 +273,15 @@ def get_session(scoped=False, engine=None, path=None):
         return ScopedSession
     else:
         return session_factory
-        
-        
+
+
 def fixtures(session):
-    """Add some base data."""  
-    
+    """Add some base data."""
+
     for se in Config['SCRAPING'].get('supported_search_engines', '').split(','):
         if se:
             search_engine = session.query(SearchEngine).filter(SearchEngine.name == se).first()
             if not search_engine:
                 session.add(SearchEngine(name=se))
-    
+
     session.commit()

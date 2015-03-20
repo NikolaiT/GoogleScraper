@@ -2,7 +2,6 @@
 
 import csv
 import sys
-import os
 import json
 from pprint import pprint
 from GoogleScraper.config import Config
@@ -18,6 +17,7 @@ impossible to launch lang scrape jobs with millions of keywords.
 output_format = 'stdout'
 outfile = None
 csv_fieldnames = set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'}
+
 
 class JsonStreamWriter():
     """Writes consecutive objects to an json output file."""
@@ -39,7 +39,6 @@ class JsonStreamWriter():
 
 
 def init_outfile(force_reload=False):
-
     global outfile, output_format
 
     if not outfile or force_reload:
@@ -65,6 +64,7 @@ def init_outfile(force_reload=False):
             outfile.writeheader()
         elif output_format == 'stdout':
             outfile = sys.stdout
+
 
 def store_serp_result(serp):
     """Store the parsed SERP page.
@@ -101,6 +101,7 @@ def store_serp_result(serp):
                 outfile.writerow(d)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
             pprint(data)
+
 
 def row2dict(obj):
     """Convert sql alchemy object to dictionary."""

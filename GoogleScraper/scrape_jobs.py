@@ -52,6 +52,7 @@ mandatory key: The 'query'. The dictionary must be called 'scrape_jobs'.
 You can see such a example file in the examples/ directory.
 """
 
+
 def default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, num_pages):
     """Get scrape jobs by keywords.
 
@@ -69,7 +70,7 @@ def default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, nu
     """
     for keyword in keywords:
         for search_engine in search_engines:
-            for page in range(1, num_pages+1):
+            for page in range(1, num_pages + 1):
                 yield {
                     'query': keyword,
                     'search_engine': search_engine,

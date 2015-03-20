@@ -10,6 +10,7 @@ from GoogleScraper import database
 Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
 logger = logging.getLogger('GoogleScraper')
 
+
 def parse_proxy_file(fname):
     """Parses a proxy file
 
@@ -42,7 +43,8 @@ def parse_proxy_file(fname):
                         proto = tokens[0]
                         host, port = tokens[1].split(':')
                     except:
-                        raise Exception('Invalid proxy file. Should have the following format: {}'.format(parse_proxy_file.__doc__))
+                        raise Exception(
+                            'Invalid proxy file. Should have the following format: {}'.format(parse_proxy_file.__doc__))
                     if len(tokens) == 3:
                         username, password = tokens[2].split(':')
                         proxies.append(Proxy(proto=proto, host=host, port=port, username=username, password=password))
@@ -51,6 +53,7 @@ def parse_proxy_file(fname):
         return proxies
     else:
         raise ValueError('No such file/directory')
+
 
 def get_proxies(host, user, password, database, port=3306, unix_socket=None):
     """"Connect to a mysql database using pymysql and retrieve proxies for the scraping job.
@@ -83,6 +86,7 @@ def get_proxies(host, user, password, database, port=3306, unix_socket=None):
         logger.error(e)
         raise
 
+
 def get_proxies_from_mysql_db(s):
     """Give this function a mysql connection string like this
 
@@ -93,7 +97,7 @@ def get_proxies_from_mysql_db(s):
     pattern = re.compile(r'(?P<dbms>\w*?)://(?P<user>\w*?):(?P<pwd>.*?)@(?P<host>\w*?)/(?P<db>\w*)')
     found = pattern.search(s)
     return get_proxies(found.group('host'), found.group('user'),
-                                found.group('pwd'), found.group('db'))
+                       found.group('pwd'), found.group('db'))
 
 
 def add_proxies_to_db(proxies, session):
