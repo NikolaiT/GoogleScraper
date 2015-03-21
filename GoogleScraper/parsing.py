@@ -961,7 +961,7 @@ def get_parser_by_search_engine(search_engine):
         return BingParser
     elif search_engine == 'yahoo':
         return YahooParser
-    elif search_engine == 'baidu':
+    elif search_engine == 'baidu' or search_engine == 'baiduimg':
         return BaiduParser
     elif search_engine == 'duckduckgo':
         return DuckduckgoParser
