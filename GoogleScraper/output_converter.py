@@ -97,7 +97,7 @@ def store_serp_result(serp):
             for row in data['results']:
                 d = row2dict(serp)
                 d.update(row)
-                d = ({k: v for k, v in d.items() if k in csv_fieldnames})
+                d = ({k: v for k, v.encode('utf') if type(v) is unicode else v in d.items() if k in csv_fieldnames})
                 outfile.writerow(d)
         elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
             pprint(data)
