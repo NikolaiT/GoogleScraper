@@ -502,7 +502,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.search_param_fields = self._get_search_param_fields()
 
                 if self.search_param_fields:
-                    print('herhehehre')
                     wait_res = self._wait_until_search_param_fields_appears()
                     if wait_res is False:
                         raise Exception('Waiting search param input fields time exceeds')
