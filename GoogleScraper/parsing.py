@@ -6,14 +6,15 @@ import re
 import lxml.html
 from lxml.html.clean import Cleaner
 import logging
-from urllib.parse import urlparse, unquote
+from urllib.parse import unquote
 import pprint
-from GoogleScraper.database import SearchEngineResultsPage, Link
+from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.config import Config
 from GoogleScraper.log import out
 from cssselect import HTMLTranslator
 
 logger = logging.getLogger('GoogleScraper')
+
 
 class InvalidSearchTypeException(Exception):
     pass
@@ -25,6 +26,7 @@ class UnknowUrlException(Exception):
 
 class NoParserForSearchEngineException(Exception):
     pass
+
 
 class Parser():
     """Parses SERP pages.
@@ -57,7 +59,7 @@ class Parser():
 
     # some search engine show on which page we currently are. If supportd, this selector will get this value.
     page_number_selectors = []
-    
+
     # The supported search types. For instance, Google supports Video Search, Image Search, News search
     search_types = []
 
@@ -82,7 +84,10 @@ class Parser():
             specific parser cannot handle the the settings.
         """
         self.searchtype = Config['SCRAPING'].get('search_type', 'normal')
-        assert self.searchtype in self.search_types, 'search type "{}" is not supported in {}'.format(self.searchtype, self.__class__.__name__)
+        assert self.searchtype in self.search_types, 'search type "{}" is not supported in {}'.format(
+            self.searchtype,
+            self.__class__.__name__
+        )
 
         self.query = query
         self.html = html
@@ -99,10 +104,10 @@ class Parser():
 
         # short alias because we use it so extensively
         self.css_to_xpath = HTMLTranslator().css_to_xpath
-        
+
         if self.html:
             self.parse()
-        
+
     def parse(self, html=None):
         """Public function to start parsing the search engine results.
         
@@ -111,10 +116,10 @@ class Parser():
         """
         if html:
             self.html = html
-        
+
         # lets do the actual parsing
         self._parse()
-        
+
         # Apply subclass specific behaviour after parsing has happened
         # This is needed because different parsers need to clean/modify
         # the parsed data uniquely.
@@ -137,7 +142,7 @@ class Parser():
         Raises: InvalidSearchTypeException if no css selectors for the searchtype could be found.
         """
         self._parse_lxml(cleaner)
-        
+
         # try to parse the number of results.
         attr_name = self.searchtype + '_search_selectors'
         selector_dict = getattr(self, attr_name, None)
@@ -147,18 +152,20 @@ class Parser():
 
         self.num_results_for_query = self.first_match(num_results_selector, self.dom)
         if not self.num_results_for_query:
-            out('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__, num_results_selector), lvl=4)
+            out('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__,
+                                                                                       num_results_selector), lvl=4)
 
         # get the current page we are at. Sometimes we search engines don't show this.
         try:
             self.page_number = int(self.first_match(self.page_number_selectors, self.dom))
-        except ValueError as e:
+        except ValueError:
             self.page_number = -1
 
         # let's see if the search query was shitty (no results for that query)
         self.effective_query = self.first_match(self.effective_query_selector, self.dom)
         if self.effective_query:
-            out('{}: There was no search hit for the search query. Search engine used {} instead.'.format(self.__class__.__name__, self.effective_query), lvl=4)
+            out('{}: There was no search hit for the search query. Search engine used {} instead.'.format(
+                self.__class__.__name__, self.effective_query), lvl=4)
 
         # the element that notifies the user about no results.
         self.no_results_text = self.first_match(self.no_results_selector, self.dom)
@@ -200,7 +207,7 @@ class Parser():
                     for key, selector in selectors_to_use.items():
                         serp_result[key] = self.advanced_css(selector, result)
 
-                    serp_result['rank'] = index+1
+                    serp_result['rank'] = index + 1
 
                     # only add items that have not None links.
                     # Avoid duplicates. Detect them by the link.
@@ -209,7 +216,6 @@ class Parser():
                             not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
                         self.search_results[result_type].append(serp_result)
                         self.num_results += 1
-
 
     def advanced_css(self, selector, element):
         """Evaluate the :text and ::attr(attr-name) additionally.
@@ -227,7 +233,7 @@ class Parser():
         if selector.endswith('::text'):
             try:
                 value = element.xpath(self.css_to_xpath(selector.split('::')[0]))[0].text_content()
-            except IndexError as e:
+            except IndexError:
                 pass
         else:
             match = re.search(r'::attr\((?P<attr>.*)\)$', selector)
@@ -236,16 +242,15 @@ class Parser():
                 attr = match.group('attr')
                 try:
                     value = element.xpath(self.css_to_xpath(selector.split('::')[0]))[0].get(attr)
-                except IndexError as e:
+                except IndexError:
                     pass
             else:
                 try:
                     value = element.xpath(self.css_to_xpath(selector))[0].text_content()
-                except IndexError as e:
+                except IndexError:
                     pass
 
         return value
-
 
     def first_match(self, selectors, element):
         """Get the first match.
@@ -276,7 +281,7 @@ class Parser():
         Override in subclass to add search engine specific behaviour.
         Commonly used to clean the results.
         """
-                
+
     def __str__(self):
         """Return a nicely formatted overview of the results."""
         return pprint.pformat(self.search_results)
@@ -294,7 +299,6 @@ class Parser():
         assert len(self.dom), 'The html needs to be parsed to get the cleaned html'
         return lxml.html.tostring(self.dom)
 
-
     def iter_serp_items(self):
         """Yields the key and index of any item in the serp results that has a link value"""
 
@@ -303,6 +307,7 @@ class Parser():
                 for i, item in enumerate(value):
                     if isinstance(item, dict) and item['link']:
                         yield (key, i)
+
 
 """
 Here follow the different classes that provide CSS selectors 
@@ -334,7 +339,7 @@ class GoogleParser(Parser):
     """Parses SERP pages of the Google search engine."""
 
     search_engine = 'google'
-    
+
     search_types = ['normal', 'image']
 
     effective_query_selector = ['#topstuff .med > b::text']
@@ -344,7 +349,7 @@ class GoogleParser(Parser):
     num_results_search_selectors = ['#resultStats']
 
     page_number_selectors = ['#navcnt td.cur::text']
-    
+
     normal_search_selectors = {
         'results': {
             'us_ip': {
@@ -393,7 +398,7 @@ class GoogleParser(Parser):
 
         }
     }
-    
+
     image_search_selectors = {
         'results': {
             'de_ip': {
@@ -409,16 +414,17 @@ class GoogleParser(Parser):
             }
         }
     }
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        
+
     def after_parsing(self):
         """Clean the urls.
         
         A typical scraped results looks like the following:
         
-        '/url?q=http://www.youtube.com/user/Apple&sa=U&ei=lntiVN7JDsTfPZCMgKAO&ved=0CFQQFjAO&usg=AFQjCNGkX65O-hKLmyq1FX9HQqbb9iYn9A'
+        '/url?q=http://www.youtube.com/user/Apple&sa=U&ei=\
+        lntiVN7JDsTfPZCMgKAO&ved=0CFQQFjAO&usg=AFQjCNGkX65O-hKLmyq1FX9HQqbb9iYn9A'
         
         Clean with a short regex.
         """
@@ -440,7 +446,6 @@ class GoogleParser(Parser):
                     if 'snippet' in self.search_results[key][i] and self.query:
                         if self.query.replace('"', '') in self.search_results[key][i]['snippet']:
                             self.no_results = False
-
 
         clean_regexes = {
             'normal': r'/url\?q=(?P<url>.*?)&sa=U&ei=',
@@ -508,10 +513,13 @@ class YandexParser(Parser):
         Normally Yandex image search store the image url in the onmousedown attribute in a json object. Its
         pretty messsy. This method grabs the link with a quick regex.
 
-        c.hit({"dtype":"iweb","path":"8.228.471.241.184.141","pos":69,"reqid":"1418919408668565-676535248248925882431999-ws35-986-IMG-p2"}, {"href":"http://www.thewallpapers.org/wallpapers/3/382/thumb/600_winter-snow-nature002.jpg"});
+        c.hit({"dtype":"iweb","path":"8.228.471.241.184.141","pos":69,"reqid":\
+        "1418919408668565-676535248248925882431999-ws35-986-IMG-p2"}, \
+        {"href":"http://www.thewallpapers.org/wallpapers/3/382/thumb/600_winter-snow-nature002.jpg"});
 
         Sometimes the img url is also stored in the href attribute (when requesting with raw http packets).
-        href="/images/search?text=snow&img_url=http%3A%2F%2Fwww.proza.ru%2Fpics%2F2009%2F12%2F07%2F1290.jpg&pos=2&rpt=simage&pin=1">
+        href="/images/search?text=snow&img_url=\
+        http%3A%2F%2Fwww.proza.ru%2Fpics%2F2009%2F12%2F07%2F1290.jpg&pos=2&rpt=simage&pin=1">
         """
         super().after_parsing()
 
@@ -527,30 +535,30 @@ class YandexParser(Parser):
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
-                    r'\{"href"\s*:\s*"(?P<url>.*?)"\}',
-                    r'img_url=(?P<url>.*?)&'
+                        r'\{"href"\s*:\s*"(?P<url>.*?)"\}',
+                        r'img_url=(?P<url>.*?)&'
                 ):
                     result = re.search(regex, self.search_results[key][i]['link'])
                     if result:
                         self.search_results[key][i]['link'] = result.group('url')
                         break
-    
-    
+
+
 class BingParser(Parser):
     """Parses SERP pages of the Bing search engine."""
 
     search_engine = 'bing'
-    
+
     search_types = ['normal', 'image']
 
     no_results_selector = ['#b_results > .b_ans::text']
-    
+
     num_results_search_selectors = ['.sb_count']
 
     effective_query_selector = ['#sp_requery a > strong']
 
     page_number_selectors = ['.sb_pagS::text']
-    
+
     normal_search_selectors = {
         'results': {
             'us_ip': {
@@ -610,7 +618,6 @@ class BingParser(Parser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
     def after_parsing(self):
         """Clean the urls.
 
@@ -626,13 +633,13 @@ class BingParser(Parser):
 
             self.no_results = False
             if self.no_results_text:
-                self.no_results = self.query in self.no_results_text\
-                                  or 'Do you want results only for' in self.no_results_text
+                self.no_results = self.query in self.no_results_text \
+                    or 'Do you want results only for' in self.no_results_text
 
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
-                    r'imgurl:"(?P<url>.*?)"',
+                        r'imgurl:"(?P<url>.*?)"',
                 ):
                     result = re.search(regex, self.search_results[key][i]['link'])
                     if result:
@@ -655,7 +662,7 @@ class YahooParser(Parser):
     num_results_search_selectors = ['#pg > span:last-child']
 
     page_number_selectors = ['#pg > strong::text']
-    
+
     normal_search_selectors = {
         'results': {
             'de_ip': {
@@ -682,19 +689,22 @@ class YahooParser(Parser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
     def after_parsing(self):
         """Clean the urls.
 
         The url is in the href attribute and the &imgurl= parameter.
 
         <a id="yui_3_5_1_1_1419284335995_1635" aria-label="<b>Matterhorn</b> sunrise"
-        href="/images/view;_ylt=AwrB8phvj5hU7moAFzOJzbkF;_ylu=X3oDMTIyc3ZrZ3RwBHNlYwNzcgRzbGsDaW1nBG9pZANmNTgyY2MyYTY4ZmVjYTI5YmYwNWZlM2E3ZTc1YzkyMARncG9zAzEEaXQDYmluZw--?
-        .origin=&back=https%3A%2F%2Fimages.search.yahoo.com%2Fsearch%2Fimages%3Fp%3Dmatterhorn%26fr%3Dyfp-t-901%26fr2%3Dpiv-web%26tab%3Dorganic%26ri%3D1&w=4592&h=3056&
-        imgurl=www.summitpost.org%2Fimages%2Foriginal%2F699696.JPG&rurl=http%3A%2F%2Fwww.summitpost.org%2Fmatterhorn-sunrise%2F699696&size=5088.0KB&
+        href="/images/view;_ylt=AwrB8phvj5hU7moAFzOJzbkF;_ylu=\
+        X3oDMTIyc3ZrZ3RwBHNlYwNzcgRzbGsDaW1nBG9pZANmNTgyY2MyYTY4ZmVjYTI5YmYwNWZlM2E3ZTc1YzkyMARncG9zAzEEaXQDYmluZw--?
+        .origin=&back=https%3A%2F%2Fimages.search.yahoo.com%2Fsearch%2Fimages%3F\
+        p%3Dmatterhorn%26fr%3Dyfp-t-901%26fr2%3Dpiv-web%26tab%3Dorganic%26ri%3D1&w=4592&h=3056&
+        imgurl=www.summitpost.org%2Fimages%2Foriginal%2F699696.JPG&rurl=http%3A%2F%2Fwww.summitpost.org\
+        %2Fmatterhorn-sunrise%2F699696&size=5088.0KB&
         name=%3Cb%3EMatterhorn%3C%2Fb%3E+sunrise&p=matterhorn&oid=f582cc2a68feca29bf05fe3a7e75c920&fr2=piv-web&
         fr=yfp-t-901&tt=%3Cb%3EMatterhorn%3C%2Fb%3E+sunrise&b=0&ni=21&no=1&ts=&tab=organic&
-        sigr=11j056ue0&sigb=134sbn4gc&sigi=11df3qlvm&sigt=10pd8j49h&sign=10pd8j49h&.crumb=qAIpMoHvtm1&fr=yfp-t-901&fr2=piv-web">
+        sigr=11j056ue0&sigb=134sbn4gc&sigi=11df3qlvm&sigt=10pd8j49h&sign=10pd8j49h&.crumb=qAIpMoHvtm1&\
+        fr=yfp-t-901&fr2=piv-web">
         """
         super().after_parsing()
 
@@ -714,7 +724,7 @@ class YahooParser(Parser):
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
-                    r'&imgurl=(?P<url>.*?)&',
+                        r'&imgurl=(?P<url>.*?)&',
                 ):
                     result = re.search(regex, self.search_results[key][i]['link'])
                     if result:
@@ -722,13 +732,14 @@ class YahooParser(Parser):
                         self.search_results[key][i]['link'] = 'http://' + unquote(result.group('url'))
                         break
 
+
 class BaiduParser(Parser):
     """Parses SERP pages of the Baidu search engine."""
 
     search_engine = 'baidu'
-    
+
     search_types = ['normal', 'image']
-    
+
     num_results_search_selectors = ['#container .nums']
 
     no_results_selector = []
@@ -772,14 +783,14 @@ class BaiduParser(Parser):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-
     def after_parsing(self):
         """Clean the urls.
 
         href="/i?ct=503316480&z=&tn=baiduimagedetail&ipn=d&word=matterhorn&step_word=&ie=utf-8&in=9250&
         cl=2&lm=-1&st=&cs=3326243323,1574167845&os=1495729451,4260959385&pn=0&rn=1&di=69455168860&ln=1285&
         fr=&&fmq=1419285032955_R&ic=&s=&se=&sme=0&tab=&width=&height=&face=&is=&istype=&ist=&jit=&
-        objurl=http%3A%2F%2Fa669.phobos.apple.com%2Fus%2Fr1000%2F077%2FPurple%2Fv4%2F2a%2Fc6%2F15%2F2ac6156c-e23e-62fd-86ee-7a25c29a6c72%2Fmzl.otpvmwuj.1024x1024-65.jpg&adpicid=0"
+        objurl=http%3A%2F%2Fa669.phobos.apple.com%2Fus%2Fr1000%2F077%2FPurple%2F\
+        v4%2F2a%2Fc6%2F15%2F2ac6156c-e23e-62fd-86ee-7a25c29a6c72%2Fmzl.otpvmwuj.1024x1024-65.jpg&adpicid=0"
         """
         super().after_parsing()
 
@@ -790,7 +801,7 @@ class BaiduParser(Parser):
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():
                 for regex in (
-                    r'&objurl=(?P<url>.*?)&',
+                        r'&objurl=(?P<url>.*?)&',
                 ):
                     result = re.search(regex, self.search_results[key][i]['link'])
                     if result:
@@ -802,9 +813,9 @@ class DuckduckgoParser(Parser):
     """Parses SERP pages of the Duckduckgo search engine."""
 
     search_engine = 'duckduckgo'
-    
+
     search_types = ['normal']
-    
+
     num_results_search_selectors = []
 
     no_results_selector = []
@@ -813,7 +824,7 @@ class DuckduckgoParser(Parser):
 
     # duckduckgo is loads next pages with ajax
     page_number_selectors = ['']
-    
+
     normal_search_selectors = {
         'results': {
             'de_ip': {
@@ -829,7 +840,6 @@ class DuckduckgoParser(Parser):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
 
     def after_parsing(self):
         super().after_parsing()
@@ -904,7 +914,6 @@ class BlekkoParser(Parser):
     }
 
 
-
 def get_parser_by_url(url):
     """Get the appropriate parser by an search engine url.
 
@@ -974,37 +983,38 @@ def get_parser_by_search_engine(search_engine):
 
 
 def parse_serp(html=None, parser=None, scraper=None, search_engine=None, query=''):
-        """Store the parsed data in the sqlalchemy session.
+    """Store the parsed data in the sqlalchemy session.
 
-        If no parser is supplied then we are expected to parse again with
-        the provided html.
+    If no parser is supplied then we are expected to parse again with
+    the provided html.
 
-        This function may be called from scraping and caching.
-        When called from caching, some info is lost (like current page number).
+    This function may be called from scraping and caching.
+    When called from caching, some info is lost (like current page number).
 
-        Args:
-            TODO: A whole lot
+    Args:
+        TODO: A whole lot
 
-        Returns:
-            The parsed SERP object.
-        """
+    Returns:
+        The parsed SERP object.
+    """
 
-        if not parser and html:
-            parser = get_parser_by_search_engine(search_engine)
-            parser = parser(query=query)
-            parser.parse(html)
+    if not parser and html:
+        parser = get_parser_by_search_engine(search_engine)
+        parser = parser(query=query)
+        parser.parse(html)
 
-        serp = SearchEngineResultsPage()
+    serp = SearchEngineResultsPage()
 
-        if query:
-            serp.query = query
+    if query:
+        serp.query = query
 
-        if parser:
-            serp.set_values_from_parser(parser)
-        if scraper:
-            serp.set_values_from_scraper(scraper)
+    if parser:
+        serp.set_values_from_parser(parser)
+    if scraper:
+        serp.set_values_from_scraper(scraper)
 
-        return serp
+    return serp
+
 
 if __name__ == '__main__':
     """Originally part of https://github.com/NikolaiT/GoogleScraper.
@@ -1020,6 +1030,7 @@ if __name__ == '__main__':
     But for some engines it nevertheless works (for example: yandex, google, ...).
     """
     import requests
+
     assert len(sys.argv) >= 2, 'Usage: {} url/file'.format(sys.argv[0])
     url = sys.argv[1]
     if os.path.exists(url):
@@ -1032,6 +1043,6 @@ if __name__ == '__main__':
     parser = parser(raw_html)
     parser.parse()
     print(parser)
-    
+
     with open('/tmp/testhtml.html', 'w') as of:
         of.write(raw_html)
