@@ -5,3 +5,4 @@ requests
 PyMySql
 sqlalchemy
 aiohttp
+# redis

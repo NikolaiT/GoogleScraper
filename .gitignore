@@ -12,6 +12,10 @@ tests/
 
 *.db
 
+*.pyc
+
+*.pyo
+
 h.py
 
 images/
