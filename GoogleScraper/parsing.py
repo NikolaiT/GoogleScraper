@@ -953,7 +953,7 @@ def get_parser_by_search_engine(search_engine):
     Raises:
         NoParserForSearchEngineException if no parser could be found for the name.
     """
-    if search_engine == 'google' or search_engine == 'googleimg':
+    if search_engine == 'google':
         return GoogleParser
     elif search_engine == 'yandex':
         return YandexParser
@@ -961,7 +961,7 @@ def get_parser_by_search_engine(search_engine):
         return BingParser
     elif search_engine == 'yahoo':
         return YahooParser
-    elif search_engine == 'baidu' or search_engine == 'baiduimg':
+    elif search_engine == 'baidu':
         return BaiduParser
     elif search_engine == 'duckduckgo':
         return DuckduckgoParser
