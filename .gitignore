@@ -5,12 +5,16 @@ google_scraper_results/
 
 
 # internal tests
-tests/
+test_functionality/
 
 # all dirs that start with a point
 .*/
 
 *.db
+
+*.pyc
+
+*.pyo
 
 h.py
 

@@ -1,27 +1,17 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 
-## run specific tests:
-## python3 -m unittest test_google_scraper.GoogleScraperFunctionalTestCase.test_no_results
-
 import os
 import unittest
-import random
-from GoogleScraper.utils import get_some_words
+
 from GoogleScraper import Config
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
 from collections import Counter
-import argparse
 
 all_search_engines = [se.strip() for se in Config['SCRAPING'].get('supported_search_engines').split(',')]
 
-words = get_some_words(n=100)
-
-def random_word():
-    return random.choice(words)
-
-class GoogleScraperStaticTestCase(unittest.TestCase):
+class GoogleScraperIntegrationTestCase(unittest.TestCase):
 
     def setUp(self):
         pass
@@ -83,7 +73,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
         self.assert_atleast90percent_of_items_are_not_None(parser)
 
     def test_parse_yahoo(self):
-        
+
         parser = self.get_parser_for_file('yahoo', 'data/uncompressed_serp_pages/snow_yahoo_de_ip.html')
 
         assert '19,400,000 Ergebnisse' == parser.num_results_for_query
@@ -134,7 +124,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
 
     ### test csv output
-    
+
     def test_csv_output_static(self):
         """Test csv output.
 
@@ -148,7 +138,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
 
         The filenames must be in the GoogleScraper cache format.
         """
-        
+
         import csv
         from GoogleScraper.output_converter import csv_fieldnames
 
@@ -297,12 +287,12 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     def test_page_number_selector_ask(self):
         parser = self.get_parser_for_file('ask', 'data/page_number_selector/ask_7.html')
         assert parser.page_number == 7, 'Wrong page number. Got {}'.format(parser.page_number)
-        
-        
+
+
     ### test all SERP object indicate no results for all search engines.
-    
+
     def test_no_results_serp_object(self):
-        
+
         config = {
             'SCRAPING': {
                 'keyword': 'asdfasdfa7654567654345654343sdfasd',
@@ -323,7 +313,7 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
         assert search.number_proxies_used == 1
         assert search.number_search_queries == 1
         assert search.started_searching < search.stopped_searching
-    
+
         assert len(all_search_engines) == len(search.serps), 'Not enough results. Expected: {}, got {}'.format(len(all_search_engines), len(search.serps))
 
         for serp in search.serps:
@@ -349,94 +339,5 @@ class GoogleScraperStaticTestCase(unittest.TestCase):
     ### test correct parsing of the number of results for the query..
 
 
-
-class GoogleScraperFunctionalTestCase(unittest.TestCase):
-
-    # generic function for dynamic parsing
-    def scrape_query(self, mode, search_engines='*', query='', random_query=False, sel_browser='Chrome'):
-
-        if random_query:
-            query = random_word()
-
-        config = {
-            'SCRAPING': {
-                'use_own_ip': 'True',
-                'keyword': query,
-                'search_engines': search_engines,
-                'num_pages_for_keyword': 1,
-                'scrape_method': mode,
-            },
-            'GLOBAL': {
-                'do_caching': 'False',
-                'verbosity': 0
-            },
-            'SELENIUM': {
-                'sel_browser': sel_browser
-            }
-        }
-        search = scrape_with_config(config)
-
-        if search_engines == '*':
-            assert search.number_search_engines_used == len(all_search_engines)
-        else:
-            assert search.number_search_engines_used == len(search_engines.split(','))
-
-        if search_engines == '*':
-            assert len(search.used_search_engines.split(',')) == len(all_search_engines)
-        else:
-            assert len(search.used_search_engines.split(',')) == len(search_engines.split(','))
-
-        assert search.number_proxies_used == 1
-        assert search.number_search_queries == 1
-        assert search.started_searching < search.stopped_searching
-
-        return search
-
-    ### test dynamic parsing for http mode
-
-    def test_http_mode_all_engines(self):
-
-        search = self.scrape_query('http', all_search_engines, random_query=True)
-
-
-     ### test dynamic parsing for selenium with phantomsjs
-
-    def test_selenium_phantomjs_all_engines(self):
-
-        search = self.scrape_query('selenium', all_search_engines, sel_browser='phantoms', random_query=True)
-
-
-    ### test dynamic parsing for selenium mode with Chrome
-
-    def test_selenium_chrome_all_engines(self):
-
-        search = self.scrape_query('selenium', all_search_engines, sel_browser='chrome', random_query=True)
-
-    ### test proxies
-
-
-    ### test no results
-
-    def test_no_results(self):
-
-        query = 'kajkld85049nmbBBAAAbvan857438VAVATRE6543vaVTYUYTRE73739klahbnvc'
-        search_engines = 'google,duckduckgo,bing'
-        search = self.scrape_query(mode='selenium', sel_browser='phantomjs', search_engines=search_engines, query=query)
-
-        for serp in search.serps:
-            assert serp.no_results is True, 'There should be no results, but got: {} {} for {}'.format(serp.no_results, len(serp.links), serp.search_engine_name)
-
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('testtype', help='The testtype.', choices=('fast', 'long'))
-    args = parser.parse_args()
-
-    if args.testtype == 'fast':
-
-        suite = unittest.defaultTestLoader.loadTestsFromTestCase(GoogleScraperStaticTestCase)
-        unittest.TextTestRunner().run(suite)
-
-    elif args.testtype == 'long':
-        import sys
-        sys.argv = ['test_google_scraper.py']
-        unittest.main(warnings='ignore')
+    unittest.main(warnings='ignore')

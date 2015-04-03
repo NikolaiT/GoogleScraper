@@ -11,8 +11,8 @@ from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.caching import cache_results
 from GoogleScraper.log import out
 
-class AsyncHttpScrape():
-    
+
+class AsyncHttpScrape(object):
     """Scrape asynchronously using asyncio.
     
     Some search engines don't block after a certain amount of requests.
@@ -20,8 +20,11 @@ class AsyncHttpScrape():
     But with bing or example, it's now (18.01.2015) no problem to
     scrape 100 unique pages in 3 seconds.
     """
-    
+
     def __init__(self, query='', page_number=1, search_engine='google', **kwargs):
+        """
+        @todo: **kwargs doesn't seem to be used, check if any call to init passes additional keyword args and remove it
+        """
         self.query = query
         self.page_number = page_number
         self.search_engine_name = search_engine
@@ -31,12 +34,13 @@ class AsyncHttpScrape():
         self.requested_by = 'localhost'
         self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, 'http')
-        self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name, search_type=self.search_type)
+        self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name,
+                                                       search_type=self.search_type)
         self.headers = headers
         self.status = 'successful'
-        
+
     def __call__(self):
-        
+
         @asyncio.coroutine
         def request():
             url = self.base_search_url + urlencode(self.params)
@@ -53,12 +57,12 @@ class AsyncHttpScrape():
                 self.query,
                 self.search_engine_name,
                 response.status
-            ), lvl=2)
+                ), lvl=2)
 
             out('[i] URL: {} HEADERS: {}'.format(
                 url,
                 self.headers
-            ), lvl=3)
+                ), lvl=3)
 
             if response.status == 200:
                 body = yield from response.read_and_close(decode=False)
@@ -66,12 +70,11 @@ class AsyncHttpScrape():
                 return self
 
             return None
-            
+
         return request
 
 
-class AsyncScrapeScheduler():
-
+class AsyncScrapeScheduler(object):
     """Processes the single requests in an asynchroneous way.
 
     """
@@ -86,6 +89,8 @@ class AsyncScrapeScheduler():
         self.scrape_method = 'async'
 
         self.loop = asyncio.get_event_loop()
+        self.requests = []
+        self.results = []
 
     def get_requests(self):
 
@@ -96,7 +101,7 @@ class AsyncScrapeScheduler():
             request_number += 1
             try:
                 job = self.scrape_jobs.pop()
-            except IndexError as e:
+            except IndexError:
                 break
 
             if job:
@@ -106,7 +111,6 @@ class AsyncScrapeScheduler():
                 break
 
     def run(self):
-
 
         while True:
             self.get_requests()
@@ -121,7 +125,8 @@ class AsyncScrapeScheduler():
 
                 if scrape:
 
-                    cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method, scrape.page_number)
+                    cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
+                                  scrape.page_number)
 
                     if scrape.parser:
                         serp = parse_serp(parser=scrape.parser, scraper=scrape, query=scrape.query)
@@ -135,7 +140,7 @@ class AsyncScrapeScheduler():
 
 if __name__ == '__main__':
     some_words = get_some_words(n=10)
-            
+
     requests = [AsyncHttpScrape(query, 1, 'bing') for query in some_words]
 
     loop = asyncio.get_event_loop()

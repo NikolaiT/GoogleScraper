@@ -45,6 +45,7 @@ logger = logging.getLogger('GoogleScraper')
 
 ALLOWED_COMPRESSION_ALGORITHMS = ('gz', 'bz2')
 
+
 class InvalidConfigurationFileException(Exception):
     """
     Used when the cache module cannot
@@ -52,6 +53,7 @@ class InvalidConfigurationFileException(Exception):
     configuration file
     """
     pass
+
 
 class CompressedFile(object):
     """Read and write the data of a compressed file.
@@ -75,12 +77,14 @@ class CompressedFile(object):
             algorithm: Which algorithm to use.
             path: A valid file path to the file to read/write. Depends
                 on the action called.
+
+        @todo: it would be a better approach to pass an Algorithm object instead of a string
         """
 
         self.algorithm = algorithm
 
-        assert self.algorithm in ALLOWED_COMPRESSION_ALGORITHMS,\
-                '{algo} is not an supported compression algorithm'.format(algo=self.algorithm)
+        assert self.algorithm in ALLOWED_COMPRESSION_ALGORITHMS, \
+            '{algo} is not an supported compression algorithm'.format(algo=self.algorithm)
 
         if path.endswith(self.algorithm):
             self.path = path
@@ -157,6 +161,7 @@ def maybe_clean_cache():
                 # Remove the whole directory if necessary
                 if os.path.isdir(path):
                     import shutil
+
                     shutil.rmtree(path)
                 else:
                     os.remove(os.path.join(cachedir, fname))
@@ -214,7 +219,7 @@ def get_cached(keyword, search_engine, scrapemode, page_number):
         # make a new fresh request.
         try:
             modtime = os.path.getmtime(os.path.join(cdir, fname))
-        except FileNotFoundError as err:
+        except FileNotFoundError:
             return False
 
         if (time.time() - modtime) / 60 / 60 > Config['GLOBAL'].getint('clean_cache_after', 48):
@@ -259,7 +264,7 @@ def read_cached_file(path):
             try:
                 data = fd.read()
                 return data
-            except UnicodeDecodeError as e:
+            except UnicodeDecodeError:
                 # If we get this error, the cache files are probably
                 # compressed but the 'compress_cached_files' flag was
                 # set to False. Try to decompress them, but this may
@@ -349,11 +354,11 @@ def _caching_is_one_to_one(keywords, search_engine, scrapemode, page_number):
     """
     mappings = {}
     for kw in keywords:
-        hash = cached_file_name(kw, search_engine, scrapemode, page_number)
-        if hash not in mappings:
-            mappings.update({hash: [kw, ]})
+        file_hash = cached_file_name(kw, search_engine, scrapemode, page_number)
+        if file_hash not in mappings:
+            mappings.update({file_hash: [kw, ]})
         else:
-            mappings[hash].append(kw)
+            mappings[file_hash].append(kw)
 
     duplicates = [v for k, v in mappings.items() if len(v) > 1]
     if duplicates:
@@ -401,7 +406,8 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
             # We found a file that contains the keyword, search engine name and
             # searchmode that fits our description. Let's see if there is already
             # an record in the database and link it to our new ScraperSearch object.
-            serp = get_serp_from_database(session, job['query'], job['search_engine'], job['scrape_method'], job['page_number'])
+            serp = get_serp_from_database(session, job['query'], job['search_engine'], job['scrape_method'],
+                                          job['page_number'])
 
             if not serp:
                 serp = parse_again(fname, job['search_engine'], job['scrape_method'], job['query'])
@@ -427,6 +433,9 @@ def parse_all_cached_files(scrape_jobs, session, scraper_search):
 
 
 def parse_again(fname, search_engine, scrape_method, query):
+    """
+    @todo: `scrape_method` is not used here -> check if scrape_method is passed to this function and remove it
+    """
     html = read_cached_file(get_path(fname))
     return parse_serp(
         html=html,
@@ -434,15 +443,16 @@ def parse_again(fname, search_engine, scrape_method, query):
         query=query
     )
 
+
 def get_serp_from_database(session, query, search_engine, scrape_method, page_number):
     try:
         serp = session.query(SearchEngineResultsPage).filter(
-                SearchEngineResultsPage.query == query,
-                SearchEngineResultsPage.search_engine_name == search_engine,
-                SearchEngineResultsPage.scrape_method == scrape_method,
-                SearchEngineResultsPage.page_number == page_number).first()
+            SearchEngineResultsPage.query == query,
+            SearchEngineResultsPage.search_engine_name == search_engine,
+            SearchEngineResultsPage.scrape_method == scrape_method,
+            SearchEngineResultsPage.page_number == page_number).first()
         return serp
-    except NoResultFound as e:
+    except NoResultFound:
         # that shouldn't happen
         # we have a cache file that matches the above identifying information
         # but it was never stored to the database.
@@ -451,9 +461,12 @@ def get_serp_from_database(session, query, search_engine, scrape_method, page_nu
 
 def clean_cachefiles():
     """Clean silly html from all cachefiles in the cachdir"""
-    if input('Do you really want to strip all cache files from bloating tags such as <script> and <style>? ').startswith('y'):
+    if input(
+            'Do you really want to strip all cache files from bloating tags such as <script> and <style>? ').startswith(
+            'y'):
         import lxml.html
         from lxml.html.clean import Cleaner
+
         cleaner = Cleaner()
         cleaner.style = True
         cleaner.scripts = True
@@ -465,27 +478,34 @@ def clean_cachefiles():
             cfile.write(cleaned)
             logger.info('Cleaned {}. Size before: {}, after {}'.format(file, len(data), len(cleaned)))
 
+
 def fix_broken_cache_names(url, search_engine, scrapemode, page_number):
     """Fix broken cache names.
 
     Args:
         url: A list of strings to add to each cached_file_name() call.
+
+    @todo: `url` is not used here -> check if scrape_method is passed to this function and remove it
     """
     files = _get_all_cache_files()
     logger.debug('{} cache files found in {}'.format(len(files), Config['GLOBAL'].get('cachedir', '.scrapecache')))
     r = re.compile(r'<title>(?P<kw>.*?) - Google Search</title>')
 
-    for i, path in enumerate(files):
+    i = 0
+    for path in files:
         fname = os.path.split(path)[1].strip()
         data = read_cached_file(path)
         infilekws = r.search(data).group('kw')
         realname = cached_file_name(infilekws, search_engine, scrapemode, page_number)
         if fname != realname:
-            out('The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(path), lvl=3)
+            out('The search query in the title element in file {} differ from that hash of its name. Fixing...'.format(
+                path), lvl=3)
             src = os.path.abspath(path)
             dst = os.path.abspath(os.path.join(os.path.split(path)[0], realname))
             logger.debug('Renamed from {} => {}'.format(src, dst))
             os.rename(src, dst)
+        i += 1
+
     logger.debug('Renamed {} files.'.format(i))
 
 
@@ -502,19 +522,25 @@ def cached(f, attr_to_cache=None):
                         is cachable.
     
     Returns: The modified and wrapped function.
+
+    @todo: `attr_to_cache` is not used here -> check if scrape_method is passed to this function and remove it
     """
+
     def wraps(*args, **kwargs):
         cached_value = get_cached(*args, params=kwargs)
         if cached_value:
-            value = f(*args, attr_to_cache=cached_value, **kwargs)
+            f(*args, attr_to_cache=cached_value, **kwargs)
         else:
             # Nothing was cached for this attribute
             value = f(*args, attr_to_cache=None, **kwargs)
             cache_results(value, *args, params=kwargs)
+
     return wraps
 
+
 maybe_clean_cache()
-    
+
 if __name__ == '__main__':
     import doctest
+
     doctest.testmod()

@@ -43,8 +43,10 @@ Config = {
     }
 }
 
+
 class InvalidConfigurationException(Exception):
     pass
+
 
 def parse_config(parse_command_line=True):
     """Parse and normalize the config file and return a dictionary with the arguments.
@@ -62,6 +64,7 @@ def parse_config(parse_command_line=True):
     """
     global Config, CONFIG_FILE
 
+    cargs = None
     cfg_parser = configparser.RawConfigParser()
     # Add internal configuration
     cfg_parser.read_dict(Config)
@@ -96,7 +99,6 @@ def parse_config(parse_command_line=True):
         if cargs['GLOBAL'].get('extended_config'):
             d = {}
             for option in cargs['GLOBAL'].get('extended_config').split('|'):
-
                 assert ':' in option, '--extended_config "key:option, key2: option"'
                 key, value = option.strip().split(':')
                 d[key.strip()] = value.strip()
@@ -120,12 +122,14 @@ def update_config_with_file(external_cfg_file):
         external.remove_section('DEFAULT')
         update_config(dict(external))
 
+
 def parse_cmd_args():
     """Parse the command line
 
     """
     global Config
     update_config(get_command_line(), Config)
+
 
 def get_config(force_reload=False, parse_command_line=True):
     """Returns the GoogleScraper configuration.
@@ -140,6 +144,7 @@ def get_config(force_reload=False, parse_command_line=True):
         already_parsed = True
         parse_config(parse_command_line=parse_command_line)
     return Config
+
 
 def update_config(d, target=None):
     """Updates the config with a dictionary.
@@ -171,5 +176,5 @@ def update_config(d, target=None):
 
     return Config
 
-
+# @todo: Config is overwritten here. check if this approach is wanted or a bug
 Config = get_config(parse_command_line=False)

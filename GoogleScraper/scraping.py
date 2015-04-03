@@ -11,7 +11,7 @@ from GoogleScraper.proxies import Proxy
 from GoogleScraper.caching import cache_results
 from GoogleScraper.database import db_Proxy
 from GoogleScraper.config import Config
-from GoogleScraper.log import out, raise_or_log
+from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 
@@ -55,9 +55,11 @@ Important events:
 - All proxies are detected and we cannot request further keywords => Stop.
 - No internet connection => Stop.
 
-- If the proxy is detected by the search engine we try to get another proxy from the pool and we call switch_proxy() => continue.
+- If the proxy is detected by the search engine we try to get another proxy from the pool and we
+  call switch_proxy() => continue.
 
-- If the proxy is detected by the search engine and there is no other proxy in the pool, we wait {search_engine}_proxy_detected_timeout seconds => continue.
+- If the proxy is detected by the search engine and there is no other proxy in the pool, we wait
+  {search_engine}_proxy_detected_timeout seconds => continue.
     + If the proxy is detected again after the waiting time, we discard the proxy for the whole scrape.
 """
 
@@ -141,13 +143,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         'duckduckgo': {}
     }
 
-    def __init__(self, jobs={}, scraper_search=None, session=None, db_lock=None, cache_lock=None,
+    def __init__(self, jobs=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
                  start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
         """Instantiate an SearchEngineScrape object.
 
         Args:
             TODO
         """
+        jobs = jobs or {}
         self.search_engine_name = search_engine
         assert self.search_engine_name, 'You need to specify an search_engine'
 
@@ -170,7 +173,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.query = ''
 
         # The default pages per kewords
-        self.pages_per_keyword = [1,]
+        self.pages_per_keyword = [1, ]
 
         # The number that shows how many searches have been done by the worker
         self.search_number = 1
@@ -238,7 +241,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             key, value = line.split(':')
             self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
 
-
         # the default timeout
         self.timeout = 5
 
@@ -246,7 +248,6 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.status = 'successful'
 
         self.html = ''
-
 
     @abc.abstractmethod
     def search(self, *args, **kwargs):
@@ -260,11 +261,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def switch_proxy(self, proxy):
         """Switch the proxy on the communication channel."""
 
-
     @abc.abstractmethod
     def proxy_check(self, proxy):
         """Check whether the assigned proxy works correctly and react"""
-
 
     @abc.abstractmethod
     def handle_request_denied(self, status_code):
@@ -306,7 +305,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def keyword_info(self):
         """Print a short summary where we are in the scrape and what's the next keyword."""
         out(
-            '[{thread_name}][{ip}]]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before scraping. {done}/{all} already scraped.'.format(
+            '[{thread_name}][{ip}]]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before '
+            'scraping. {done}/{all} already scraped.'.format(
                 thread_name=self.name,
                 ip=self.requested_by,
                 keyword=self.query,
@@ -319,14 +319,14 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
         out('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords={}, num pages for keyword={}'.format(
-            scraper_name, self.requested_by, self.search_type, self.base_search_url, self.search_engine_name, len(self.jobs),
+            scraper_name, self.requested_by, self.search_type, self.base_search_url, self.search_engine_name,
+            len(self.jobs),
             self.pages_per_keyword), lvl=1)
-
 
     def cache_results(self):
         """Caches the html for the current request."""
-        cache_results(self.parser, self.query, self.search_engine_name, self.scrape_method, self.page_number, db_lock=self.db_lock)
-
+        cache_results(self.parser, self.query, self.search_engine_name, self.scrape_method, self.page_number,
+                      db_lock=self.db_lock)
 
     def _largest_sleep_range(self, search_number):
         """Sleep a given amount of time dependent on the number of searches done.
@@ -345,7 +345,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 if search_number % n == 0:
                     return self.sleeping_ranges[n]
         # sleep one second
-        return (1, 2)
+        return 1, 2
 
     def detection_prevention_sleep(self):
         # match the largest sleep range
@@ -362,7 +362,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         if not self.store():
             out(
                 'No results to store for keyword: "{}" in search engine: {}'.format(self.query,
-                                                                                              self.search_engine_name), lvl=4)
+                                                                                    self.search_engine_name), lvl=4)
 
         if self.progress_queue:
             self.progress_queue.put(1)
@@ -370,14 +370,12 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def before_search(self):
         """Things that need to happen before entering the search loop."""
-
         # check proxies first before anything
         if Config['SCRAPING'].getboolean('check_proxies', True) and self.proxy:
             if not self.proxy_check():
                 self.startable = False
 
-
-    def update_proxy_status(self, status, ipinfo={}, online=True):
+    def update_proxy_status(self, status, ipinfo=None, online=True):
         """Sets the proxy status with the results of ipinfo.io
 
         Args:
@@ -385,6 +383,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             ipinfo: The json results from ipinfo.io
             online: Whether the proxy is usable or not.
         """
+        ipinfo = ipinfo or {}
 
         with self.db_lock:
 
@@ -403,6 +402,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
 from GoogleScraper.http_mode import HttpScrape
 from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_name
+
 
 class ScrapeWorkerFactory():
     def __init__(self, mode=None, proxy=None, search_engine=None, session=None, db_lock=None,
@@ -423,8 +423,7 @@ class ScrapeWorkerFactory():
 
     def is_suitabe(self, job):
 
-        return job['scrape_method'] == self.mode and\
-               job['search_engine'] == self.search_engine
+        return job['scrape_method'] == self.mode and job['search_engine'] == self.search_engine
 
     def add_job(self, job):
 
@@ -435,7 +434,6 @@ class ScrapeWorkerFactory():
             self.jobs[query] = []
 
         self.jobs[query].append(page_number)
-
 
     def get_worker(self):
 
