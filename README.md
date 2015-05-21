@@ -336,7 +336,7 @@ def image_search():
 
 if __name__ == '__main__':
 
-    usage = 'Usage: {} [basic|image-search]'.format(sys.argv[0])
+    usage = 'Usage: {} [basic|image]'.format(sys.argv[0])
     if len(sys.argv) != 2:
         print(usage)
     else:
