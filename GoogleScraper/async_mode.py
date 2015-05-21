@@ -48,7 +48,7 @@ class AsyncHttpScrape(object):
             response = yield from aiohttp.request('GET', url, params=self.params, headers=self.headers)
 
             if response.status != 200:
-                self.status = 'not successful: ' + response.status
+                self.status = 'not successful: ' + str(response.status)
 
             self.requested_at = datetime.datetime.utcnow()
 

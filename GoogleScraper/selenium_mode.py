@@ -210,11 +210,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     '--proxy-server={}://{}:{}'.format(self.proxy.proto, self.proxy.host, self.proxy.port))
                 self.webdriver = webdriver.Chrome(chrome_options=chrome_ops)
             else:
-                self.webdriver = webdriver.Chrome()
+                self.webdriver = webdriver.Chrome()#service_log_path='/tmp/chromedriver_log.log')
             return True
         except WebDriverException as e:
             # we don't have a chrome executable or a chrome webdriver installed
-            logger.error(e)
+            raise
         return False
 
     def _get_Firefox(self):

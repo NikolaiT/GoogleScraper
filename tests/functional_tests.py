@@ -35,18 +35,18 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
         search = scrape_with_config(config)
 
         if search_engines == '*':
-            assert search.number_search_engines_used == len(all_search_engines)
+            self.assertEqual(search.number_search_engines_used, len(all_search_engines))
         else:
-            assert search.number_search_engines_used == len(search_engines.split(','))
+            self.assertEqual(search.number_search_engines_used, len(search_engines.split(',')))
 
         if search_engines == '*':
-            assert len(search.used_search_engines.split(',')) == len(all_search_engines)
+            self.assertEqual(len(search.used_search_engines.split(',')), len(all_search_engines))
         else:
-            assert len(search.used_search_engines.split(',')) == len(search_engines.split(','))
+            self.assertEqual(len(search.used_search_engines.split(',')), len(search_engines.split(',')))
 
-        assert search.number_proxies_used == 1
-        assert search.number_search_queries == 1
-        assert search.started_searching < search.stopped_searching
+        self.assertEqual(search.number_proxies_used, 1)
+        self.assertEqual(search.number_search_queries, 1)
+        self.assertLess(search.started_searching, search.stopped_searching)
 
         return search
 
@@ -82,7 +82,7 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
         search = self.scrape_query(mode='selenium', sel_browser='phantomjs', search_engines=search_engines, query=query)
 
         for serp in search.serps:
-            assert serp.no_results is True, 'There should be no results, but got: {} {} for {}'.format(serp.no_results, len(serp.links), serp.search_engine_name)
+            self.assertTrue(serp.no_results, msg='There should be no results, but got: {} {} for {}'.format(serp.no_results, len(serp.links), serp.search_engine_name))
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
