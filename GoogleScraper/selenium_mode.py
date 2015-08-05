@@ -589,7 +589,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             self.search()
 
         if self.webdriver:
-            self.webdriver.close()
+            self.webdriver.quit()
 
 
 """
