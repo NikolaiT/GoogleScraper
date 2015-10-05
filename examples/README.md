@@ -1,7 +1,7 @@
 ## Examples of using GoogleScraper
 
 In this directory you can find a wide range of examples of how to use GoogleScraper. It would be 
-great if People could create Pull Requests with their own examples of how to use GoogleScraper!
+great if you kind people could create Pull Requests with your **own examples of how to use GoogleScraper!**
 
 
 ### Asynchronous Mode
@@ -19,7 +19,7 @@ always fresh!
 
 This example shows how to scrape more than one SERP page per keyword. The config that is passed
 looks like this:
-    :::python
+
     config = {
         'use_own_ip': True,
         'keyword': 'reddit',
@@ -44,7 +44,6 @@ Chrome as frontend.
 
 This is another quite cute use case of GoogleScraper. In [this example](image_search.py), images are scraped and saved in a `images/` directory. The configuration used looks like this:
 
-    :::python
     config = {
         'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
         'search_engines': ['yandex', 'google', 'bing', 'yahoo'], # duckduckgo not supported

@@ -1,8 +1,22 @@
-## GoogleScraper - Scraping search engines professionally
+# GoogleScraper - Scraping search engines professionally
+
+## News
+
+GoogleScraper becomes **finally mature!** In the last months I didn't work at all on GoogleScraper. Reason for this was my overall
+unhappiness with the Project. It is a very complex project with lot's of dependencies and pitfalls where newcomers may stumble.
+
+And most importantly, *I was never satisfied with it's use case.* My initial goal was to make the whole internet searchable and give ordinary people like me independent access to the internet's information again. But this is never going to work by scraping search engines. This is the completely wrong way. Search engines cannot represent the internet and do hide information from you.
+
+#### Why continuing this Project then?
+
+Because GoogleScraper has its reason to live: Gain information on how search engines see the internet. Especially when it comes to **SEO and marketing**. For this very reason I will continue to maintain this project. But to say it: GoogleScraper will never support **massive gathering of data**. If you want to know which servers are running Drupal or Wordpress, you are wrong here. If you want to know all servers with a specific string in it's html body you are also wrong. This leads us to...
+
+#### But how can I scrape the internet then :/ ?
+
+Well my son, I am working on this. Let's just say I need to learn some Rust the next weeks. Or maybe I will use C. But Rust looks sooooo neat. And it's time ot learn some concepts about computer networks and about real scraping & indexing & crawling...
 
 Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/googlescraper-260-keywords-in-a-second.html).
 
-**Important: I need [your help](http://incolumitas.com/2015/03/01/a-lot-of-work-to-do-for-googlescraper-in-the-future-and-request-for-comments/)**
 
 ### Table of Contents
 
