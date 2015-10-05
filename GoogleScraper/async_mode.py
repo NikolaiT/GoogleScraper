@@ -6,34 +6,34 @@ from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
 from GoogleScraper.http_mode import get_GET_params_for_search_engine, headers
 from GoogleScraper.scraping import get_base_search_url_by_search_engine
 from GoogleScraper.utils import get_some_words
-from GoogleScraper.config import Config
 from GoogleScraper.output_converter import store_serp_result
-from GoogleScraper.caching import cache_results
-from GoogleScraper.log import out
+from GoogleScraper.log import setup_logger
 
+logger = setup_logger(__name__)
 
 class AsyncHttpScrape(object):
     """Scrape asynchronously using asyncio.
     
     Some search engines don't block after a certain amount of requests.
-    Google surely does (after very few parrallel requests). 
+    Google surely does (after very few parallel requests).
     But with bing or example, it's now (18.01.2015) no problem to
     scrape 100 unique pages in 3 seconds.
     """
 
-    def __init__(self, query='', page_number=1, search_engine='google', **kwargs):
+    def __init__(self, config, query='', page_number=1, search_engine='google', scrape_method='http-async'):
         """
         @todo: **kwargs doesn't seem to be used, check if any call to init passes additional keyword args and remove it
         """
+        self.config = config
         self.query = query
         self.page_number = page_number
         self.search_engine_name = search_engine
         self.search_type = 'normal'
-        self.scrape_method = 'http-async'
+        self.scrape_method = scrape_method
         self.requested_at = None
         self.requested_by = 'localhost'
         self.parser = get_parser_by_search_engine(self.search_engine_name)
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, 'http')
+        self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, 'http')
         self.params = get_GET_params_for_search_engine(self.query, self.search_engine_name,
                                                        search_type=self.search_type)
         self.headers = headers
@@ -52,21 +52,19 @@ class AsyncHttpScrape(object):
 
             self.requested_at = datetime.datetime.utcnow()
 
-            out('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
+            logger.info('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
                 self.requested_by,
                 self.query,
                 self.search_engine_name,
-                response.status
-                ), lvl=2)
+                response.status))
 
-            out('[i] URL: {} HEADERS: {}'.format(
+            logger.debug('[i] URL: {} HEADERS: {}'.format(
                 url,
-                self.headers
-                ), lvl=3)
+                self.headers))
 
             if response.status == 200:
                 body = yield from response.read_and_close(decode=False)
-                self.parser = self.parser(body)
+                self.parser = self.parser(config=self.config, html=body)
                 return self
 
             return None
@@ -79,14 +77,14 @@ class AsyncScrapeScheduler(object):
 
     """
 
-    def __init__(self, scrape_jobs, session=None, scraper_search=None, db_lock=None):
-
-        self.max_concurrent_requests = Config['HTTP_ASYNC'].getint('max_concurrent_requests')
+    def __init__(self, config, scrape_jobs, cache_manager=None, session=None, scraper_search=None, db_lock=None):
+        self.cache_manager = cache_manager
+        self.config = config
+        self.max_concurrent_requests = self.config.get('max_concurrent_requests')
         self.scrape_jobs = scrape_jobs
         self.session = session
         self.scraper_search = scraper_search
         self.db_lock = db_lock
-        self.scrape_method = 'async'
 
         self.loop = asyncio.get_event_loop()
         self.requests = []
@@ -105,7 +103,7 @@ class AsyncScrapeScheduler(object):
                 break
 
             if job:
-                self.requests.append(AsyncHttpScrape(**job))
+                self.requests.append(AsyncHttpScrape(self.config, **job))
 
             if request_number >= self.max_concurrent_requests:
                 break
@@ -125,11 +123,11 @@ class AsyncScrapeScheduler(object):
 
                 if scrape:
 
-                    cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
+                    self.cache_manager.cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
                                   scrape.page_number)
 
                     if scrape.parser:
-                        serp = parse_serp(parser=scrape.parser, scraper=scrape, query=scrape.query)
+                        serp = parse_serp(self.config, parser=scrape.parser, scraper=scrape, query=scrape.query)
 
                         self.scraper_search.serps.append(serp)
                         self.session.add(serp)

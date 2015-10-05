@@ -2,20 +2,17 @@
 
 import datetime
 import random
-import logging
 import time
 import os
 import abc
 
 from GoogleScraper.proxies import Proxy
-from GoogleScraper.caching import cache_results
 from GoogleScraper.database import db_Proxy
-from GoogleScraper.config import Config
-from GoogleScraper.log import out
 from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
+from GoogleScraper.log import setup_logger
 
-logger = logging.getLogger('GoogleScraper')
+logger = setup_logger(__name__)
 
 SEARCH_MODES = ('http', 'selenium', 'http-async')
 
@@ -64,7 +61,7 @@ Important events:
 """
 
 
-def get_base_search_url_by_search_engine(search_engine_name, search_mode):
+def get_base_search_url_by_search_engine(config, search_engine_name, search_mode):
     """Retrieves the search engine base url for a specific search_engine.
 
     This function cascades. So base urls in the SCRAPING section will
@@ -81,12 +78,12 @@ def get_base_search_url_by_search_engine(search_engine_name, search_mode):
     """
     assert search_mode in SEARCH_MODES, 'search mode "{}" is not available'.format(search_mode)
 
-    specific_base_url = Config[search_mode.upper()].get('{}_search_url'.format(search_engine_name), None)
+    specific_base_url = config.get('{}_search_url'.format(search_engine_name), None)
 
     if not specific_base_url:
-        specific_base_url = Config['SCRAPING'].get('{}_search_url'.format(search_engine_name), None)
+        specific_base_url = config.get('{}_search_url'.format(search_engine_name), None)
 
-    ipfile = Config['SCRAPING'].get('{}_ip_file'.format(search_engine_name), '')
+    ipfile = config.get('{}_ip_file'.format(search_engine_name), '')
 
     if os.path.exists(ipfile):
         ips = open(ipfile, 'rt').read().split('\n')
@@ -143,13 +140,19 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         'duckduckgo': {}
     }
 
-    def __init__(self, jobs=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
+    def __init__(self, config, cache_manager=None, jobs=None, scraper_search=None, session=None, db_lock=None, cache_lock=None,
                  start_page_pos=1, search_engine=None, search_type=None, proxy=None, progress_queue=None):
         """Instantiate an SearchEngineScrape object.
 
         Args:
             TODO
         """
+        # Set the config dictionary
+        self.config = config
+
+        # Set the cache manager
+        self.cache_manager = cache_manager
+
         jobs = jobs or {}
         self.search_engine_name = search_engine
         assert self.search_engine_name, 'You need to specify an search_engine'
@@ -157,7 +160,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.search_engine_name = self.search_engine_name.lower()
 
         if not search_type:
-            self.search_type = Config['SCRAPING'].get('search_type', 'normal')
+            self.search_type = self.config.get('search_type', 'normal')
         else:
             self.search_type = search_type
 
@@ -172,23 +175,23 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # The actual keyword that is to be scraped next
         self.query = ''
 
-        # The default pages per kewords
+        # The default pages per keywords
         self.pages_per_keyword = [1, ]
 
         # The number that shows how many searches have been done by the worker
         self.search_number = 1
 
         # The parser that should be used to parse the search engine results
-        self.parser = get_parser_by_search_engine(self.search_engine_name)()
+        self.parser = get_parser_by_search_engine(self.search_engine_name)(config=self.config)
 
         # The number of results per page
-        self.num_results_per_page = Config['SCRAPING'].getint('num_results_per_page', 10)
+        self.num_results_per_page = int(self.config.get('num_results_per_page', 10))
 
         # The page where to start scraping. By default the starting page is 1.
         if start_page_pos:
             self.start_page_pos = 1 if start_page_pos < 1 else start_page_pos
         else:
-            self.start_page_pos = Config['SCRAPING'].getint('search_offset', 1)
+            self.start_page_pos = int(self.config.get('search_offset', 1))
 
         # The page where we are right now
         self.page_number = self.start_page_pos
@@ -232,14 +235,9 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         # How long to sleep (in seconds) after every n-th request
         self.sleeping_ranges = dict()
-        sleep_ranges_option = Config['GLOBAL'].get(
+        self.sleeping_ranges = self.config.get(
             '{search_engine}_sleeping_ranges'.format(search_engine=self.search_engine_name),
-            Config['GLOBAL'].get('sleeping_ranges'))
-
-        for line in sleep_ranges_option.split('\n'):
-            assert line.count(':') == 1, 'Invalid sleep range format.'
-            key, value = line.split(':')
-            self.sleeping_ranges[int(key)] = tuple([int(offset.strip()) for offset in value.split(',')])
+            self.config.get('sleeping_ranges'))
 
         # the default timeout
         self.timeout = 5
@@ -285,7 +283,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
         with self.db_lock:
 
-            serp = parse_serp(parser=self.parser, scraper=self, query=self.query)
+            serp = parse_serp(self.config, parser=self.parser, scraper=self, query=self.query)
 
             self.scraper_search.serps.append(serp)
             self.session.add(serp)
@@ -304,7 +302,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
 
     def keyword_info(self):
         """Print a short summary where we are in the scrape and what's the next keyword."""
-        out(
+        logger.info(
             '[{thread_name}][{ip}]]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before '
             'scraping. {done}/{all} already scraped.'.format(
                 thread_name=self.name,
@@ -314,18 +312,18 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
                 delay=self.current_delay,
                 done=self.search_number,
                 all=self.num_keywords
-            ), lvl=2)
+            ))
 
     def instance_creation_info(self, scraper_name):
         """Debug message whenever a scraping worker is created"""
-        out('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords={}, num pages for keyword={}'.format(
+        logger.info('[+] {}[{}][search-type:{}][{}] using search engine "{}". Num keywords={}, num pages for keyword={}'.format(
             scraper_name, self.requested_by, self.search_type, self.base_search_url, self.search_engine_name,
             len(self.jobs),
-            self.pages_per_keyword), lvl=1)
+            self.pages_per_keyword))
 
     def cache_results(self):
         """Caches the html for the current request."""
-        cache_results(self.parser, self.query, self.search_engine_name, self.scrape_method, self.page_number,
+        self.cache_manager.cache_results(self.parser, self.query, self.search_engine_name, self.scrape_method, self.page_number,
                       db_lock=self.db_lock)
 
     def _largest_sleep_range(self, search_number):
@@ -360,9 +358,8 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.search_number += 1
 
         if not self.store():
-            out(
-                'No results to store for keyword: "{}" in search engine: {}'.format(self.query,
-                                                                                    self.search_engine_name), lvl=4)
+            logger.debug('No results to store for keyword: "{}" in search engine: {}'.format(self.query,
+                                                                                    self.search_engine_name))
 
         if self.progress_queue:
             self.progress_queue.put(1)
@@ -371,7 +368,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
     def before_search(self):
         """Things that need to happen before entering the search loop."""
         # check proxies first before anything
-        if Config['SCRAPING'].getboolean('check_proxies', True) and self.proxy:
+        if self.config.get('check_proxies', True) and self.proxy:
             if not self.proxy_check():
                 self.startable = False
 
@@ -405,9 +402,11 @@ from GoogleScraper.selenium_mode import get_selenium_scraper_by_search_engine_na
 
 
 class ScrapeWorkerFactory():
-    def __init__(self, mode=None, proxy=None, search_engine=None, session=None, db_lock=None,
+    def __init__(self, config, cache_manager=None, mode=None, proxy=None, search_engine=None, session=None, db_lock=None,
                  cache_lock=None, scraper_search=None, captcha_lock=None, progress_queue=None, browser_num=1):
 
+        self.config = config
+        self.cache_manager = cache_manager
         self.mode = mode
         self.proxy = proxy
         self.search_engine = search_engine
@@ -442,7 +441,9 @@ class ScrapeWorkerFactory():
             if self.mode == 'selenium':
 
                 return get_selenium_scraper_by_search_engine_name(
+                    self.config,
                     self.search_engine,
+                    cache_manager=self.cache_manager,
                     search_engine=self.search_engine,
                     jobs=self.jobs,
                     session=self.session,
@@ -458,6 +459,8 @@ class ScrapeWorkerFactory():
             elif self.mode == 'http':
 
                 return HttpScrape(
+                    self.config,
+                    cache_manager=self.cache_manager,
                     search_engine=self.search_engine,
                     jobs=self.jobs,
                     session=self.session,

@@ -1,22 +1,17 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
 
 # See in the config.cfg file for possible values
 config = {
-    'SCRAPING': {
-        'use_own_ip': 'True',
-        'keyword': 'Let\'s go bubbles!',
-        'search_engines': 'yandex, bing',
-        'num_pages_for_keyword': 1,
-        'scrape_method': 'selenium',
-    },
-    'SELENIUM': {
-        'sel_browser': 'chrome',
-    },
-    'GLOBAL': {
-        'do_caching': 'False'
-    }
+    'use_own_ip': True,
+    'keyword': 'Let\'s go bubbles!',
+    'search_engines': ['yandex', 'bing'],
+    'num_pages_for_keyword': 1,
+    'scrape_method': 'selenium',
+    'sel_browser': 'chrome',
+    'do_caching': False
 }
 
 try:

@@ -4,18 +4,16 @@ import threading
 import json
 import datetime
 import random
-import logging
 import socket
 from urllib.parse import urlencode
 
 import GoogleScraper.socks as socks
 from GoogleScraper.scraping import SearchEngineScrape, get_base_search_url_by_search_engine
 from GoogleScraper.parsing import get_parser_by_search_engine
-from GoogleScraper.config import Config
-from GoogleScraper.log import out
 from GoogleScraper.user_agents import user_agents
+from GoogleScraper.log import setup_logger
 
-logger = logging.getLogger('GoogleScraper')
+logger = setup_logger(__name__)
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -135,16 +133,16 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         results: Returns the found results.
     """
 
-    def __init__(self, *args, time_offset=0.0, **kwargs):
+    def __init__(self, config, *args, time_offset=0.0, **kwargs):
         """Initialize an HttScrape object to scrape over blocking http.
 
         HttpScrape inherits from SearchEngineScrape
         and from threading.Timer.
         """
         threading.Timer.__init__(self, time_offset, self.search)
-        SearchEngineScrape.__init__(self, *args, **kwargs)
+        SearchEngineScrape.__init__(self, config, *args, **kwargs)
 
-        # Bind the requests module to this instance such that each 
+        # Bind the requests module to this instance such that each
         # instance may have an own proxy
         self.requests = __import__('requests')
 
@@ -160,7 +158,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.scrape_method = 'http'
 
         # get the base search url based on the search engine.
-        self.base_search_url = get_base_search_url_by_search_engine(self.search_engine_name, self.scrape_method)
+        self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
 
         super().instance_creation_info(self.__class__.__name__)
 
@@ -203,7 +201,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         ipinfo = {}
 
         try:
-            text = self.requests.get(Config['GLOBAL'].get('proxy_info_url')).text
+            text = self.requests.get(self.config.get('proxy_info_url')).text
             try:
                 ipinfo = json.loads(text)
             except ValueError:
@@ -246,7 +244,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                                                               self.search_type)
 
         self.parser = get_parser_by_search_engine(self.search_engine_name)
-        self.parser = self.parser()
+        self.parser = self.parser(config=self.config)
 
     def search(self, rand=False, timeout=15):
         """The actual search for the search engine.
@@ -273,11 +271,10 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
             self.requested_at = datetime.datetime.utcnow()
             self.html = request.text
 
-            out('[HTTP - {url}, headers={headers}, params={params}'.format(
+            logger.debug('[HTTP - {url}, headers={headers}, params={params}'.format(
                 url=request.url,
                 headers=self.headers,
-                params=self.search_params),
-                lvl=3)
+                params=self.search_params))
 
         except self.requests.ConnectionError as ce:
             self.status = 'Network problem occurred {}'.format(ce)

@@ -1,180 +1,62 @@
 # -*- coding: utf-8 -*-
 
+import GoogleScraper.scrape_config
+import inspect
 import os
-import configparser
-import logging
 
-from GoogleScraper.commandline import get_command_line
+try:
+    # SourceFileLoader is the recommended way in 3.3+
+    from importlib.machinery import SourceFileLoader
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.cfg')
-already_parsed = False
-logger = logging.getLogger('GoogleScraper')
-
-Config = {
-    'SCRAPING': {
-        # Whether to scrape with own ip address or just with proxies
-        'use_own_ip': True,
-        # which scrape_method to use
-        'scrape_method': 'http'
-    },
-    'GLOBAL': {
-        # The directory path for cached google results
-        'do_caching': True,
-        # If set, then compress/decompress files
-        'compress_cached_files': True,
-        # If set, use this compressing algorithm, else just use zip
-        'compressing_algorithm': 'gz',
-        # Whether caching shall be enabled
-        'cachedir': '.scrapecache/',
-        # After how many hours should the cache be cleaned
-        'clean_cache_after': 48,
-    },
-    'SELENIUM': {
-        # The maximal amount of selenium browser windows running in parallel
-        'num_workers': 4,
-        # which browser to use with selenium. Valid values: ('Chrome', 'Firefox')
-        'sel_browser': 'Chrome',
-    },
-    'HTTP': {
-
-    },
-    'HTTP_ASYNC': {
-
-    }
-}
+    def load_source(name, path):
+        return SourceFileLoader(name, path).load_module()
+except ImportError:
+    # but it does not exist in 3.2-, so fall back to imp
+    import imp
+    load_source = imp.load_source
 
 
-class InvalidConfigurationException(Exception):
-    pass
-
-
-def parse_config(parse_command_line=True):
-    """Parse and normalize the config file and return a dictionary with the arguments.
-
-    There are several places where GoogleScraper can be configured. The configuration is
-    determined (in this order, a key/value pair emerging further down the list overwrites earlier occurrences)
-    from the following places:
-      - Program internal configuration found in the global variable Config in this file
-      - Configuration parameters given in the config file CONFIG_FILE
-      - Params supplied by command line arguments
-
-    So for example, program internal params are overwritten by the config file which in turn
-    are shadowed by command line arguments.
-
+def get_config(command_line_args=None, external_configuration_file=None, config_from_library_call=None):
     """
-    global Config, CONFIG_FILE
+    Parse the configuration from different sources:
+        - Internal config file
+        - External config file (As specified by the end user)
+        - Command Line args
+        - Config that is passed to GoogleScraper if it is used as library.
 
-    cargs = None
-    cfg_parser = configparser.RawConfigParser()
-    # Add internal configuration
-    cfg_parser.read_dict(Config)
+    The order in which configuration is overwritten:
 
-    if parse_command_line:
-        cargs = get_command_line()
+    Config from library call > Command Line args > External config file > internal config file
 
-    if parse_command_line:
-        cfg_file_cargs = cargs['GLOBAL'].get('config_file')
-        if cfg_file_cargs and os.path.exists(cfg_file_cargs):
-            CONFIG_FILE = cfg_file_cargs
+    So for example, a command line args overwrites an option in a user specified
+    config file. But the user specified config file is still more valued than the
+    same named option in the internal config file. But if GoogleScraper is called
+    as library, the config passed there will overwrite everything else (Even if this config
+    has specified an external config file...).
 
-    # Parse the config file
-    try:
-        with open(CONFIG_FILE, 'r', encoding='utf8') as cfg_file:
-            cfg_parser.read_file(cfg_file)
-    except Exception as e:
-        logger.error('Exception trying to parse config file {}: {}'.format(CONFIG_FILE, e))
-
-    logger.setLevel(cfg_parser['GLOBAL'].get('debug', 'INFO'))
-
-    # add configuration parameters retrieved from command line
-    if parse_command_line:
-        cfg_parser = update_config(cargs, cfg_parser)
-
-    # and replace the global Config variable with the real thing
-    Config = cfg_parser
-
-    # if we got extended config via command line, update the Config
-    # object accordingly.
-    if parse_command_line:
-        if cargs['GLOBAL'].get('extended_config'):
-            d = {}
-            for option in cargs['GLOBAL'].get('extended_config').split('|'):
-                assert ':' in option, '--extended_config "key:option, key2: option"'
-                key, value = option.strip().split(':')
-                d[key.strip()] = value.strip()
-
-            for section, section_proxy in Config.items():
-                for key, option in section_proxy.items():
-                    if key in d and key != 'extended_config':
-                        Config.set(section, key, str(d[key]))
-
-
-def update_config_with_file(external_cfg_file):
-    """Updates the global Config with the configuration of an
-    external file.
-
-    Args:
-        external_cfg_file: The external configuration file to update from.
+    External configuration files may be only specified in the command line args.
     """
-    if external_cfg_file and os.path.exists(external_cfg_file):
-        external = configparser.RawConfigParser()
-        external.read_file(open(external_cfg_file, 'rt'))
-        external.remove_section('DEFAULT')
-        update_config(dict(external))
+
+    config = GoogleScraper.scrape_config
+
+    def update_members(d):
+        for k, v in d.items():
+            setattr(config, k, v)
+
+    if external_configuration_file:
+        if os.path.exists(external_configuration_file) and external_configuration_file.endswith('.py'):
+            exernal_config = load_source('external_config', external_configuration_file)
+            members = inspect.getmembers(exernal_config)
+            update_members(members)
+
+    if command_line_args:
+        update_members(command_line_args)
+
+    if config_from_library_call:
+        update_members(config_from_library_call)
+
+    return {k: v for k, v in vars(config).items() if not k.startswith('_')}
 
 
-def parse_cmd_args():
-    """Parse the command line
-
-    """
-    global Config
-    update_config(get_command_line(), Config)
 
 
-def get_config(force_reload=False, parse_command_line=True):
-    """Returns the GoogleScraper configuration.
-
-    Args:
-        force_reload: If true, ignores the flag already_parsed
-    Returns:
-        The configuration after parsing it.
-    """
-    global already_parsed
-    if not already_parsed or force_reload:
-        already_parsed = True
-        parse_config(parse_command_line=parse_command_line)
-    return Config
-
-
-def update_config(d, target=None):
-    """Updates the config with a dictionary.
-
-    In comparison to the native dictionary update() method,
-    update_config() will only extend or overwrite options in sections. It won't forget
-    options that are not explicitly specified in d.
-
-    Will overwrite existing options.
-
-    Args:
-        d: The dictionary to update the configuration with.
-        target; The configuration to be updated.
-
-    Returns:
-        The configuration after possibly updating it.
-    """
-    if not target:
-        global Config
-    else:
-        Config = target
-
-    for section, mapping in d.items():
-        if not Config.has_section(section) and section != 'DEFAULT':
-            Config.add_section(section)
-
-        for option, value in mapping.items():
-            Config.set(section, option, str(value))
-
-    return Config
-
-# @todo: Config is overwritten here. check if this approach is wanted or a bug
-Config = get_config(parse_command_line=False)

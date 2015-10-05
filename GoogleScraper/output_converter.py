@@ -3,8 +3,8 @@
 import csv
 import sys
 import json
-from pprint import pprint
-from GoogleScraper.config import Config
+import pprint
+from GoogleScraper.log import setup_logger
 from GoogleScraper.database import Link, SERP
 
 """Stores SERP results in the appropriate output format.
@@ -18,6 +18,7 @@ output_format = 'stdout'
 outfile = None
 csv_fieldnames = set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'}
 
+logger = setup_logger(__name__)
 
 class JsonStreamWriter():
     """Writes consecutive objects to an json output file."""
@@ -38,12 +39,12 @@ class JsonStreamWriter():
         self.file.close()
 
 
-def init_outfile(force_reload=False):
+def init_outfile(config, force_reload=False):
     global outfile, output_format
 
     if not outfile or force_reload:
 
-        output_file = Config['OUTPUT'].get('output_filename')
+        output_file = config.get('output_filename', '')
 
         if output_file.endswith('.json'):
             output_format = 'json'
@@ -99,8 +100,8 @@ def store_serp_result(serp):
                 d.update(row)
                 d = ({k: v.encode('utf') if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
                 outfile.writerow(d)
-        elif output_format == 'stdout' and Config['GLOBAL'].getint('verbosity', 1) > 2:
-            pprint(data)
+        elif output_format == 'stdout':
+            logger.log_results('\n' + pprint.pformat(data))
 
 
 def row2dict(obj):

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
@@ -9,15 +10,11 @@ target_directory = 'images/'
 
 # See in the config.cfg file for possible values
 config = {
-    'SCRAPING': {
-        'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
-        'search_engines': 'yandex,google,bing,yahoo', # duckduckgo not supported
-        'search_type': 'image',
-        'scrape_method': 'selenium'
-    },
-    'GLOBAL': {
-        'do_caching': 'True'
-    }
+    'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
+    'search_engines': ['yandex', 'google', 'bing', 'yahoo'], # duckduckgo not supported
+    'search_type': 'image',
+    'scrape_method': 'selenium',
+    'do_caching': True,
 }
 
 try:

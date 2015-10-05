@@ -15,7 +15,6 @@ can be assigned to more than one ScraperSearch. Therefore we need a n:m relation
 """
 
 import datetime
-from GoogleScraper.config import Config
 from urllib.parse import urlparse
 from sqlalchemy import Column, String, Integer, ForeignKey, Table, DateTime, Enum, Boolean
 from sqlalchemy.ext.declarative import declarative_base
@@ -241,7 +240,7 @@ class SearchEngineProxyStatus(Base):
     last_check = Column(DateTime)
 
 
-def get_engine(path=None):
+def get_engine(config, path=None):
     """Return the sqlalchemy engine.
 
     Args:
@@ -250,17 +249,17 @@ def get_engine(path=None):
     Returns:
         The sqlalchemy engine.
     """
-    db_path = path if path else Config['OUTPUT'].get('database_name', 'google_scraper') + '.db'
-    echo = True if (Config['GLOBAL'].getint('verbosity', 0) >= 4) else False
+    db_path = path if path else config.get('database_name', 'google_scraper') + '.db'
+    echo = config.get('log_sqlalchemy', False)
     engine = create_engine('sqlite:///' + db_path, echo=echo, connect_args={'check_same_thread': False})
     Base.metadata.create_all(engine)
 
     return engine
 
 
-def get_session(scoped=False, engine=None, path=None):
+def get_session(config, scoped=False, engine=None, path=None):
     if not engine:
-        engine = get_engine(path=path)
+        engine = get_engine(config, path=path)
 
     session_factory = sessionmaker(
         bind=engine,
@@ -275,10 +274,10 @@ def get_session(scoped=False, engine=None, path=None):
         return session_factory
 
 
-def fixtures(session):
+def fixtures(config, session):
     """Add some base data."""
 
-    for se in Config['SCRAPING'].get('supported_search_engines', '').split(','):
+    for se in config.get('supported_search_engines', []):
         if se:
             search_engine = session.query(SearchEngine).filter(SearchEngine.name == se).first()
             if not search_engine:

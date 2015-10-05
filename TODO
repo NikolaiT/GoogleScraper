@@ -92,3 +92,14 @@
 - Fix: If there's no internet connection, Malicious request detected is show. Show no internet connection instead.
 
 - FIGURE OUT: WHY THE HELLO DOES DUCKDUCKGO NOT WORK IN PHANTOMJS?
+
+
+05.10.2015
+
+    - Switch configuration from INI format to plain python code [Done]
+    - recode parse logic for configuration [Done]
+        Command Line Settings > Command Line Configuration File > Builtin Configuration File
+    - rebuild logging system. Create a dedicate logger for each submodule. [Partially Done]
+        Set the loglevel for each logger to the value which was specified in the configuration
+    - write tests for all search engines and for all major modes in the source directory.
+       Enable Flag which runs the tests automatically. Differ between long tests and short ones.

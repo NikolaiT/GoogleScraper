@@ -24,7 +24,7 @@ scrape_jobs = [
     },
 
     {
-        'query': 'mountina',
+        'query': 'mountain',
         'search_engine': 'baidu',
         'scrape_method': 'http'
     },

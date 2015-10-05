@@ -85,6 +85,10 @@ def get_some_words(n=100):
     return words
 
 
+def get_base_path():
+    return os.path.dirname(os.path.realpath(__file__))
+
+
 if __name__ == '__main__':
     import doctest
 

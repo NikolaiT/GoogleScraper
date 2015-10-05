@@ -5,15 +5,13 @@ import os
 import re
 import lxml.html
 from lxml.html.clean import Cleaner
-import logging
 from urllib.parse import unquote
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage
-from GoogleScraper.config import Config
-from GoogleScraper.log import out
+from GoogleScraper.log import setup_logger
 from cssselect import HTMLTranslator
 
-logger = logging.getLogger('GoogleScraper')
+logger = setup_logger(__name__)
 
 
 class InvalidSearchTypeException(Exception):
@@ -71,7 +69,7 @@ class Parser():
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
 
-    def __init__(self, html=None, query=''):
+    def __init__(self, config=None, html=None, query=''):
         """Create new Parser instance and parse all information.
 
         Args:
@@ -83,7 +81,8 @@ class Parser():
             Assertion error if the subclassed
             specific parser cannot handle the the settings.
         """
-        self.searchtype = Config['SCRAPING'].get('search_type', 'normal')
+        self.config = config
+        self.searchtype = self.config.get('search_type', 'normal')
         assert self.searchtype in self.search_types, 'search type "{}" is not supported in {}'.format(
             self.searchtype,
             self.__class__.__name__
@@ -152,8 +151,8 @@ class Parser():
 
         self.num_results_for_query = self.first_match(num_results_selector, self.dom)
         if not self.num_results_for_query:
-            out('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__,
-                                                                                       num_results_selector), lvl=4)
+            logger.debug('{}: Cannot parse num_results from serp page with selectors {}'.format(self.__class__.__name__,
+                                                                                       num_results_selector))
 
         # get the current page we are at. Sometimes we search engines don't show this.
         try:
@@ -164,8 +163,8 @@ class Parser():
         # let's see if the search query was shitty (no results for that query)
         self.effective_query = self.first_match(self.effective_query_selector, self.dom)
         if self.effective_query:
-            out('{}: There was no search hit for the search query. Search engine used {} instead.'.format(
-                self.__class__.__name__, self.effective_query), lvl=4)
+            logger.debug('{}: There was no search hit for the search query. Search engine used {} instead.'.format(
+                self.__class__.__name__, self.effective_query))
 
         # the element that notifies the user about no results.
         self.no_results_text = self.first_match(self.no_results_selector, self.dom)
@@ -979,10 +978,10 @@ def get_parser_by_search_engine(search_engine):
     elif search_engine == 'blekko':
         return BlekkoParser
     else:
-        raise NoParserForSearchEngineException('No such parser for {}'.format(search_engine))
+        raise NoParserForSearchEngineException('No such parser for "{}"'.format(search_engine))
 
 
-def parse_serp(html=None, parser=None, scraper=None, search_engine=None, query=''):
+def parse_serp(config, html=None, parser=None, scraper=None, search_engine=None, query=''):
     """Store the parsed data in the sqlalchemy session.
 
     If no parser is supplied then we are expected to parse again with
@@ -1001,6 +1000,7 @@ def parse_serp(html=None, parser=None, scraper=None, search_engine=None, query='
     if not parser and html:
         parser = get_parser_by_search_engine(search_engine)
         parser = parser(query=query)
+        parser.set_config(config)
         parser.parse(html)
 
     serp = SearchEngineResultsPage()

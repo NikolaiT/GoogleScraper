@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 from GoogleScraper import scrape_with_config, GoogleSearchError
@@ -10,16 +11,12 @@ keywords = [
 
 # See in the config.cfg file for possible values
 config = {
-    'SCRAPING': {
-        'use_own_ip': 'True',
-        'keywords': '\n'.join(keywords),
-        'search_engines': 'bing',
-        'num_pages_for_keyword': 1,
-        'scrape_method': 'http',
-    },
-    'GLOBAL': {
-        'do_caching': 'True'
-    }
+    'use_own_ip': 'True',
+    'keywords': keywords,
+    'search_engines': ['bing',],
+    'num_pages_for_keyword': 1,
+    'scrape_method': 'http',
+    'do_caching': 'True'
 }
 
 try:

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import logging
+from GoogleScraper.log import setup_logger
 
-logger = logging.getLogger('GoogleScraper')
+logger = setup_logger(__name__)
 
 """
 The core logic of GoogleScraper is handled here.

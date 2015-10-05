@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import re
@@ -13,7 +13,7 @@ requirements = [r for r in open('requirements.txt', 'r').read().split('\n') if r
 
 setup(name='GoogleScraper',
       version=version,
-      description='A module to scrape and extract links, titles and descriptions from Google search results',
+      description='A module to scrape and extract links, titles and descriptions from various search engines',
       long_description=open('README.md').read(),
       author='Nikolai Tschacher',
       author_email='admin@incolumitas.com',
@@ -21,8 +21,6 @@ setup(name='GoogleScraper',
       py_modules=['usage'],
       packages=['GoogleScraper'],
       entry_points={'console_scripts': ['GoogleScraper = GoogleScraper.core:main']},
-      package_data={
-          'GoogleScraper': ['config.cfg'],
-      },
+      package_dir={'examples': 'examples/'},
       install_requires=requirements
 )

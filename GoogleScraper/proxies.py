@@ -3,12 +3,12 @@
 from collections import namedtuple
 import os
 import pymysql
-import logging
 import re
 from GoogleScraper import database
+from GoogleScraper.log import setup_logger
 
 Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
-logger = logging.getLogger('GoogleScraper')
+logger = setup_logger(__name__)
 
 
 def parse_proxy_file(fname):
