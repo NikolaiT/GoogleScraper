@@ -11,7 +11,7 @@ __home__ = 'incolumitas.com'
 
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.config import get_config
-from GoogleScraper.log import setup_logger
+import logging
 
 """
 All objects imported here are exposed as the public API of GoogleScraper
@@ -20,4 +20,4 @@ All objects imported here are exposed as the public API of GoogleScraper
 from GoogleScraper.core import scrape_with_config
 from GoogleScraper.scraping import GoogleSearchError, MaliciousRequestDetected
 
-setup_logger(__name__)
+logging.getLogger(__name__)

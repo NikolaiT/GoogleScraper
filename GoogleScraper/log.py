@@ -3,27 +3,23 @@
 import sys
 import logging
 
-LOGLEVEL_SHOW_RESULTS_SUMMARY = 12
-LOGLEVEL_SHOW_ALL_RESULTS = 11
+"""
+Loggers are created at the top of modules. Therefore each code may access
+a logger. But there is a fundamental problem to this approach:
 
-logging.addLevelName(LOGLEVEL_SHOW_RESULTS_SUMMARY, 'RESULTS_SUMMARY')
-logging.addLevelName(LOGLEVEL_SHOW_ALL_RESULTS, 'RESULTS')
+The configuration that determines the state of GoogleScraper may come from various
+sources and is parsed only at runtime in the config.py module. In this config, the
+loglevel is also specified.
 
-def summarize_results(self, message, *args, **kws):
-    # Yes, logger takes its '*args' as 'args'.
-    if self.isEnabledFor(LOGLEVEL_SHOW_RESULTS_SUMMARY):
-        self._log(LOGLEVEL_SHOW_RESULTS_SUMMARY, message, args, **kws)
-logging.Logger.summarize_results = summarize_results
+So we need to adjust the loglevel to the value set in
+the configuration for each submodule.
+"""
 
-def log_results(self, message, *args, **kws):
-    # Yes, logger takes its '*args' as 'args'.
-    if self.isEnabledFor(LOGLEVEL_SHOW_ALL_RESULTS):
-        self._log(LOGLEVEL_SHOW_ALL_RESULTS, message, args, **kws)
-logging.Logger.log_results = log_results
-
-def setup_logger(name, level=20):
-    """Setup the global configuration logger for GoogleScraper"""
-    logger = logging.getLogger(name)
+def setup_logger(level=logging.INFO):
+    """
+    Configure global log settings for GoogleScraper
+    """
+    logger = logging.getLogger()
     logger.setLevel(level)
 
     # See here: http://stackoverflow.com/questions/7173033/duplicate-log-output-when-using-python-logging-module
@@ -32,5 +28,3 @@ def setup_logger(name, level=20):
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         ch.setFormatter(formatter)
         logger.addHandler(ch)
-
-    return logger

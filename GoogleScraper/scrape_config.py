@@ -8,6 +8,45 @@ capabilities to specify settings in this file.
 """
 
 """
+[OUTPUT]
+Settings which control how GoogleScraper represents it's results
+and handles output.
+"""
+# How and if results are printed when running GoogleScraper.
+# if set to 'all', then all data from results are outputted
+# if set to 'summarize', then only a summary of results is given.
+print_results = 'all'
+
+# The name of the database that is written to the same
+# directory where GoogleScraper will be called.
+database_name = 'google_scraper'
+
+# The file name of the output
+# The file name also determine the format of how
+# to store the results.
+# filename.json => save results as json
+# filename.csv => save a csv file
+# If set to None, don't write any file.
+output_filename = ''
+
+# Whether sqlalchemy should log all stuff to stdout
+# useful for devs. Don't set this to True if you don't know
+# what you are doing.
+log_sqlalchemy = False
+
+# Set the debug level of the application. Use the string representation
+# instead of the numbers. High numbers will output less, lower numbers more.
+# CRITICAL = 50
+# FATAL = CRITICAL
+# ERROR = 40
+# WARNING = 30
+# WARN = WARNING
+# INFO = 20
+# DEBUG = 10
+# NOTSET = 0
+log_level = 'INFO'
+
+"""
 [SCRAPING]
 Configuration parameters that control the scraping process. You will most
 likely want to change these values.
@@ -145,20 +184,6 @@ proxy_check_url = 'http://canihazip.com/s'
 # Proxy info url
 proxy_info_url = 'http://ipinfo.io/json'
 
-# Set the debug level of the application. Use the string representation
-# instead of the numbers. High numbers will output less, lower numbers more.
-# CRITICAL = 50
-# FATAL = CRITICAL
-# ERROR = 40
-# WARNING = 30
-# WARN = WARNING
-# INFO = 20
-# RESULTS_SUMMARY = 12 => Will print a summary of all results!
-# RESULTS = 11 => Will print out all results!
-# DEBUG = 10
-# NOTSET = 0
-debug = 'RESULTS_SUMMARY'
-
 # The basic search url
 # Default is google
 base_search_url = 'http://www.google.com/search'
@@ -263,22 +288,3 @@ proxy_detected_timeout = 400
 
 # Whether to stop workers when they got detected instead of waiting.
 stop_on_detection = True
-
-"""
-[OUTPUT]
-Settings which control how GoogleScraper represents it's results.
-"""
-# The name of the database
-database_name = 'google_scraper'
-
-# The file name of the output
-# The file name also determine the format of how
-# to store the results.
-# filename.json => save results as json
-# filename.csv => save a csv file
-# If set to None, don't write any file.
-output_filename = ''
-
-# Whether sqlalchemy should log all stuff to stdout
-# useful for devs
-log_sqlalchemy = False

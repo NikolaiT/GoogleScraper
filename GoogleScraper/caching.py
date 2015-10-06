@@ -10,7 +10,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from GoogleScraper.database import SearchEngineResultsPage
 from GoogleScraper.parsing import parse_serp
 from GoogleScraper.output_converter import store_serp_result
-from GoogleScraper.log import setup_logger
+import logging
 
 """
 GoogleScraper is a complex application and thus searching is error prone. While developing,
@@ -37,7 +37,7 @@ quite some keywords to scrape for. Then the previously parsed 1000 results are a
 stored in the database and shouldn't be added a second time.
 """
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 ALLOWED_COMPRESSION_ALGORITHMS = ('gz', 'bz2')
 
@@ -255,7 +255,8 @@ class CacheManager():
                     try:
                         data = fd.read()
                         return data
-                    except UnicodeDecodeError:
+                    except UnicodeDecodeError as e:
+                        logger.warning(str(e))
                         # If we get this error, the cache files are probably
                         # compressed but the 'compress_cached_files' flag was
                         # set to False. Try to decompress them, but this may
@@ -409,7 +410,7 @@ class CacheManager():
                 if num_cached % 200 == 0:
                     session.commit()
 
-                store_serp_result(serp)
+                store_serp_result(serp, self.config)
                 num_cached += 1
                 scrape_jobs.remove(job)
 

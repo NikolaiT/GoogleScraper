@@ -8,10 +8,10 @@ from lxml.html.clean import Cleaner
 from urllib.parse import unquote
 import pprint
 from GoogleScraper.database import SearchEngineResultsPage
-from GoogleScraper.log import setup_logger
+import logging
 from cssselect import HTMLTranslator
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class InvalidSearchTypeException(Exception):
@@ -999,8 +999,7 @@ def parse_serp(config, html=None, parser=None, scraper=None, search_engine=None,
 
     if not parser and html:
         parser = get_parser_by_search_engine(search_engine)
-        parser = parser(query=query)
-        parser.set_config(config)
+        parser = parser(config, query=query)
         parser.parse(html)
 
     serp = SearchEngineResultsPage()

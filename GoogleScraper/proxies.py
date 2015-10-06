@@ -5,10 +5,10 @@ import os
 import pymysql
 import re
 from GoogleScraper import database
-from GoogleScraper.log import setup_logger
+import logging
 
 Proxy = namedtuple('Proxy', 'proto, host, port, username, password')
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def parse_proxy_file(fname):

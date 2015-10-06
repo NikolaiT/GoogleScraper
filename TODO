@@ -99,7 +99,9 @@
     - Switch configuration from INI format to plain python code [Done]
     - recode parse logic for configuration [Done]
         Command Line Settings > Command Line Configuration File > Builtin Configuration File
-    - rebuild logging system. Create a dedicate logger for each submodule. [Partially Done]
-        Set the loglevel for each logger to the value which was specified in the configuration
+    - rebuild logging system. Create a dedicate logger for each submodule. [Done]
+        Set the loglevel for each logger to the value which was specified in the configuration [Done]
+        => Logging only reports events. Results are printed according to a dedicate option in the config file.
     - write tests for all search engines and for all major modes in the source directory.
        Enable Flag which runs the tests automatically. Differ between long tests and short ones.
+       - Look at some big open source python projects where tests are stored (pelican, requests)

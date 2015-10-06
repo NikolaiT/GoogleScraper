@@ -7,6 +7,7 @@ import sys
 import hashlib
 import os
 import queue
+from GoogleScraper.log import setup_logger
 from GoogleScraper.commandline import get_command_line
 from GoogleScraper.database import ScraperSearch, SERP, Link, get_session, fixtures
 from GoogleScraper.proxies import parse_proxy_file, get_proxies_from_mysql_db, add_proxies_to_db
@@ -16,11 +17,11 @@ from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
 from GoogleScraper.scraping import ScrapeWorkerFactory
 from GoogleScraper.output_converter import init_outfile
 from GoogleScraper.async_mode import AsyncScrapeScheduler
-from GoogleScraper.log import setup_logger
+import logging
 from GoogleScraper.utils import get_base_path
 import GoogleScraper.config
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class WrongConfigurationError(Exception):
@@ -165,6 +166,11 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
             external_config_file_path = os.path.abspath(cmd_line_args.get('config_file'))
 
     config = get_config(cmd_line_args, external_config_file_path, config_from_dict)
+
+    if isinstance(config['log_level'], int):
+        config['log_level'] = logging.getLevelName(config['log_level'])
+
+    setup_logger(level=config.get('log_level'))
 
     if config.get('view_config', False):
         print(open(os.path.join(get_base_path(), 'scrape_config.py')).read())

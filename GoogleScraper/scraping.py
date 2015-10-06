@@ -10,9 +10,9 @@ from GoogleScraper.proxies import Proxy
 from GoogleScraper.database import db_Proxy
 from GoogleScraper.output_converter import store_serp_result
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
-from GoogleScraper.log import setup_logger
+import logging
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 SEARCH_MODES = ('http', 'selenium', 'http-async')
 
@@ -289,7 +289,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
             self.session.add(serp)
             self.session.commit()
 
-            store_serp_result(serp)
+            store_serp_result(serp, self.config)
 
             if serp.num_results:
                 return True

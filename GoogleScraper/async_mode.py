@@ -7,9 +7,9 @@ from GoogleScraper.http_mode import get_GET_params_for_search_engine, headers
 from GoogleScraper.scraping import get_base_search_url_by_search_engine
 from GoogleScraper.utils import get_some_words
 from GoogleScraper.output_converter import store_serp_result
-from GoogleScraper.log import setup_logger
+import logging
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 class AsyncHttpScrape(object):
     """Scrape asynchronously using asyncio.
@@ -22,7 +22,6 @@ class AsyncHttpScrape(object):
 
     def __init__(self, config, query='', page_number=1, search_engine='google', scrape_method='http-async'):
         """
-        @todo: **kwargs doesn't seem to be used, check if any call to init passes additional keyword args and remove it
         """
         self.config = config
         self.query = query
@@ -123,23 +122,32 @@ class AsyncScrapeScheduler(object):
 
                 if scrape:
 
-                    self.cache_manager.cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
-                                  scrape.page_number)
+                    if self.cache_manager:
+                        self.cache_manager.cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
+                                      scrape.page_number)
 
                     if scrape.parser:
                         serp = parse_serp(self.config, parser=scrape.parser, scraper=scrape, query=scrape.query)
 
-                        self.scraper_search.serps.append(serp)
-                        self.session.add(serp)
-                        self.session.commit()
+                        if self.scraper_search:
+                            self.scraper_search.serps.append(serp)
 
-                        store_serp_result(serp)
+                        if self.session:
+                            self.session.add(serp)
+                            self.session.commit()
+
+                        store_serp_result(serp, self.config)
 
 
 if __name__ == '__main__':
-    some_words = get_some_words(n=10)
+    from GoogleScraper.config import get_config
+    from GoogleScraper.scrape_jobs import default_scrape_jobs_for_keywords
 
-    requests = [AsyncHttpScrape(query, 1, 'bing') for query in some_words]
+    some_words = get_some_words(n=1)
 
-    loop = asyncio.get_event_loop()
-    results = loop.run_until_complete(asyncio.wait([r()() for r in requests]))
+    cfg = get_config()
+    scrape_jobs = list(default_scrape_jobs_for_keywords(some_words, ['bing'], 'http-async', 1))
+
+    manager = AsyncScrapeScheduler(cfg, scrape_jobs)
+    manager.run()
+

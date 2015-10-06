@@ -4,7 +4,7 @@ import csv
 import sys
 import json
 import pprint
-from GoogleScraper.log import setup_logger
+import logging
 from GoogleScraper.database import Link, SERP
 
 """Stores SERP results in the appropriate output format.
@@ -15,10 +15,11 @@ impossible to launch lang scrape jobs with millions of keywords.
 """
 
 output_format = 'stdout'
-outfile = None
+outfile = sys.stdout
 csv_fieldnames = set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'}
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
+
 
 class JsonStreamWriter():
     """Writes consecutive objects to an json output file."""
@@ -67,7 +68,7 @@ def init_outfile(config, force_reload=False):
             outfile = sys.stdout
 
 
-def store_serp_result(serp):
+def store_serp_result(serp, config):
     """Store the parsed SERP page.
 
     Stores the results from scraping in the appropriate output format.
@@ -101,7 +102,10 @@ def store_serp_result(serp):
                 d = ({k: v.encode('utf') if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
                 outfile.writerow(d)
         elif output_format == 'stdout':
-            logger.log_results('\n' + pprint.pformat(data))
+            if config.get('print_results') == 'summarize':
+                print(serp)
+            elif config.get('print_results') == 'all':
+                pprint.pprint(data)
 
 
 def row2dict(obj):

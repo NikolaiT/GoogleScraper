@@ -3,11 +3,10 @@
 import argparse
 from GoogleScraper.version import __version__
 
-def get_command_line():
-    """Parse command line arguments when GoogleScraper is used as a CLI application.
 
-    Args:
-        print_help: If set to True, only prints the usage and immediately returns.
+def get_command_line():
+    """
+    Parse command line arguments when GoogleScraper is used as a CLI application.
 
     Returns:
         The configuration as a dictionary that determines the behaviour of the app.
@@ -84,19 +83,21 @@ def get_command_line():
     loglevel_help = '''
 Set the debug level of the application. Use the string representation
 instead of the numbers. High numbers will output less, lower numbers more.
-CRITICAL = 50
-FATAL = CRITICAL
-ERROR = 40
-WARNING = 30
-WARN = WARNING
-INFO = 20
-RESULTS_SUMMARY = 12 => Will print a summary of all results!
-RESULTS = 11 => Will print out all results!
-DEBUG = 10
+CRITICAL = 50,
+FATAL = CRITICAL,
+ERROR = 40,
+WARNING = 30,
+WARN = WARNING,
+INFO = 20,
+DEBUG = 10,
 NOTSET = 0
     '''
 
-    parser.add_argument('-v', '--verbosity', type=str, default='RESULTS_SUMMARY', help=loglevel_help)
+    parser.add_argument('-v', '--verbosity', '--loglevel', '--log-level',
+                        type=str, dest='log_level', default='INFO', help=loglevel_help)
+
+    parser.add_argument('--print-results', choices=['all', 'summarize'], default='all',
+                        help='Whether to print all results ("all"), or only print a summary ("summarize")')
 
     parser.add_argument('--view-config', action='store_true', default=False,
                         help="Print the current configuration to stdout. You may use it to create and tweak your own "
@@ -113,7 +114,7 @@ NOTSET = 0
                              "<host>/<dbname>. Has precedence over proxy files.")
 
     parser.add_argument('-s', '--search-engines', action='store', default=['google'],
-                        help='What search engines to use (See GoogleScraper --config for the all suported). If you '
+                        help='What search engines to use (See GoogleScraper --config for the all supported). If you '
                              'want to use more than one at the same time, just separate with commatas: "google, bing, '
                              'yandex". If you want to use all search engines that are available, give \'*\' as '
                              'argument.')

@@ -11,9 +11,9 @@ import GoogleScraper.socks as socks
 from GoogleScraper.scraping import SearchEngineScrape, get_base_search_url_by_search_engine
 from GoogleScraper.parsing import get_parser_by_search_engine
 from GoogleScraper.user_agents import user_agents
-from GoogleScraper.log import setup_logger
+import logging
 
-logger = setup_logger(__name__)
+logger = logging.getLogger(__name__)
 
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
