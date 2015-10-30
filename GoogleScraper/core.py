@@ -201,7 +201,15 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     proxy_file = config.get('proxy_file', '')
     proxy_db = config.get('mysql_proxy_db', '')
 
-    search_engines = set(config.get('search_engines', ['google']))
+    all_search_engines = ['google', 'googleimg', 'yandex', 'bing', 'yahoo', 'baidu', 'baiduimg', 'duckduckgo', 'ask', 'blekko']
+
+    search_engines = config.get('search_engines', ['google'])
+    if not isinstance(search_engines, list):
+        if search_engines == '*':
+            search_engines = all_search_engines
+        else:
+            search_engines = search_engines.split(',')
+
     assert search_engines, 'No search engine specified'
     num_search_engines = len(search_engines)
     num_workers = int(config.get('num_workers'))
