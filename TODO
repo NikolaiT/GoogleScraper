@@ -105,3 +105,74 @@
     - write tests for all search engines and for all major modes in the source directory.
        Enable Flag which runs the tests automatically. Differ between long tests and short ones.
        - Look at some big open source python projects where tests are stored (pelican, requests)
+
+
+30.11.2015
+
+    - Find good resources about to learn how to test code correctly
+        [DONE: 12min], found the following links:
+            - http://docs.python-guide.org/en/latest/writing/tests/
+                ==> LEARNED:
+                    - put test suites that require some complex data structures to load (such as websites to scrape) in separate test suites
+                    - run all (fast) tests before committing code
+                    - run all (including slow ones) before pushing code to master
+                    - use tox for testing the code with multiple interpreter configurations
+                    - mock allows to monkey patch functionality in the code such that it returns whatever you want
+            - http://codeutopia.net/blog/2015/04/11/what-are-unit-testing-integration-testing-and-functional-testing/
+                ==> LEARNED:
+                    - unittets don't make use of external resources such as databases or network
+                    - code that is hard to unit test is often poorly designed
+                    - integration test: tests how parts of the system work together
+                    - functional tests: test the complete functionality of the system
+                    - only a small amount of functional tests are required: They make sure the app works as a whole.
+                    - "testing common user interactions"
+                    - functional tests are validated in the same way as a user who uses the tool.
+                    - unit/integration tests are validated with code
+                    - don't make them too fine grained!
+            - https://code.google.com/p/robotframework/wiki/HowToWriteGoodTestCases
+                ==> LEARNED:
+                    - never sleep in the code: safety margins take too long in your code (use polls instead)
+            - http://blog.agilistic.nl/how-writing-unit-tests-force-you-to-write-good-code-and-6-bad-arguments-why-you-shouldnt/
+                ==> LEARNED:
+                    - Classes should be loosly coupled
+                    - avoid cascade of changes when changing one class
+                    - maximize encapsulation in classes
+                    - classes should have one responsibility
+                    - avoid large and tightly coupled classes
+                    - unit test should test the function/class without any dependencies
+                    - unit test tests one thing
+                    - avoid like the PEST: tightly coupled functions/classes, difficult to understand classes/functions,
+                        functions that do many things, not intuitive classes/functions (bad interface)
+            - http://www.toptal.com/python/an-introduction-to-mocking-in-python
+                ==> LEARNED:
+                    - instead of testing a functions effects, we can mock the underlying operating system api by
+                        ensuring that a os function was called with certain parameters. This enables us to verify
+                        that os code was called with the correct parameters.
+            - http://pytest.org/
+                ==> LEARNED:
+                    - How pytest can be invoked: http://pytest.org/latest/usage.html
+                    - pytest can yield more information in the traceback with the -l option
+                    - pytest can be called within python: http://pytest.org/latest/usage.html
+                    - how the directory structure for tests should look like: http://pytest.org/latest/goodpractises.html
+
+    - Read and understand the test links collected in the previous task.
+        [Done: 75min + 25min]
+
+    - Add hook to run unit tests before committing code
+        [Done: 9 min]: Found pre-commit hook that checks pep8 stuff and that runs unit tests
+            here: https://gist.githubusercontent.com/snim2/6444684/raw/c7f1ec75c3cc0306bd8f36faee7dd201902528e8/pre-commit.py
+
+
+--- 12 + 100 + 9 + 5 = 126min ---
+
+
+1.12.2015
+    - Read that again: http://pytest.org/latest/example/parametrize.html
+        [Done: 9min], not learned anything really. Is about meta programming in test suites I guess.
+
+    - Create virtualenv in Project directory.
+        [Done: 5min]
+
+    - Add hook that runs all tests before pushing to master
+    - read about casperJS and evaluate whether it might be interesting for GoogleScraper
+

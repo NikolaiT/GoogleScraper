@@ -72,8 +72,8 @@ class AsyncHttpScrape(object):
 
 
 class AsyncScrapeScheduler(object):
-    """Processes the single requests in an asynchroneous way.
-
+    """
+    Processes the single requests in an asynchronous way.
     """
 
     def __init__(self, config, scrape_jobs, cache_manager=None, session=None, scraper_search=None, db_lock=None):

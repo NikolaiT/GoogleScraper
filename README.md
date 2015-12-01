@@ -32,7 +32,13 @@ Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/g
 <a name="install" \>
 ## Installation
 
-GoogleScraper is written in Python 3. You should install at least Python 3.4
+GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using 
+Ubuntu 15.10 and Python3.5 for instance, please install:
+
+```
+sudo apt-get install python3.5-dev
+```
+
 Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode. On Ubuntu 14.04 for instance,
 you certainly have to install the Chrome driver.
 
