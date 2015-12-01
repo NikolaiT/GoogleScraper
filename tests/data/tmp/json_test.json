@@ -1,12 +1,12 @@
 [{
   "effective_query": "0",
-  "id": "471",
+  "id": "576",
   "no_results": "True",
   "num_results": "0",
   "num_results_for_query": "0",
   "page_number": "None",
   "query": "asdfasdfa7654567654345654343sdfasd",
-  "requested_at": "2015-12-01 19:08:20.715545",
+  "requested_at": "2015-12-01 19:11:33.005162",
   "requested_by": "127.0.0.1",
   "results": [],
   "scrape_method": "None",
@@ -15,7 +15,7 @@
 },{
   "effective_query": "False",
   "id": "None",
-  "no_results": "False",
+  "no_results": "True",
   "num_results": "0",
   "num_results_for_query": "False",
   "page_number": "None",
@@ -154,7 +154,7 @@
 },{
   "effective_query": "False",
   "id": "None",
-  "no_results": "True",
+  "no_results": "False",
   "num_results": "0",
   "num_results_for_query": "False",
   "page_number": "None",
