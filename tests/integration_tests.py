@@ -155,7 +155,7 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
         from GoogleScraper.output_converter import csv_fieldnames
 
         number_search_engines = len(all_search_engines)
-        csv_outfile = 'data/tmp/csv_test.csv'
+        csv_outfile = os.path.join(base, 'data/tmp/csv_test.csv')
 
         config = {
             'keyword': 'some words',
@@ -165,7 +165,7 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
             'cachedir': os.path.join(base, 'data/csv_tests/'),
             'do_caching': True,
             'verbosity': 0,
-            'output_filename': os.path.join(base, csv_outfile),
+            'output_filename': csv_outfile,
         }
         search = scrape_with_config(config)
 
@@ -199,7 +199,7 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
         import json
 
         number_search_engines = len(all_search_engines)
-        json_outfile = 'data/tmp/json_test.json'
+        json_outfile = os.path.join(base, 'data/tmp/json_test.json')
 
         config = {
             'keyword': 'some words',
@@ -209,7 +209,7 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
             'cachedir': os.path.join(base, 'data/json_tests/'),
             'do_caching': True,
             'verbosity': 0,
-            'output_filename': os.path.join(base, json_outfile)
+            'output_filename': json_outfile
         }
         search = scrape_with_config(config)
 
@@ -332,7 +332,7 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
             parser = self.get_parser_for_file(search_engine, 'data/no_results_literal/{}.html'.format(search_engine),
                                               query=query)
 
-            assert parser.no_results, 'No results must be true for search engine {}!'.format(search_engine)
+            assert parser.num_results == 0 or parser.effective_query, 'No results must be true for search engine {}! But got {} serp entries and effective query: {}.'.format(search_engine, parser.num_results, parser.effective_query)
 
             ### test correct parsing of the number of results for the query..
 

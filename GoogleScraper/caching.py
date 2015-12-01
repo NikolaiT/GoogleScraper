@@ -97,11 +97,11 @@ class CompressedFile(object):
 
     def read_gz(self):
         with gzip.open(self.path, 'rb') as f:
-            return f.read()
+            return f.read().decode()
 
     def read_bz2(self):
         with bz2.open(self.path, 'rb') as f:
-            return f.read()
+            return f.read().decode()
 
     def write_gz(self, data):
         with gzip.open(self.path, 'wb') as f:
@@ -230,13 +230,13 @@ class CacheManager():
         a file that ends with .gz needs to be gunzipped.
 
         Supported algorithms:
-        gzip, and bzip2
+        gzip and bzip2
 
         Args:
             path: The path to the cached file.
 
         Returns:
-            The data of the cached file.
+            The data of the cached file as a string.
 
         Raises:
             InvalidConfigurationFileException: When the type of the cached file
@@ -267,7 +267,7 @@ class CacheManager():
                 f = CompressedFile(path)
                 return f.read()
             else:
-                raise InvalidConfigurationFileException('"{path}" is a invalid configuration file.')
+                raise InvalidConfigurationFileException('"{}" is a invalid configuration file.'.format(path))
 
 
     def cache_results(self, parser, query, search_engine, scrape_mode, page_number, db_lock=None):

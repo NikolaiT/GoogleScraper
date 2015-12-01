@@ -174,5 +174,9 @@
         [Done: 5min]
 
     - Add hook that runs all tests before pushing to master
+        [Done: 11min], Hook is a pre-commit hook and will execute all tests found in the directory tests/
+
+    - See whether existing test suites do work and fix all issues there.
+
     - read about casperJS and evaluate whether it might be interesting for GoogleScraper
 

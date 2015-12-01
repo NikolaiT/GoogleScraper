@@ -85,7 +85,8 @@ class SearchEngineResultsPage(Base):
     # automatically search other similar search queries when they find no results.
     # Sometimes they have results for the query, but detect a spelling mistake and only
     # suggest an alternative. This is another case!
-    # If no_results is true, then there weren't ANY RESULTS FOUND FOR THIS QUERY!!!
+    # If no_results is true, then there weren't ANY RESULTS FOUND FOR THIS QUERY!!! But there
+    # could have been results for an auto corrected query.
     no_results = Column(Boolean, default=False)
 
     def __str__(self):
@@ -96,6 +97,10 @@ class SearchEngineResultsPage(Base):
         return self.__str__()
 
     def has_no_results_for_query(self):
+        """
+        Returns True if the original query did not yield any results.
+        Returns False if either there are no serp entries, or the search engine auto corrected the query.
+        """
         return self.num_results == 0 or self.effective_query
 
     def set_values_from_parser(self, parser):

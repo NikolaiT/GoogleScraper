@@ -341,7 +341,7 @@ class GoogleParser(Parser):
 
     search_types = ['normal', 'image']
 
-    effective_query_selector = ['#topstuff .med > b::text']
+    effective_query_selector = ['#topstuff .med > b::text', '.med > a > b::text']
 
     no_results_selector = []
 
@@ -554,7 +554,7 @@ class BingParser(Parser):
 
     num_results_search_selectors = ['.sb_count']
 
-    effective_query_selector = ['#sp_requery a > strong']
+    effective_query_selector = ['#sp_requery a > strong', '#sp_requery + #sp_recourse a::attr(href)']
 
     page_number_selectors = ['.sb_pagS::text']
 
@@ -655,8 +655,7 @@ class YahooParser(Parser):
 
     no_results_selector = []
 
-    # yahooo doesn't have such a thing :D
-    effective_query_selector = ['']
+    effective_query_selector = ['.msg #cquery a::attr(href)']
 
     num_results_search_selectors = ['#pg > span:last-child']
 
