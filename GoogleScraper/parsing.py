@@ -140,6 +140,7 @@ class Parser():
         
         Raises: InvalidSearchTypeException if no css selectors for the searchtype could be found.
         """
+        self.num_results = 0
         self._parse_lxml(cleaner)
 
         # try to parse the number of results.
@@ -165,6 +166,8 @@ class Parser():
         if self.effective_query:
             logger.debug('{}: There was no search hit for the search query. Search engine used {} instead.'.format(
                 self.__class__.__name__, self.effective_query))
+        else:
+            self.effective_query = ''
 
         # the element that notifies the user about no results.
         self.no_results_text = self.first_match(self.no_results_selector, self.dom)

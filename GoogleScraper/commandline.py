@@ -4,7 +4,7 @@ import argparse
 from GoogleScraper.version import __version__
 
 
-def get_command_line():
+def get_command_line(only_print_help=False):
     """
     Parse command line arguments when GoogleScraper is used as a CLI application.
 
@@ -28,6 +28,9 @@ def get_command_line():
                              'extremely fast and explosive scraping jobs. You may search more than 1000 requests per '
                              'second if you have the necessary number of proxies available. ',
                         choices=('http', 'selenium', 'http-async'))
+
+    parser.add_argument('--sel-browser', choices=['firefox', 'chrome', 'phantomjs'], default='phantomjs',
+                        help='The browser frontend for selenium scraping mode. Does only make sense if --scrape-method is set to "selenium"')
 
     keyword_group = parser.add_mutually_exclusive_group()
 
@@ -119,6 +122,9 @@ NOTSET = 0
                              'yandex". If you want to use all search engines that are available, give \'*\' as '
                              'argument.')
 
-    args = parser.parse_args()
+    if only_print_help:
+        parser.print_help()
+    else:
+        args = parser.parse_args()
 
-    return vars(args)
+        return vars(args)

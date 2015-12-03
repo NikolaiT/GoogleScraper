@@ -99,7 +99,7 @@ def store_serp_result(serp, config):
             for row in data['results']:
                 d = row2dict(serp)
                 d.update(row)
-                d = ({k: v.encode('utf') if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
+                d = ({k: v if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
                 outfile.writerow(d)
         elif output_format == 'stdout':
             if config.get('print_results') == 'summarize':

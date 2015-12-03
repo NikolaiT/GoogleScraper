@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import tempfile
 import threading
 from urllib.parse import quote
 import json
@@ -24,6 +25,7 @@ except ImportError as ie:
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
 
 from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, get_base_search_url_by_search_engine, MaliciousRequestDetected
+from GoogleScraper.user_agents import random_user_agent
 import logging
 
 
@@ -177,6 +179,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         return online
 
+
+    def _save_debug_screenshot(self):
+        """
+        Saves a debug screenshot of the browser window to figure
+        out what went wrong.
+        """
+        tempdir = tempfile.gettempdir()
+        location = os.path.join(tempdir, '{}_{}_debug_screenshot.png'.format(self.search_engine_name, self.browser_type))
+        self.webdriver.get_screenshot_as_file(location)
+
     def _set_xvfb_display(self):
         # TODO: should we check the format of the config?
         if self.xvfb_display:
@@ -257,7 +269,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     )
 
             dcap = dict(DesiredCapabilities.PHANTOMJS)
-            # dcap["phantomjs.page.settings.userAgent"] = random_user_agent()
+            dcap["phantomjs.page.settings.userAgent"] = random_user_agent(only_desktop=True)
 
             self.webdriver = webdriver.PhantomJS(service_args=service_args, desired_capabilities=dcap)
             return True
@@ -388,8 +400,14 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             return False
 
     def _goto_next_page(self):
-        """Click the next page element.
         """
+        Click the next page element,
+
+        Returns:
+            The url of the next page or False if there is no such url
+                (end of available pages for instance).
+        """
+        next_url = ''
         element = self._find_next_page_element()
 
         if hasattr(element, 'click'):
@@ -414,28 +432,32 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     except WebDriverException:
                         pass
 
+        # wait until the next page was loaded
+
+
+        if not next_url:
+            return False
+        else:
             return next_url
 
-        return element
 
     def _find_next_page_element(self):
         """Finds the element that locates the next page for any search engine.
 
         Returns:
-            The element that needs to be clicked to get to the next page.
+            The element that needs to be clicked to get to the next page or a boolean value to
+            indicate an error condition.
         """
         if self.search_type == 'normal':
             selector = self.next_page_selectors[self.search_engine_name]
             try:
-                # wait until the next page link emerges
-                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
-                return self.webdriver.find_element_by_css_selector(selector)
-            except TimeoutException as te:
-                logger.debug('{}: Cannot locate next page element: {}'.format(self.name, te))
-                return False
-            except WebDriverException as e:
-                logger.debug('{} Cannot locate next page element: {}'.format(self.name, e))
-                return False
+                # wait until the next page link is clickable
+                WebDriverWait(self.webdriver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
+            except (WebDriverException, TimeoutException) as e:
+                self._save_debug_screenshot()
+                raise Exception('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
+
+            return self.webdriver.find_element_by_css_selector(selector)
 
         elif self.search_type == 'image':
             self.page_down()
@@ -443,16 +465,42 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     def wait_until_serp_loaded(self):
         """
-        First tries to wait until next page selector is located. If this fails, waits
-        until the title contains the query.
+        This method tries to wait until the page requested is loaded.
 
+        We know that the correct page is loaded when self.page_number appears
+        in the navigation of the page.
         """
+
         if self.search_type == 'normal':
-            selector = self.next_page_selectors[self.search_engine_name]
-            try:
-                WebDriverWait(self.webdriver, 5).until(EC.visibility_of_element_located((By.CSS_SELECTOR, selector)))
-            except (TimeoutException, WebDriverException):
-                self.wait_until_title_contains_keyword()
+
+            if self.search_engine_name == 'google':
+                selector = '#navcnt td.cur'
+            elif self.search_engine_name == 'yandex':
+                selector = '.pager__item_current_yes font font'
+            elif self.search_engine_name == 'bing':
+                selector = 'nav li a.sb_pagS'
+            elif self.search_engine_name == 'yahoo':
+                selector = '.compPagination strong'
+            elif self.search_engine_name == 'baidu':
+                selector = '#page .fk_cur + .pc'
+            elif self.search_engine_name == 'duckduckgo':
+                # no pagination in duckduckgo
+                pass
+            elif self.search_engine_name == 'ask':
+                selector = '#paging .pgcsel .pg'
+
+            if self.search_engine_name == 'duckduckgo':
+                time.sleep(1.5)
+            else:
+
+                try:
+                    WebDriverWait(self.webdriver, 5).\
+            until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, selector), str(self.page_number)))
+                except TimeoutException as e:
+                    self._save_debug_screenshot()
+                    content = self.webdriver.find_element_by_css_selector(selector).text
+                    raise Exception('Pagenumber={} did not appear in navigation. Got "{}" instead'\
+                                    .format(self.page_number), content)
 
         elif self.search_type == 'image':
             self.wait_until_title_contains_keyword()
@@ -479,7 +527,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
             if self.search_input is False and self.config.get('stop_on_detection'):
                 self.status = 'Malicious request detected'
-                super().after_search()
                 return
 
             if self.search_input is False:

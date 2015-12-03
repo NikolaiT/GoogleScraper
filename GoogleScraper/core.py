@@ -170,7 +170,7 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     if isinstance(config['log_level'], int):
         config['log_level'] = logging.getLevelName(config['log_level'])
 
-    setup_logger(level=config.get('log_level'))
+    setup_logger(level=config.get('log_level').upper())
 
     if config.get('view_config', False):
         print(open(os.path.join(get_base_path(), 'scrape_config.py')).read())
@@ -201,8 +201,17 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     proxy_file = config.get('proxy_file', '')
     proxy_db = config.get('mysql_proxy_db', '')
 
-    search_engines = set(config.get('search_engines', ['google']))
-    assert search_engines, 'No search engine specified'
+    # when no search engine is specified, use google
+    search_engines = config.get('search_engines', ['google',])
+    if not isinstance(search_engines, list):
+        if search_engines == '*':
+            search_engines = config.get('supported_search_engines')
+        else:
+            search_engines = search_engines.split(',')
+
+    assert isinstance(search_engines, list), 'Search engines must be a list like data type!'
+    search_engines = set(search_engines)
+
     num_search_engines = len(search_engines)
     num_workers = int(config.get('num_workers'))
     scrape_method = config.get('scrape_method')
@@ -227,11 +236,10 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
         return
 
     if not (keyword or keywords) and not kwfile:
-        raise WrongConfigurationError(
-            'No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and '
-            'keyword with --keyword.')
         # Just print the help.
         get_command_line(True)
+        print('No keywords to scrape for. Please provide either an keyword file (Option: --keyword-file) or specify and '
+            'keyword with --keyword.')
         return
 
     cache_manager = CacheManager(config)
@@ -404,8 +412,9 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
                             )
                         )
 
+            # here we look for suitable workers
+            # for all jobs created.
             for job in scrape_jobs:
-
                 while True:
                     worker = workers.get()
                     workers.put(worker)
@@ -429,6 +438,7 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
 
             # after threads are done, stop the progress queue.
             q.put('done')
+            progress_thread.join()
 
         elif method == 'http-async':
             scheduler = AsyncScrapeScheduler(config, scrape_jobs, cache_manager=cache_manager, session=session, scraper_search=scraper_search,
@@ -437,13 +447,6 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
 
         else:
             raise Exception('No such scrape_method {}'.format(config.get('scrape_method')))
-
-        if method in ('selenium', 'http'):
-            # progress_thread can be None
-            try:
-                progress_thread.join()
-            except AttributeError:
-                pass
 
     # in the end, close the json file.
     from GoogleScraper.output_converter import outfile, output_format

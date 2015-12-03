@@ -1,19 +1,33 @@
 [{
-  "effective_query": "0",
-  "id": "576",
+  "effective_query": "",
+  "id": "796",
   "no_results": "True",
   "num_results": "0",
   "num_results_for_query": "0",
   "page_number": "None",
   "query": "asdfasdfa7654567654345654343sdfasd",
-  "requested_at": "2015-12-01 19:11:33.005162",
+  "requested_at": "2015-12-03 17:05:47.508224",
   "requested_by": "127.0.0.1",
   "results": [],
   "scrape_method": "None",
   "search_engine_name": "None",
   "status": "successful"
 },{
-  "effective_query": "False",
+  "effective_query": "",
+  "id": "None",
+  "no_results": "True",
+  "num_results": "0",
+  "num_results_for_query": "False",
+  "page_number": "None",
+  "query": "asdfasdfa7654567654345654343sdfasd",
+  "requested_at": "None",
+  "requested_by": "None",
+  "results": [],
+  "scrape_method": "None",
+  "search_engine_name": "None",
+  "status": "None"
+},{
+  "effective_query": "",
   "id": "None",
   "no_results": "True",
   "num_results": "0",
@@ -152,7 +166,7 @@
   "search_engine_name": "None",
   "status": "None"
 },{
-  "effective_query": "False",
+  "effective_query": "",
   "id": "None",
   "no_results": "False",
   "num_results": "0",
@@ -291,21 +305,7 @@
   "search_engine_name": "None",
   "status": "None"
 },{
-  "effective_query": "False",
-  "id": "None",
-  "no_results": "True",
-  "num_results": "0",
-  "num_results_for_query": "False",
-  "page_number": "None",
-  "query": "asdfasdfa7654567654345654343sdfasd",
-  "requested_at": "None",
-  "requested_by": "None",
-  "results": [],
-  "scrape_method": "None",
-  "search_engine_name": "None",
-  "status": "None"
-},{
-  "effective_query": "False",
+  "effective_query": "",
   "id": "None",
   "no_results": "False",
   "num_results": "0",

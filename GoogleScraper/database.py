@@ -68,7 +68,7 @@ class SearchEngineResultsPage(Base):
     requested_by = Column(String, default='127.0.0.1')
 
     # The string in the SERP that indicates how many results we got for the search term.
-    num_results_for_query = Column(String)
+    num_results_for_query = Column(String, default='')
 
     # Whether we got any results at all. This is the same as len(serp.links)
     num_results = Column(Integer, default=-1)

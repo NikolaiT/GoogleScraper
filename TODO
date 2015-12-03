@@ -162,7 +162,6 @@
         [Done: 9 min]: Found pre-commit hook that checks pep8 stuff and that runs unit tests
             here: https://gist.githubusercontent.com/snim2/6444684/raw/c7f1ec75c3cc0306bd8f36faee7dd201902528e8/pre-commit.py
 
-
 --- 12 + 100 + 9 + 5 = 126min ---
 
 
@@ -177,6 +176,33 @@
         [Done: 11min], Hook is a pre-commit hook and will execute all tests found in the directory tests/
 
     - See whether existing test suites do work and fix all issues there.
+        [Started: 122min], integration tests do work. Functional  tests fail, because there is a issue in GoogleScraper. Update: Both integration and functional tests do work.
+
+--- 9 + 5 + 11 + 122 = 147min ---
+
+
+2.12
+
+    - Find out why the test test_google_with_phantomjs_and_json_output fails. Why is it not possible to scrape 3 pages with Google in selenium mode?
+        [Done: 42min]: Because the next page element cannot be located in phantomjs mode for some reason.
+
+    - Why cannt phantomjs locate the next page?
+        [Done:  46min]:
+        - Check version of phantomjs: 1.9.0 is my version
+        - Newest version of phantomjs: 2.0, but it is too hard to install/compile
+        - Reason that search is interrupted: Exception is thrown in line
+
+    - Read about worker and job patterns (consumer-producer patterns) in python. Learn about queues patterns.
+        Read the following ressources:
+            - http://www.bogotobogo.com/python/Multithread/python_multithreading_Synchronization_Producer_Consumer_using_Queue.php
+            - https://pymotw.com/2/Queue/
+            - http://www.informit.com/articles/article.aspx?p=1850445&seqNum=8
+            - http://codefudge.com/2015/09/scraping-alchemist-celery-selenium-phantomjs-and-tor.html
 
     - read about casperJS and evaluate whether it might be interesting for GoogleScraper
 
+
+3.12
+
+    - Make functional tests work again
+        [Done: 120min]
