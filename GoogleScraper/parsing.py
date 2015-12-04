@@ -482,7 +482,7 @@ class YandexParser(Parser):
         'results': {
             'de_ip': {
                 'container': 'div.serp-list',
-                'result_container': 'div.serp-item__wrap ',
+                'result_container': 'div.serp-item',
                 'link': 'a.serp-item__title-link::attr(href)',
                 'snippet': 'div.serp-item__text::text',
                 'title': 'a.serp-item__title-link::text',

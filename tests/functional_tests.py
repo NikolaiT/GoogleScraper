@@ -209,11 +209,11 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
     def test_asynchronous_mode_bing_and_yandex(self):
         results_file = os.path.join(tempfile.gettempdir(), 'async_results.json')
         config = {
-            'keyword': 'banana',
-            'search_engines': ['Google'],
+            'keyword': 'where is my mind',
+            'search_engines': ['bing', 'yandex'],
             'num_results_per_page': 10,
-            'num_pages_for_keyword': 2,
-            'scrape_method': 'http',
+            'num_pages_for_keyword': 3,
+            'scrape_method': 'http-async',
             'output_filename': results_file,
             'do_caching': 'False',
         }
