@@ -69,7 +69,7 @@ class Parser():
     # If you didn't specify the search type in the search_types list, this attribute
     # will not be evaluated and no data will be parsed.
 
-    def __init__(self, config=None, html=None, query=''):
+    def __init__(self, config={}, html='', query=''):
         """Create new Parser instance and parse all information.
 
         Args:
@@ -474,7 +474,10 @@ class YandexParser(Parser):
 
     effective_query_selector = ['.misspell__message .misspell__link']
 
-    num_results_search_selectors = ['.serp-adv .serp-item__wrap > strong']
+    # @TODO: In december 2015, I saw that yandex only shows the number of search results in the search input field
+    # with javascript. One can scrape it in plain http mode, but the values are hidden in some javascript and not
+    # accessible with normal xpath/css selectors. A normal text search is done.
+    num_results_search_selectors = ['.serp-adv .serp-item__wrap > strong', '.input__found_visibility_visible font font::text']
 
     page_number_selectors = ['.pager__group .button_checked_yes span::text']
 
@@ -533,6 +536,17 @@ class YandexParser(Parser):
 
             if self.num_results == 0:
                 self.no_results = True
+
+            # very hackish, probably prone to all kinds of errors.
+            if not self.num_results_for_query:
+                substr = 'function() { var title = "%s —' % self.query
+                try:
+                    i = self.html.index(substr)
+                    if i:
+                        self.num_results_for_query = re.search(r'— (.)*?"', self.html[i:i+len(self.query) + 150]).group()
+                except Exception as e:
+                    logger.debug(str(e))
+
 
         if self.searchtype == 'image':
             for key, i in self.iter_serp_items():

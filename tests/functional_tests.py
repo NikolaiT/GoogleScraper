@@ -207,7 +207,16 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
 
     def test_asynchronous_mode_bing_and_yandex(self):
+        """
+        Expected results:
+        - around 60 results
+        - 30 results for bing and 30 results for yandex
+        - valid json file with the contents
+        """
         results_file = os.path.join(tempfile.gettempdir(), 'async_results.json')
+        if os.path.exists(results_file):
+            os.remove(results_file)
+
         config = {
             'keyword': 'where is my mind',
             'search_engines': ['bing', 'yandex'],
@@ -220,6 +229,60 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
         search = scrape_with_config(config)
 
+        self.assertEqual(search.keyword_file, '')
+        self.assertLess(search.started_searching, search.stopped_searching)
+        self.assertEqual(search.number_proxies_used, 1)
+        self.assertEqual(search.number_search_engines_used, 2)
+        self.assertEqual(search.number_search_queries, 1)
+        self.assertEqual(len(search.serps), 6)
+
+        # test that we have twice [1,2,3] as page numbers
+        self.assertSetEqual(set([serp.page_number for serp in search.serps]), {1,2,3})
+
+        self.assertAlmostEqual(sum([len(serp.links) for serp in search.serps]), 60, delta=10)
+        self.assertAlmostEqual(sum([len(serp.links) for serp in search.serps if serp.search_engine_name == 'yandex']), 30, delta=5)
+        self.assertAlmostEqual(sum([len(serp.links) for serp in search.serps if serp.search_engine_name == 'bing']), 30, delta=5)
+
+        for serp in search.serps:
+            self.assertEqual(serp.query, 'where is my mind')
+            self.assertEqual(serp.status, 'successful')
+            self.assertIn(serp.search_engine_name.lower(), ('bing', 'yandex'))
+            self.assertEqual(serp.scrape_method, 'http-async')
+            self.assertTrue(serp.num_results_for_query)
+            self.assertAlmostEqual(serp.num_results, 10, delta=2)
+            self.assertFalse(is_string_and_longer_than(serp.effective_query, 1), msg=serp.effective_query)
+            self.assertEqual(serp.num_results, len(serp.links))
+
+            predicate_true_at_least_n_times(lambda v: is_string_and_longer_than(v, 3),
+                                                    serp.links, 7, 'snippet')
+            for link in serp.links:
+                if link.link_type == 'results':
+                    self.assertTrue(is_string_and_longer_than(link.title, 3))
+
+                self.assertTrue(is_string_and_longer_than(link.link, 10))
+                self.assertTrue(isinstance(link.rank, int))
+
+        # test that the json output is correct
+        self.assertTrue(os.path.isfile(results_file))
+
+        with open(results_file, 'rt') as file:
+            obj = json.load(file)
+
+            # check the same stuff again for the json file
+            for i, page in enumerate(obj):
+                self.assertEqual(page['effective_query'], '')
+                self.assertEqual(page['num_results'], str(len(page['results'])))
+                self.assertTrue(is_string_and_longer_than(page['num_results_for_query'], 5))
+                self.assertEqual(page['query'], 'where is my mind')
+                self.assertEqual(page['requested_by'], 'localhost')
+
+                for j, result in enumerate(page['results']):
+                    if result['link_type'] == 'results':
+                        self.assertTrue(is_string_and_longer_than(result['title'], 3))
+                        self.assertTrue(is_string_and_longer_than(result['snippet'], 3))
+
+                    self.assertTrue(is_string_and_longer_than(result['link'], 10))
+                    self.assertTrue(isinstance(int(result['rank']), int))
 
 
 if __name__ == '__main__':

@@ -349,7 +349,7 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
 
     if not scraper_search:
         scraper_search = ScraperSearch(
-            keyword_file=os.path.abspath(kwfile),
+            keyword_file=kwfile,
             number_search_engines_used=num_search_engines,
             number_proxies_used=len(proxies),
             number_search_queries=len(keywords),
