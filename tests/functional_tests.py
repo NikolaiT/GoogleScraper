@@ -13,6 +13,7 @@ When testing single functions:
 python -m pytest tests/functional_tests.py::GoogleScraperFunctionalTestCase::test_google_with_phantomjs_and_json_output
 """
 
+import csv
 import json
 import tempfile
 import os
@@ -27,6 +28,17 @@ all_search_engines = base_config['supported_search_engines']
 def is_string_and_longer_than(s, n):
     return isinstance(s, str) and len(s) > n
 
+
+def predicate_true_at_least_n_times(pred, collection, n, key):
+    """
+    Ensures that the predicate is at least n times true for
+    items in a collection with the key.
+    """
+    if hasattr(collection[0], key):
+        assert len([getattr(v, key) for v in collection if pred(getattr(v, key))]) > n
+    elif key in collection[0]:
+        assert len([v[key] for v in collection if pred(v[key])]) > n
+
 class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
     def test_google_with_phantomjs_and_json_output(self):
@@ -37,6 +49,9 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
         phantomjs and save the results to a JSON file.
         """
         results_file = os.path.join(tempfile.gettempdir(), 'results.json')
+        if os.path.exists(results_file):
+            os.remove(results_file)
+
         config = {
             'keyword': 'apple tree',
             'search_engines': ['Google'],
@@ -110,6 +125,9 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
     def test_http_mode_google_csv_output(self):
 
         results_file = os.path.join(tempfile.gettempdir(), 'results.csv')
+        if os.path.exists(results_file):
+            os.remove(results_file)
+
         config = {
             'keyword': 'banana',
             'search_engines': ['Google'],
@@ -143,10 +161,11 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
             self.assertEqual(serp.num_results, len(serp.links))
 
+            predicate_true_at_least_n_times(lambda v: is_string_and_longer_than(v, 3),
+                                                    serp.links, 7, 'snippet')
             for link in serp.links:
                 if link.link_type == 'results':
                     self.assertTrue(is_string_and_longer_than(link.title, 3))
-                    self.assertTrue(is_string_and_longer_than(link.snippet, 3))
 
                 self.assertTrue(is_string_and_longer_than(link.link, 10))
                 self.assertTrue(isinstance(link.rank, int))
@@ -154,11 +173,14 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
         # test that the csv output is correct
         self.assertTrue(os.path.isfile(results_file))
 
-        import csv
         with open(results_file, 'rt') as file:
-            reader = csv.DictReader(file)
+            reader = csv.DictReader(file, delimiter=',')
 
-            for row in reader:
+            rows = [row for row in reader]
+
+            self.assertAlmostEqual(20, len(rows), delta=3)
+
+            for row in rows:
                 self.assertEqual(row['query'], 'banana')
                 self.assertTrue(is_string_and_longer_than(row['requested_at'], 5))
                 self.assertTrue(int(row['num_results']))
@@ -167,8 +189,8 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
                 self.assertEqual(row['search_engine_name'], 'google')
                 self.assertIn(int(row['page_number']), [1,2])
                 self.assertEqual(row['status'], 'successful')
-                self.assertEqual(is_string_and_longer_than(row['num_results_for_query'], 3))
-                self.assertTrue(bool(row['no_results']))
+                self.assertTrue(is_string_and_longer_than(row['num_results_for_query'], 3))
+                self.assertTrue(row['no_results'] == 'False')
                 self.assertTrue(row['effective_query'] == '')
 
                 if row['link_type'] == 'results':
@@ -178,7 +200,25 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
                     self.assertTrue(is_string_and_longer_than(row['visible_link'], 5))
 
                 self.assertTrue(is_string_and_longer_than(row['link'], 10))
-                self.assertTrue(isinstance(row['rank'], int))
+                self.assertTrue(row['rank'].isdigit())
+
+            # ensure that at least 90% of all entries have a string as snippet
+            predicate_true_at_least_n_times(lambda v: is_string_and_longer_than(v, 3), rows, int(0.8*len(rows)), 'snippet')
+
+
+    def test_asynchronous_mode_bing_and_yandex(self):
+        results_file = os.path.join(tempfile.gettempdir(), 'async_results.json')
+        config = {
+            'keyword': 'banana',
+            'search_engines': ['Google'],
+            'num_results_per_page': 10,
+            'num_pages_for_keyword': 2,
+            'scrape_method': 'http',
+            'output_filename': results_file,
+            'do_caching': 'False',
+        }
+
+        search = scrape_with_config(config)
 
 
 

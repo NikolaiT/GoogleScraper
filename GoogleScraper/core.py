@@ -448,11 +448,8 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
         else:
             raise Exception('No such scrape_method {}'.format(config.get('scrape_method')))
 
-    # in the end, close the json file.
-    from GoogleScraper.output_converter import outfile, output_format
-
-    if output_format == 'json':
-        outfile.end()
+    from GoogleScraper.output_converter import close_outfile
+    close_outfile()
 
     scraper_search.stopped_searching = datetime.datetime.utcnow()
     session.add(scraper_search)

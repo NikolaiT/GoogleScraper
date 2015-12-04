@@ -40,6 +40,30 @@ class JsonStreamWriter():
         self.file.close()
 
 
+class CsvStreamWriter():
+    """
+    Writes consecutive objects to an csv output file.
+    """
+    def __init__(self, filename):
+        # every row in the csv output file should contain all fields
+        # that are in the table definition. Except the id, they have the
+        # same name in both tables
+        self.file = open(filename, 'wt')
+        self.dict_writer = csv.DictWriter(self.file, fieldnames=csv_fieldnames, delimiter=',')
+        self.dict_writer.writeheader()
+
+    def write(self, data, serp):
+        # one row per link
+        for row in data['results']:
+            d = row2dict(serp)
+            d.update(row)
+            d = ({k: v if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
+            self.dict_writer.writerow(d)
+
+    def end(self):
+        self.file.close()
+
+
 def init_outfile(config, force_reload=False):
     global outfile, output_format
 
@@ -59,11 +83,7 @@ def init_outfile(config, force_reload=False):
         if output_format == 'json':
             outfile = JsonStreamWriter(output_file)
         elif output_format == 'csv':
-            # every row in the csv output file should contain all fields
-            # that are in the table definition. Except the id, they have the
-            # same name in both tables
-            outfile = csv.DictWriter(open(output_file, 'wt'), fieldnames=csv_fieldnames)
-            outfile.writeheader()
+            outfile = CsvStreamWriter(output_file)
         elif output_format == 'stdout':
             outfile = sys.stdout
 
@@ -95,12 +115,7 @@ def store_serp_result(serp, config):
             # The problem here is, that we need to stream write the json data.
             outfile.write(data)
         elif output_format == 'csv':
-            # one row per link
-            for row in data['results']:
-                d = row2dict(serp)
-                d.update(row)
-                d = ({k: v if type(v) is str else v for k, v in d.items() if k in csv_fieldnames})
-                outfile.writerow(d)
+            outfile.write(data, serp)
         elif output_format == 'stdout':
             if config.get('print_results') == 'summarize':
                 print(serp)
@@ -115,3 +130,12 @@ def row2dict(obj):
         d[column.name] = str(getattr(obj, column.name))
 
     return d
+
+
+def close_outfile():
+    """
+    Closes the outfile.
+    """
+    global outfile
+    if output_format in ('json', 'csv'):
+        outfile.end()
