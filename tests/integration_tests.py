@@ -337,5 +337,41 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
             ### test correct parsing of the number of results for the query..
 
 
+    def test_csv_file_header_always_the_same(self):
+        """
+        Check that csv files have always the same order in their header.
+        """
+        csv_outfile_1 = os.path.join(base, 'data/tmp/csvout1.csv')
+        csv_outfile_2 = os.path.join(base, 'data/tmp/csvout2.csv')
+
+        config = {
+            'keyword': 'some words',
+            'search_engines': all_search_engines,
+            'num_pages_for_keyword': 2,
+            'scrape_method': 'selenium',
+            'cachedir': os.path.join(base, 'data/csv_tests/'),
+            'do_caching': True,
+            'verbosity': 0,
+            'output_filename': csv_outfile_1,
+        }
+        search = scrape_with_config(config)
+
+        search = scrape_with_config(config)
+        config.update({'output_filename': csv_outfile_2})
+        search = scrape_with_config(config)
+
+        assert os.path.isfile(csv_outfile_1) and os.path.isfile(csv_outfile_2)
+
+        file1 = open(csv_outfile_1, 'rt')
+        file2 = open(csv_outfile_2, 'rt')
+
+        import csv
+        reader1, reader2 = csv.DictReader(file1), csv.DictReader(file2)
+
+        header1, header2 = reader1.fieldnames, reader2.fieldnames
+        from GoogleScraper.output_converter import csv_fieldnames
+
+        assert header1 == header2 == csv_fieldnames
+
 if __name__ == '__main__':
     unittest.main(warnings='ignore')
