@@ -913,6 +913,23 @@ class AskParser(Parser):
                 'snippet': '.abstract::text',
                 'title': '.txt_lg.b::text',
                 'visible_link': '.durl span::text'
+            },
+            'de_ip_december_2015': {
+                'container': '.l-mid-content',
+                'result_container': '.web-result',
+                'link': '.web-result-title > a::attr(href)',
+                'snippet': '.web-result-description::text',
+                'title': '.web-result-title > a::text',
+                'visible_link': '.web-result-url::text'
+            },
+            # as requested by httm mode
+            'de_ip_december_2015_raw_http': {
+                'container': '#midblock',
+                'result_container': '#teoma-results .wresult',
+                'link': 'a.title::attr(href)',
+                'snippet': '.abstract::text',
+                'title': 'a.title::text',
+                'visible_link': '.durl span::text'
             }
         },
     }

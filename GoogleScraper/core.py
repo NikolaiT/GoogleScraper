@@ -212,6 +212,9 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     assert isinstance(search_engines, list), 'Search engines must be a list like data type!'
     search_engines = set(search_engines)
 
+    for engine in search_engines:
+        assert engine in config.get('supported_search_engines'), 'Search engine "{}" not supported.'.format(engine)
+
     num_search_engines = len(search_engines)
     num_workers = int(config.get('num_workers'))
     scrape_method = config.get('scrape_method')

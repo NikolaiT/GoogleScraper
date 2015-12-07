@@ -245,7 +245,7 @@ All settings that only apply for requesting with real browsers.
 """
 
 # which browser to use in selenium mode. Valid values=  ('Chrome', 'Firefox', 'Phantomjs')
-sel_browser = 'Chrome'
+sel_browser = 'Phantomjs'
 
 # Manual captcha solving
 # If this parameter is set to a Integer, the browser waits for the user
@@ -257,7 +257,7 @@ sel_browser = 'Chrome'
 manual_captcha_solving = False
 
 # Xvfb display option
-# You should start xvfb at your own
+# You should start xvfb on your own before this option has any effect.
 # Format=  [hostname]= displaynumber[.screennumber], see X(7) manuel for details
 # will set environment variable $DISPLAY to it
 xvfb_display = None
@@ -275,7 +275,7 @@ google_search_url = 'https://www.google.com/search?'
 
 """
 [HTTP_ASYNC]
-Settings specificly for the asynchronous mode.
+Settings specific for the asynchronous mode.
 """
 
 # The number of concurrent requests that are used for scraping

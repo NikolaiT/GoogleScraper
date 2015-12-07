@@ -401,7 +401,9 @@ class CacheManager():
                 serp = self.get_serp_from_database(session, job['query'], job['search_engine'], job['scrape_method'],
                                               job['page_number'])
 
-                if not serp:
+                # if no serp was found or the serp has no results
+                # parse again
+                if not serp or (serp and len(serp.links) <= 0):
                     serp = self.parse_again(fname, job['search_engine'], job['scrape_method'], job['query'])
 
                 serp.scraper_searches.append(scraper_search)

@@ -186,7 +186,7 @@
     - Find out why the test test_google_with_phantomjs_and_json_output fails. Why is it not possible to scrape 3 pages with Google in selenium mode?
         [Done: 42min]: Because the next page element cannot be located in phantomjs mode for some reason.
 
-    - Why cannt phantomjs locate the next page?
+    - Why cant phantomjs locate the next page?
         [Done:  46min]:
         - Check version of phantomjs: 1.9.0 is my version
         - Newest version of phantomjs: 2.0, but it is too hard to install/compile
@@ -220,4 +220,5 @@
             - ranks doesn't need to be cumulative, since their absolute rank can be
                 recalculated by multiplying with the page number.
 
-    - fix functional test issues of `test_all_search_engines_in_http_mode`
+    - fix functional test issues of `test_all_search_engines_in_http_mode
+        [Began: 52min], duckduckgo works. yahoo improved.
