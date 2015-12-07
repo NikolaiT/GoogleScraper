@@ -206,3 +206,6 @@
 
     - Make functional tests work again
         [Done: 120min]
+
+
+-- Fix bug in `GoogleScraper -q 'apples' -s google -m selenium --sel-browser phantomjs -p 10`

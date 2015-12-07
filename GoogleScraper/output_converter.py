@@ -16,7 +16,7 @@ impossible to launch lang scrape jobs with millions of keywords.
 
 output_format = 'stdout'
 outfile = sys.stdout
-csv_fieldnames = set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'}
+csv_fieldnames = sorted(set(Link.__table__.columns._data.keys() + SERP.__table__.columns._data.keys()) - {'id', 'serp_id'})
 
 logger = logging.getLogger(__name__)
 
