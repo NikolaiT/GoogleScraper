@@ -41,6 +41,95 @@ def predicate_true_at_least_n_times(pred, collection, n, key):
 
 class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
+    def test_all_search_engines_in_http_mode(self):
+        """
+        Very simple test case that assures that scraping all
+        search engines in http mode works.
+        """
+
+        config = {
+            'keyword': 'in this world',
+            'search_engines': '*',
+            'scrape_method': 'http',
+            'do_caching': 'False',
+            'num_results_per_page': 10,
+        }
+
+        search = scrape_with_config(config)
+
+        self.assertLess(search.started_searching, search.stopped_searching)
+        self.assertEqual(search.number_proxies_used, 1)
+        self.assertEqual(search.number_search_engines_used, len(all_search_engines))
+        self.assertEqual(search.number_search_queries, 1)
+        self.assertEqual(len(search.serps), len(all_search_engines))
+
+        for i, serp in enumerate(search.serps):
+            self.assertEqual(search.serps[i].page_number, 1)
+            self.assertEqual(serp.status, 'successful')
+            self.assertIn(serp.search_engine_name.lower(), all_search_engines)
+            self.assertEqual(serp.scrape_method, 'http')
+            self.assertTrue(serp.num_results_for_query)
+            self.assertAlmostEqual(serp.num_results, 10, delta=2)
+            self.assertFalse(is_string_and_longer_than(serp.effective_query, 1), msg=serp.effective_query)
+            self.assertEqual(serp.no_results, False)
+            self.assertEqual(serp.num_results, len(serp.links))
+
+            for j, link in enumerate(serp.links):
+                if link.link_type == 'results':
+                    self.assertTrue(is_string_and_longer_than(link.title, 3))
+                    self.assertTrue(is_string_and_longer_than(link.snippet, 3))
+
+                self.assertTrue(is_string_and_longer_than(link.link, 10))
+                self.assertTrue(link.domain in link.link)
+                self.assertTrue(isinstance(link.rank, int))
+
+
+    def test_all_search_engines_in_selenium_mode(self):
+        """
+        Very simple test case that assures that scraping all
+        search engines in selenium mode works.
+
+        Basically copy paste from `test_all_search_engines_in_http_mode`.
+        """
+
+        config = {
+            'keyword': 'dont look back in anger',
+            'search_engines': '*',
+            'scrape_method': 'selenium',
+            'selenium_browser': 'phantomjs',
+            'do_caching': 'False',
+            'num_results_per_page': 10,
+        }
+
+        search = scrape_with_config(config)
+
+        self.assertLess(search.started_searching, search.stopped_searching)
+        self.assertEqual(search.number_proxies_used, 1)
+        self.assertEqual(search.number_search_engines_used, len(all_search_engines))
+        self.assertEqual(search.number_search_queries, 1)
+        self.assertEqual(len(search.serps), len(all_search_engines))
+
+        for i, serp in enumerate(search.serps):
+            self.assertEqual(search.serps[i].page_number, 1)
+            self.assertEqual(serp.status, 'successful')
+            self.assertIn(serp.search_engine_name.lower(), all_search_engines)
+            self.assertEqual(serp.scrape_method, 'selenium')
+            self.assertTrue(serp.num_results_for_query)
+            self.assertAlmostEqual(serp.num_results, 10, delta=2)
+            self.assertFalse(is_string_and_longer_than(serp.effective_query, 1), msg=serp.effective_query)
+            self.assertEqual(serp.no_results, False)
+            self.assertEqual(serp.num_results, len(serp.links))
+
+            for j, link in enumerate(serp.links):
+                if link.link_type == 'results':
+                    self.assertTrue(is_string_and_longer_than(link.title, 3))
+                    self.assertTrue(is_string_and_longer_than(link.snippet, 3))
+
+                self.assertTrue(is_string_and_longer_than(link.link, 10))
+                self.assertTrue(link.domain in link.link)
+                self.assertTrue(isinstance(link.rank, int))
+
+
     def test_google_with_phantomjs_and_json_output(self):
         """
         Very common use case:
@@ -83,7 +172,6 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             self.assertAlmostEqual(serp.num_results, 10, delta=2)
             self.assertFalse(is_string_and_longer_than(serp.effective_query, 1), msg=serp.effective_query)
             self.assertEqual(serp.no_results, False)
-
             self.assertEqual(serp.num_results, len(serp.links))
 
             for j, link in enumerate(serp.links):
@@ -119,7 +207,6 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
 
                     self.assertTrue(is_string_and_longer_than(result['link'], 10))
                     self.assertTrue(isinstance(int(result['rank']), int))
-
 
 
     def test_http_mode_google_csv_output(self):
@@ -189,7 +276,6 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
                 self.assertEqual(row['search_engine_name'], 'google')
                 self.assertIn(int(row['page_number']), [1,2])
                 self.assertEqual(row['status'], 'successful')
-                self.assertTrue(is_string_and_longer_than(row['num_results_for_query'], 3))
                 self.assertTrue(row['no_results'] == 'False')
                 self.assertTrue(row['effective_query'] == '')
 
@@ -198,6 +284,7 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
                     self.assertTrue(is_string_and_longer_than(row['snippet'], 3))
                     self.assertTrue(is_string_and_longer_than(row['domain'], 5))
                     self.assertTrue(is_string_and_longer_than(row['visible_link'], 5))
+                    self.assertTrue(is_string_and_longer_than(row['num_results_for_query'], 3))
 
                 self.assertTrue(is_string_and_longer_than(row['link'], 10))
                 self.assertTrue(row['rank'].isdigit())
@@ -248,7 +335,8 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             self.assertEqual(serp.status, 'successful')
             self.assertIn(serp.search_engine_name.lower(), ('bing', 'yandex'))
             self.assertEqual(serp.scrape_method, 'http-async')
-            self.assertTrue(serp.num_results_for_query)
+            if serp.search_engine_name != 'yandex':
+                self.assertTrue(is_string_and_longer_than(serp.num_results_for_query, 5))
             self.assertAlmostEqual(serp.num_results, 10, delta=2)
             self.assertFalse(is_string_and_longer_than(serp.effective_query, 1), msg=serp.effective_query)
             self.assertEqual(serp.num_results, len(serp.links))
@@ -272,7 +360,8 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             for i, page in enumerate(obj):
                 self.assertEqual(page['effective_query'], '')
                 self.assertEqual(page['num_results'], str(len(page['results'])))
-                self.assertTrue(is_string_and_longer_than(page['num_results_for_query'], 5))
+                if page['search_engine_name'].lower() != 'yandex':
+                    self.assertTrue(is_string_and_longer_than(page['num_results_for_query'], 5))
                 self.assertEqual(page['query'], 'where is my mind')
                 self.assertEqual(page['requested_by'], 'localhost')
 

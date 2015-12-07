@@ -849,7 +849,15 @@ class DuckduckgoParser(Parser):
                 'snippet': 'result__snippet::text',
                 'title': '.result__title > a::text',
                 'visible_link': '.result__url__domain::text'
-            }
+            },
+            'non_javascript_mode': {
+                'container': '#content',
+                'result_container': '.results_links',
+                'link': '.links_main > a::attr(href)',
+                'snippet': '.snippet::text',
+                'title': '.links_main > a::text',
+                'visible_link': '.url::text'
+            },
         },
     }
 

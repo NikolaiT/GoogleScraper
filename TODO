@@ -209,3 +209,15 @@
 
 
 -- Fix bug in `GoogleScraper -q 'apples' -s google -m selenium --sel-browser phantomjs -p 10`
+
+
+7.12
+
+    - test that serp rank is cumulative among pages
+        [Done: 10min] Rank testing doesn't make any sense. Reasons:
+            - ranks start again in different type of serp results (ads vs normal)
+            - results aren't ordered by rank in json or csv/output
+            - ranks doesn't need to be cumulative, since their absolute rank can be
+                recalculated by multiplying with the page number.
+
+    - fix functional test issues of `test_all_search_engines_in_http_mode`

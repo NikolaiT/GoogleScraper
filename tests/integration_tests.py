@@ -3,7 +3,6 @@
 
 import os
 import unittest
-
 from GoogleScraper import scrape_with_config
 from GoogleScraper.parsing import get_parser_by_search_engine
 from GoogleScraper.config import get_config
@@ -13,6 +12,7 @@ config = get_config()
 base = os.path.dirname(os.path.realpath(__file__))
 
 all_search_engines = config.get('supported_search_engines')
+
 
 class GoogleScraperIntegrationTestCase(unittest.TestCase):
     def setUp(self):
@@ -175,8 +175,9 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
 
         # the items that should always have a value:
         notnull = (
-        'link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrape_method', 'page_number', 'search_engine_name',
-        'snippet')
+            'link', 'query', 'rank', 'domain', 'title', 'link_type', 'scrape_method', 'page_number',
+            'search_engine_name',
+            'snippet')
 
         for rownum, row in enumerate(reader):
             if rownum == 0:
@@ -332,10 +333,10 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
             parser = self.get_parser_for_file(search_engine, 'data/no_results_literal/{}.html'.format(search_engine),
                                               query=query)
 
-            assert parser.num_results == 0 or parser.effective_query, 'No results must be true for search engine {}! But got {} serp entries and effective query: {}.'.format(search_engine, parser.num_results, parser.effective_query)
+            assert parser.num_results == 0 or parser.effective_query, 'No results must be true for search engine {}! But got {} serp entries and effective query: {}.'.format(
+                search_engine, parser.num_results, parser.effective_query)
 
             ### test correct parsing of the number of results for the query..
-
 
     def test_csv_file_header_always_the_same(self):
         """
@@ -372,6 +373,23 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
         from GoogleScraper.output_converter import csv_fieldnames
 
         assert header1 == header2 == csv_fieldnames
+
+    def test_duckduckgo_http_mode_works(self):
+        """
+        duckduckgo has a non javascript version that should
+        be queried when using http mode
+        """
+
+        parser = self.get_parser_for_file('duckduckgo', 'data/various/duckduckgo_http_mode_december_2015.html',
+                                          query='what happened')
+
+        for result_type, data in parser.search_results.items():
+            for serp in data:
+                assert isinstance(serp['rank'], int)
+                assert len(serp['link']) > 8
+                assert serp['title']
+                assert len(serp['snippet']) > 5
+
 
 if __name__ == '__main__':
     unittest.main(warnings='ignore')

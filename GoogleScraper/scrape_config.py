@@ -113,6 +113,9 @@ baidu_search_url = 'http://www.baidu.com/s?'
 # The duckduckgo base search url
 duckduckgo_search_url = 'https://duckduckgo.com/'
 
+# duckduckgo url for http mode
+http_duckduckgo_search_url = 'https://duckduckgo.com/html/?'
+
 # The ask base search url
 ask_search_url = 'http://de.ask.com/web?'
 

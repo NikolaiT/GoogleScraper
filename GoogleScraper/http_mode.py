@@ -3,14 +3,13 @@
 import threading
 import json
 import datetime
-import random
 import socket
 from urllib.parse import urlencode
 
 import GoogleScraper.socks as socks
 from GoogleScraper.scraping import SearchEngineScrape, get_base_search_url_by_search_engine
 from GoogleScraper.parsing import get_parser_by_search_engine
-from GoogleScraper.user_agents import user_agents
+from GoogleScraper.user_agents import random_user_agent
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ logger = logging.getLogger(__name__)
 headers = {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate',
+    'Accept-Encoding': 'gzip, deflate, sdch',
     'Connection': 'keep-alive',
 }
 
@@ -163,7 +162,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         super().instance_creation_info(self.__class__.__name__)
 
         if self.search_engine_name == 'blekko':
-            logger.critical('blekko doesnt support http mode.')
+            logger.critical('blekko does not support http mode.')
             self.startable = False
 
     def set_proxy(self):
@@ -246,7 +245,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.parser = get_parser_by_search_engine(self.search_engine_name)
         self.parser = self.parser(config=self.config)
 
-    def search(self, rand=False, timeout=15):
+    def search(self, rand=True, timeout=15):
         """The actual search for the search engine.
 
         When raising StopScrapingException, the scraper will stop.
@@ -259,7 +258,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.build_search()
 
         if rand:
-            self.headers['User-Agent'] = random.choice(user_agents)
+            self.headers['User-Agent'] = random_user_agent(only_desktop=True)
 
         try:
             super().detection_prevention_sleep()

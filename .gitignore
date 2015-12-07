@@ -1,3 +1,6 @@
+# test data
+tests/data/tmp/*
+
 google_scraper.db
 instructions/
 .ipynb_checkpoints
