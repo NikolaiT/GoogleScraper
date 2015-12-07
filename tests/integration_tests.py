@@ -383,7 +383,12 @@ class GoogleScraperIntegrationTestCase(unittest.TestCase):
         parser = self.get_parser_for_file('duckduckgo', 'data/various/duckduckgo_http_mode_december_2015.html',
                                           query='what happened')
 
+        assert parser.num_results > 8
+
         for result_type, data in parser.search_results.items():
+            if result_type == 'normal':
+                assert len(data) > 8
+
             for serp in data:
                 assert isinstance(serp['rank'], int)
                 assert len(serp['link']) > 8
