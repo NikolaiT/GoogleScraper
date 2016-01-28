@@ -244,11 +244,11 @@ def basic_usage():
     # See in the config.cfg file for possible values
     config = {
         'SCRAPING': {
-            'use_own_ip': 'True',
-            'keyword': 'Let\'s go bubbles!',
+            'use_own_ip': 'True',            
             'search_engines': 'yandex',
             'num_pages_for_keyword': 1
         },
+        'keyword': 'Let\'s go bubbles!',
         'SELENIUM': {
             'sel_browser': 'chrome',
         },
@@ -263,12 +263,10 @@ def basic_usage():
         print(e)
 
     # let's inspect what we got
-
-    for search in sqlalchemy_session.query(ScraperSearch).all():
-        for serp in search.serps:
-            print(serp)
-            for link in serp.links:
-                print(link)
+    for serp in sqlalchemy_session.serps:
+        print(serp)
+        for link in serp.links:
+            print(link)
 
 
 # simulating a image search for all search engines that support image search
