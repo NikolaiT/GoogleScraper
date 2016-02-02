@@ -62,7 +62,8 @@ class AsyncHttpScrape(object):
                 self.headers))
 
             if response.status == 200:
-                body = yield from response.read_and_close(decode=False)
+                #The aiohttp method ClientResponse.read_and_close() is gone as of december 2015
+                body = yield from response.text()
                 self.parser = self.parser(config=self.config, html=body)
                 return self
 
