@@ -182,7 +182,7 @@ Bing search params.
 
 """
 bing_search_params = {
-
+    'adlt': 'off'
 }
 
 """
