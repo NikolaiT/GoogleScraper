@@ -58,7 +58,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'google': '#pnnext',
         'yandex': '.pager__button_kind_next',
         'bing': '.sb_pagN',
-        'yahoo': '#pg-next',
+        'yahoo': '.compPagination .next',
         'baidu': '.n',
         'ask': '#paging div a.txt3.l_nu',
         'blekko': '',
@@ -455,13 +455,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 WebDriverWait(self.webdriver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
             except (WebDriverException, TimeoutException) as e:
                 self._save_debug_screenshot()
-                raise Exception('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
+                # raise Exception('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
 
             return self.webdriver.find_element_by_css_selector(selector)
 
         elif self.search_type == 'image':
             self.page_down()
-            return True
+            if self.search_engine_name == 'google':
+                return self.webdriver.find_element_by_css_selector('input._kvc')
+            else:
+                return True
 
     def wait_until_serp_loaded(self):
         """
@@ -599,17 +602,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         Used for next page in image search mode or when the
         next results are obtained by scrolling down a page.
         """
-        js = '''
-        var w = window,
-            d = document,
-            e = d.documentElement,
-            g = d.getElementsByTagName('body')[0],
-            y = w.innerHeight|| e.clientHeight|| g.clientHeight;
+        js = 'window.scrollTo(0,document.body.scrollHeight);'
 
-        window.scrollBy(0,y);
-        return y;
-        '''
-
+        time.sleep(5)
         self.webdriver.execute_script(js)
 
     def run(self):

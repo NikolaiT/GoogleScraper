@@ -404,7 +404,7 @@ class GoogleParser(Parser):
     image_search_selectors = {
         'results': {
             'de_ip': {
-                'container': 'li#isr_mc',
+                'container': '#isr_mc',
                 'result_container': 'div.rg_di',
                 'link': 'a.rg_l::attr(href)'
             },
@@ -626,7 +626,7 @@ class BingParser(Parser):
             'ch_ip': {
                 'container': '#dg_c .imgres',
                 'result_container': '.dg_u',
-                'link': 'a.dv_i::attr(m)'
+                'link': 'a::attr(m)'
             },
         }
     }
