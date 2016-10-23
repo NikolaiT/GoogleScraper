@@ -117,7 +117,7 @@ duckduckgo_search_url = 'https://duckduckgo.com/'
 http_duckduckgo_search_url = 'https://duckduckgo.com/html/?'
 
 # The ask base search url
-ask_search_url = 'http://de.ask.com/web?'
+ask_search_url = 'http://www.ask.com/web?'
 
 # The search type. Currently, the following search modes are
 # supported for some search engine=  normal, video, news and image search.
@@ -271,7 +271,7 @@ All settings that target the raw http packet scraping mode.
 # for each mode
 # search engine urls for the specific engines
 # The google search url specifiably for http mode
-google_search_url = 'https://www.google.com/search?'
+# google_search_url = 'https://www.google.com/search?'
 
 """
 [HTTP_ASYNC]
