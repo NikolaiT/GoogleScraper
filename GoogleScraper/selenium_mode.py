@@ -27,6 +27,7 @@ except ImportError as ie:
 from GoogleScraper.scraping import SearchEngineScrape, SeleniumSearchError, get_base_search_url_by_search_engine, MaliciousRequestDetected
 from GoogleScraper.user_agents import random_user_agent
 import logging
+import urllib.parse
 
 
 logger = logging.getLogger(__name__)
@@ -58,9 +59,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'google': '#pnnext',
         'yandex': '.pager__button_kind_next',
         'bing': '.sb_pagN',
-        'yahoo': '#pg-next',
+        'yahoo': '.next',
         'baidu': '.n',
-        'ask': '#paging div a.txt3.l_nu',
+        'ask': '.js-pagination-next',
         'blekko': '',
         'duckduckgo': '',
         'googleimg': '#pnnext',
@@ -76,7 +77,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         'duckduckgo': (By.NAME, 'q'),
         'ask': (By.NAME, 'q'),
         'blekko': (By.NAME, 'q'),
-        'google': (By.NAME, 'q'),
         'googleimg': (By.NAME, 'as_q'),
         'baiduimg': (By.NAME, 'word'),
     }
@@ -694,9 +694,11 @@ class AskSelScrape(SelScrape):
     def wait_until_serp_loaded(self):
 
         def wait_until_keyword_in_url(driver):
+
+            current_url = urllib.parse.unquote(driver.current_url)
             try:
-                return quote(self.query) in driver.current_url or \
-                    self.query.replace(' ', '+') in driver.current_url
+                return quote(self.query) in current_url or \
+                    self.query.replace(' ', '+') in current_url
             except WebDriverException:
                 pass
 
