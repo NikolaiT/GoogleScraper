@@ -486,9 +486,9 @@ class YandexParser(Parser):
             'de_ip': {
                 'container': 'div.serp-list',
                 'result_container': 'div.serp-item',
-                'link': 'a.serp-item__title-link::attr(href)',
-                'snippet': 'div.serp-item__text::text',
-                'title': 'a.serp-item__title-link::text',
+                'link': 'a.link.organic__url.link.link_cropped_no::attr(href)',
+                'snippet': '.organic__content-wrapper::text',
+                'title': '.organic__title-wrapper::text',
                 'visible_link': 'a.serp-url__link::attr(href)'
             }
         }
@@ -854,7 +854,7 @@ class DuckduckgoParser(Parser):
                 'container': '#links',
                 'result_container': '.result',
                 'link': '.result__title > a::attr(href)',
-                'snippet': 'result__snippet::text',
+                'snippet': '.result__snippet::text',
                 'title': '.result__title > a::text',
                 'visible_link': '.result__url__domain::text'
             },
@@ -907,12 +907,12 @@ class AskParser(Parser):
     normal_search_selectors = {
         'results': {
             'de_ip': {
-                'container': '#midblock',
-                'result_container': '.ptbs.ur',
-                'link': '.abstract > a::attr(href)',
-                'snippet': '.abstract::text',
-                'title': '.txt_lg.b::text',
-                'visible_link': '.durl span::text'
+                'container': '.l-mid-content',
+                'result_container': '.web-result.ur.tsrc_Wiki-SA',
+                'link': 'a.web-result-title-link::attr(href)',
+                'snippet': '.web-result-description::text',
+                'title': 'a.web-result-title-link::text',
+                'visible_link': 'a.web-result-title-link::attr(href)'
             }
         },
     }
