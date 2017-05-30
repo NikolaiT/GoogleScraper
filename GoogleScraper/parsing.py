@@ -907,12 +907,12 @@ class AskParser(Parser):
     normal_search_selectors = {
         'results': {
             'de_ip': {
-                'container': '#midblock',
-                'result_container': '.ptbs.ur',
-                'link': '.abstract > a::attr(href)',
-                'snippet': '.abstract::text',
-                'title': '.txt_lg.b::text',
-                'visible_link': '.durl span::text'
+                'container': '.main',
+                'result_container': '.PartialSearchResults-item',
+                'link': 'div > a::attr(href)',
+                'snippet': 'p:last-child::text',
+                'title': 'div > a::text',
+                'visible_link': 'p:nth-child(2)::text'
             }
         },
     }
