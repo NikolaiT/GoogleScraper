@@ -900,9 +900,9 @@ class AskParser(Parser):
 
     no_results_selector = []
 
-    effective_query_selector = ['#spell-check-result > a']
+    effective_query_selector = []
 
-    page_number_selectors = ['.pgcsel .pg::text']
+    page_number_selectors = ['.PartialWebPagination-pgsel::text']
 
     normal_search_selectors = {
         'results': {
