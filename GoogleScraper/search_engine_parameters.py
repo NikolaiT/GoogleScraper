@@ -7,8 +7,6 @@ All values set to None, are NOT INCLUDED in the GET request! Everything else (al
 """Google search params
 
 Some good stuff:
-    http://www.blueglass.com/blog/google-search-url-parameters-query-string-anatomy/
-    http://www.rankpanel.com/blog/google-search-parameters/
     http://lifehacker.com/5933248/avoid-getting-redirected-to-country-specific-versions-of-google
 
 All search requests must include the parameters site, client, q, and output. All parameter values
