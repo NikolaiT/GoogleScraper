@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+from aiohttp import ClientSession
 import datetime
 from urllib.parse import urlencode
 from GoogleScraper.parsing import get_parser_by_search_engine, parse_serp
@@ -40,31 +41,45 @@ class AsyncHttpScrape(object):
 
     def __call__(self):
 
-        @asyncio.coroutine
-        def request():
+        #@asyncio.coroutine
+        async def request():
             url = self.base_search_url + urlencode(self.params)
+            try:
+                async with ClientSession() as session:
+                    async with session.get(url, params=self.params, headers=self.headers) as response:
+                    #response = yield from aiohttp.request('GET', url, )
 
-            response = yield from aiohttp.request('GET', url, params=self.params, headers=self.headers)
+                        if response.status != 200:
+                            self.status = 'not successful: ' + str(response.status)
 
-            if response.status != 200:
-                self.status = 'not successful: ' + str(response.status)
+                        self.requested_at = datetime.datetime.utcnow()
 
-            self.requested_at = datetime.datetime.utcnow()
+                        logger.info('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
+                            self.requested_by,
+                            self.query,
+                            self.search_engine_name,
+                            response.status))
 
-            logger.info('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
-                self.requested_by,
-                self.query,
-                self.search_engine_name,
-                response.status))
+                        logger.debug('[i] URL: {} HEADERS: {}'.format(
+                            url,
+                            self.headers))
 
-            logger.debug('[i] URL: {} HEADERS: {}'.format(
-                url,
-                self.headers))
-
-            if response.status == 200:
-                body = yield from response.read_and_close(decode=False)
-                self.parser = self.parser(config=self.config, html=body)
-                return self
+                        if response.status == 200:
+                            try:
+                                body = await response.text()
+                                self.parser = self.parser(config=self.config, html=body)
+                            except Exception as e:
+                                print(e)
+                                return None
+                            #try:
+                            #    await response.close()
+                            #except:
+                            #    return None
+                                
+                            
+                            return self
+            except Exception as e:
+                print(e)
 
             return None
 
@@ -124,7 +139,7 @@ class AsyncScrapeScheduler(object):
 
                     if self.cache_manager:
                         self.cache_manager.cache_results(scrape.parser, scrape.query, scrape.search_engine_name, scrape.scrape_method,
-                                      scrape.page_number)
+                                                         scrape.page_number)
 
                     if scrape.parser:
                         serp = parse_serp(self.config, parser=scrape.parser, scraper=scrape, query=scrape.query)
@@ -150,4 +165,3 @@ if __name__ == '__main__':
 
     manager = AsyncScrapeScheduler(cfg, scrape_jobs)
     manager.run()
-
