@@ -121,11 +121,12 @@ class SearchEngineResultsPage(Base):
                     parsed = urlparse(link['link'])
 
                     # fill with nones to prevent key errors
-                    [link.update({key: None}) for key in ('snippet', 'title', 'visible_link') if key not in link]
+                    [link.update({key: None}) for key in ('snippet', 'time_stamp','title', 'visible_link') if key not in link]
 
                     Link(
                         link=link['link'],
                         snippet=link['snippet'],
+                        time_stamp=link['time_stamp'],
                         title=link['title'],
                         visible_link=link['visible_link'],
                         domain=parsed.netloc,
@@ -169,6 +170,7 @@ class Link(Base):
     id = Column(Integer, primary_key=True)
     title = Column(String)
     snippet = Column(String)
+    time_stamp=Column(String)
     link = Column(String)
     domain = Column(String)
     visible_link = Column(String)

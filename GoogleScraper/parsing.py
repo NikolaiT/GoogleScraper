@@ -359,6 +359,7 @@ class GoogleParser(Parser):
                 'result_container': 'div.g ',
                 'link': 'h3.r > a:first-child::attr(href)',
                 'snippet': 'div.s span.st::text',
+                'time_stamp' : 'div.slp',
                 'title': 'h3.r > a:first-child::text',
                 'visible_link': 'cite::text'
             },
@@ -367,6 +368,7 @@ class GoogleParser(Parser):
                 'result_container': 'li.g ',
                 'link': 'h3.r > a:first-child::attr(href)',
                 'snippet': 'div.s span.st::text',
+                'time_stamp' : 'div.slp',
                 'title': 'h3.r > a:first-child::text',
                 'visible_link': 'cite::text'
             },
@@ -374,6 +376,7 @@ class GoogleParser(Parser):
                 'container': 'li.card-section',
                 'link': 'a._Dk::attr(href)',
                 'snippet': 'span._dwd::text',
+                'time_stamp' : 'div.slp',
                 'title': 'a._Dk::text',
                 'visible_link': 'cite::text'
             },
