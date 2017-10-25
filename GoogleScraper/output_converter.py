@@ -6,6 +6,7 @@ import json
 import pprint
 import logging
 from GoogleScraper.database import Link, SERP
+import pymongo
 
 """Stores SERP results in the appropriate output format.
 
@@ -64,6 +65,30 @@ class CsvStreamWriter():
         self.file.close()
 
 
+class MongoDBWriter():
+    """
+    Writes consecutive objects to an csv output file.
+    """
+    def __init__(self):
+        # every row in the csv output file should contain all fields
+        # that are in the table definition. Except the id, they have the
+        # same name in both tables
+
+        self.client = pymongo.MongoClient('mongodb://localhost:27017')
+        self.collection = self.client.googlescraper.serps
+
+    def write(self, data, serp):
+        # one row per link
+        for row in data['results']:
+            d = row2dict(serp)
+            d.update(row)
+            d = {k: v if type(v) is str else v for k, v in d.items() if k in csv_fieldnames}
+            self.collection.insert_one(d)
+
+    def end(self):
+        self.client.close()
+
+
 def init_outfile(config, force_reload=False):
     global outfile, output_format
 
@@ -75,6 +100,8 @@ def init_outfile(config, force_reload=False):
             output_format = 'json'
         elif output_file.endswith('.csv'):
             output_format = 'csv'
+        elif output_file =='mongodb':
+            output_format = 'mongodb'
 
         # the output files. Either CSV or JSON or STDOUT
         # It's little bit tricky to write the JSON output file, since we need to
@@ -84,8 +111,11 @@ def init_outfile(config, force_reload=False):
             outfile = JsonStreamWriter(output_file)
         elif output_format == 'csv':
             outfile = CsvStreamWriter(output_file)
+        elif output_format == 'mongodb':
+            outfile = MongoDBWriter()
         elif output_format == 'stdout':
             outfile = sys.stdout
+
 
 
 def store_serp_result(serp, config):
@@ -115,6 +145,8 @@ def store_serp_result(serp, config):
             # The problem here is, that we need to stream write the json data.
             outfile.write(data)
         elif output_format == 'csv':
+            outfile.write(data, serp)
+        elif output_format == 'mongodb':
             outfile.write(data, serp)
         elif output_format == 'stdout':
             if config.get('print_results') == 'summarize':
