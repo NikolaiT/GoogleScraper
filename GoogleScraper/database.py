@@ -121,7 +121,7 @@ class SearchEngineResultsPage(Base):
                     parsed = urlparse(link['link'])
 
                     # fill with nones to prevent key errors
-                    [link.update({key: None}) for key in ('snippet', 'time_stamp', 'title', 'visible_link') if key not in link]
+                    [link.update({key: None}) for key in ('snippet', 'time_stamp','title', 'visible_link') if key not in link]
 
                     Link(
                         link=link['link'],
