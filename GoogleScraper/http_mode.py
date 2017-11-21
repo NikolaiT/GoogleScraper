@@ -175,7 +175,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
 
         # get the base search url based on the search engine.
         #+ "&source=lnt&tbs=cdr%3A1%2Ccd_min%3A2015%2Ccd_max%3A2016&tbm=
-        self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method) + "&source=lnt&tbs=cdr%3A1%2Ccd_min%3A2015%2Ccd_max%3A2016&tbm="
+        self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
 
         super().instance_creation_info(self.__class__.__name__)
 
