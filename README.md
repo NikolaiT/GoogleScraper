@@ -29,7 +29,7 @@ Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/g
 7. [Contact](#contact)
 
 
-<a name="install" \>
+<a name="install" />
 ## Installation
 
 GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using 
