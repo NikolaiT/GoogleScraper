@@ -21,6 +21,6 @@ setup(name='GoogleScraper',
       py_modules=['usage'],
       packages=['GoogleScraper'],
       entry_points={'console_scripts': ['GoogleScraper = GoogleScraper.core:main']},
-      package_dir={'examples': 'examples/'},
+      package_dir={'examples': 'examples'},
       install_requires=requirements
 )
