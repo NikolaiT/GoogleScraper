@@ -15,6 +15,7 @@ and handles output.
 # How and if results are printed when running GoogleScraper.
 # if set to 'all', then all data from results are outputted
 # if set to 'summarize', then only a summary of results is given.
+# if set to anything else, no output will be given at all.
 print_results = 'all'
 
 # The name of the database that is written to the same

@@ -210,7 +210,7 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
             search_engines = search_engines.split(',')
 
     assert isinstance(search_engines, list), 'Search engines must be a list like data type!'
-    search_engines = set(search_engines)
+    search_engines = list(map(lambda x: x.lower(), set(search_engines)))
 
     for engine in search_engines:
         assert engine in config.get('supported_search_engines'), 'Search engine "{}" not supported.'.format(engine)

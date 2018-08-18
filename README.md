@@ -1,5 +1,12 @@
 # GoogleScraper - Scraping search engines professionally
 
+## New News - August 2018
+
+This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
+
+Nikolai Tschacher
+
+
 ## News
 
 GoogleScraper becomes **finally mature!** In the last months I didn't work at all on GoogleScraper. Reason for this was my overall
@@ -32,7 +39,7 @@ Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/g
 <a name="install" \>
 ## Installation
 
-GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using 
+GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using
 Ubuntu 15.10 and Python3.5 for instance, please install:
 
 ```
@@ -106,7 +113,7 @@ Scrape all keywords that are in keywords.txt in selenium mode (with real browser
 GoogleScraper -m selenium --keyword-file keywords.txt -v2
 ```
 
-Scrape all keywords that are in 
+Scrape all keywords that are in
 + keywords.txt
 + with http mode
 + using 10 threads
