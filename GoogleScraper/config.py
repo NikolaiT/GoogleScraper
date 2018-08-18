@@ -58,7 +58,3 @@ def get_config(command_line_args=None, external_configuration_file=None, config_
     config = {k: v for k, v in vars(config).items() if not k.startswith('_')}
 
     return config
-
-
-
-

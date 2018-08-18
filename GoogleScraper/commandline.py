@@ -85,7 +85,7 @@ def get_command_line(only_print_help=False):
 
     loglevel_help = '''
 Set the debug level of the application. Use the string representation
-instead of the numbers. High numbers will output less, lower numbers more.
+instead of the numbers. High numbers will output less, low numbers more.
 CRITICAL = 50,
 FATAL = CRITICAL,
 ERROR = 40,
@@ -97,7 +97,8 @@ NOTSET = 0
     '''
 
     parser.add_argument('-v', '--verbosity', '--loglevel', '--log-level',
-                        type=str, dest='log_level', default='INFO', help=loglevel_help)
+                        dest='log_level', default='INFO', type = str.lower,
+                         choices=['debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal'], help=loglevel_help)
 
     parser.add_argument('--print-results', choices=['all', 'summarize'], default='all',
                         help='Whether to print all results ("all"), or only print a summary ("summarize")')
