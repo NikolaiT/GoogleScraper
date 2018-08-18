@@ -13,7 +13,9 @@ logger = logging.getLogger(__name__)
 
 class AsyncHttpScrape(object):
     """Scrape asynchronously using asyncio.
-    
+
+    https://aiohttp.readthedocs.io/en/v3.0.1/client.html
+
     Some search engines don't block after a certain amount of requests.
     Google surely does (after very few parallel requests).
     But with bing or example, it's now (18.01.2015) no problem to
@@ -38,33 +40,32 @@ class AsyncHttpScrape(object):
         self.headers = headers
         self.status = 'successful'
 
-    def __call__(self):
+    async def __call__(self):
 
-        @asyncio.coroutine
-        def request():
-            url = self.base_search_url + urlencode(self.params)
+        url = self.base_search_url + urlencode(self.params)
 
-            response = yield from aiohttp.request('GET', url, params=self.params, headers=self.headers)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, params=self.params, headers=self.headers) as response:
 
-            if response.status != 200:
-                self.status = 'not successful: ' + str(response.status)
+                if response.status != 200:
+                    self.status = 'not successful: ' + str(response.status)
 
-            self.requested_at = datetime.datetime.utcnow()
+                self.requested_at = datetime.datetime.utcnow()
 
-            logger.info('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
-                self.requested_by,
-                self.query,
-                self.search_engine_name,
-                response.status))
+                logger.info('[+] {} requested keyword \'{}\' on {}. Response status: {}'.format(
+                    self.requested_by,
+                    self.query,
+                    self.search_engine_name,
+                    response.status))
 
-            logger.debug('[i] URL: {} HEADERS: {}'.format(
-                url,
-                self.headers))
+                logger.debug('[i] URL: {} HEADERS: {}'.format(
+                    url,
+                    self.headers))
 
-            if response.status == 200:
-                body = yield from response.read_and_close(decode=False)
-                self.parser = self.parser(config=self.config, html=body)
-                return self
+                if response.status == 200:
+                    body = await response.text()
+                    self.parser = self.parser(config=self.config, html=body)
+                    return self
 
             return None
 
@@ -115,7 +116,7 @@ class AsyncScrapeScheduler(object):
             if not self.requests:
                 break
 
-            self.results = self.loop.run_until_complete(asyncio.wait([r()() for r in self.requests]))
+            self.results = self.loop.run_until_complete(asyncio.wait([r() for r in self.requests]))
 
             for task in self.results[0]:
                 scrape = task.result()
@@ -150,4 +151,3 @@ if __name__ == '__main__':
 
     manager = AsyncScrapeScheduler(cfg, scrape_jobs)
     manager.run()
-

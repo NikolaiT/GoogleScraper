@@ -6,7 +6,6 @@ This project is back to live after two years of abandonment. In the coming weeks
 
 Nikolai Tschacher
 
-
 ## News
 
 GoogleScraper becomes **finally mature!** In the last months I didn't work at all on GoogleScraper. Reason for this was my overall

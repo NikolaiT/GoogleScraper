@@ -1,3 +1,4 @@
+asyncio
 lxml
 selenium
 cssselect

@@ -19,7 +19,7 @@ def get_command_line(only_print_help=False):
                                                  'Multithreading support.',
                                      epilog='GoogleScraper {version}. This program might infringe the TOS of the '
                                             'search engines. Please use it on your own risk. (c) by Nikolai Tschacher'
-                                            ', 2012-2015. incolumitas.com'.format(version=__version__))
+                                            ', 2012-2018. incolumitas.com'.format(version=__version__))
 
     parser.add_argument('-m', '--scrape-method', type=str, default='http',
                         help='The scraping type. There are currently three types: "http", "selenium" and "http-async". '
