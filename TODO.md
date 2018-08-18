@@ -222,3 +222,8 @@
 
     - fix functional test issues of `test_all_search_engines_in_http_mode
         [Began: 52min], duckduckgo works. yahoo improved.
+        
+        
+### 18.8.2018
+    - Integrate Google Maps Search into GoogleScraper
+    - Integrate 

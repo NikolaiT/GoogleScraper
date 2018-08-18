@@ -35,7 +35,7 @@ Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/g
 7. [Contact](#contact)
 
 
-<a name="install" \>
+<a name="install" />
 ## Installation
 
 GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using
@@ -226,7 +226,7 @@ Some interesting technologies/software to do so:
 + [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
 
 
-<a name="usage" \>
+<a name="usage" />
 ## Example Usage
 Here you can learn how to use GoogleScrape from within your own Python scripts.
 
@@ -375,7 +375,7 @@ if __name__ == '__main__':
             print(usage)
 ```
 
-<a name="cli-usage" \>
+<a name="cli-usage" />
 ## Direct command line usage
 
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
@@ -426,7 +426,7 @@ In case you want to use GoogleScraper.py in *http* mode (which means that raw ht
 ```
 GoogleScraper -m http -p 1 -n 25 -q "white light"
 ```
-<a name="contact" \>
+<a name="contact" />
 ## Contact
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
