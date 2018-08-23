@@ -126,7 +126,7 @@ ask_search_url = 'http://de.ask.com/web?'
 search_type = 'normal'
 
 # The scrape method. Can be 'http' or 'selenium' or 'http-async'
-# http mode uses http packets directly, whereas selenium mode uses a real browser (or phantomjs).
+# http mode uses http packets directly, whereas selenium mode uses a real browser.
 # http_async uses asyncio.
 scrape_method = 'selenium'
 
@@ -245,8 +245,12 @@ fix_cache_names = False
 All settings that only apply for requesting with real browsers.
 """
 
-# which browser to use in selenium mode. Valid values=  ('Chrome', 'Firefox', 'Phantomjs')
-sel_browser = 'Phantomjs'
+# which browser to use in selenium mode. Valid values=  ('chrome', 'firefox', 'headless')
+sel_browser = 'headless'
+
+# chrome driver executable path
+# get chrome drivers here: https://chromedriver.storage.googleapis.com/index.html?path=2.41/
+chromedriver_path = 'Drivers/chromedriver'
 
 # Manual captcha solving
 # If this parameter is set to a Integer, the browser waits for the user

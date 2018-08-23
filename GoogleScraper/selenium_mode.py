@@ -51,7 +51,8 @@ def get_selenium_scraper_by_search_engine_name(config, search_engine_name, *args
 
 
 class SelScrape(SearchEngineScrape, threading.Thread):
-    """Instances of this class make use of selenium browser objects to query the search engines on a high level.
+    """Instances of this class make use of selenium browser
+       objects to query the search engines on a high level.
     """
 
     next_page_selectors = {
@@ -197,7 +198,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     def _get_webdriver(self):
         """Return a webdriver instance and set it up with the according profile/ proxies.
 
-        Chrome is quite fast, but not as stealthy as PhantomJS.
+        https://stackoverflow.com/questions/49162667/unknown-error-call-function-result-missing-value-for-selenium-send-keys-even
+        Get Chrome Drivers here: https://chromedriver.storage.googleapis.com/index.html?path=2.41/
 
         Returns:
             The appropriate webdriver mode according to self.browser_type. If no webdriver mode
@@ -207,25 +209,33 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             return self._get_Chrome()
         elif self.browser_type == 'firefox':
             return self._get_Firefox()
-        elif self.browser_type == 'phantomjs':
-            return self._get_PhantomJS()
+        elif self.browser_type == 'headless':
+            return self._get_Chrome(headless=True)
 
         return False
 
-    def _get_Chrome(self):
+    def _get_Chrome(self, headless=False):
         try:
+            chrome_options = webdriver.ChromeOptions()
+
+            if headless:
+                chrome_options.add_argument('headless')
+                chrome_options.add_argument('window-size=1200x600') # optional
+
             if self.proxy:
-                chrome_ops = webdriver.ChromeOptions()
-                chrome_ops.add_argument(
+                chrome_options.add_argument(
                     '--proxy-server={}://{}:{}'.format(self.proxy.proto, self.proxy.host, self.proxy.port))
-                self.webdriver = webdriver.Chrome(chrome_options=chrome_ops)
-            else:
-                self.webdriver = webdriver.Chrome()#service_log_path='/tmp/chromedriver_log.log')
+
+            chromedriver_path = self.config.get('chromedriver_path')
+            self.webdriver = webdriver.Chrome(executable_path=chromedriver_path,
+                                                        chrome_options=chrome_options)
             return True
+
         except WebDriverException as e:
             # we don't have a chrome executable or a chrome webdriver installed
             raise
         return False
+
 
     def _get_Firefox(self):
         try:
@@ -253,36 +263,13 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             logger.error(e)
         return False
 
-    def _get_PhantomJS(self):
-        try:
-            service_args = []
-
-            if self.proxy:
-                service_args.extend([
-                    '--proxy={}:{}'.format(self.proxy.host, self.proxy.port),
-                    '--proxy-type={}'.format(self.proxy.proto),
-                ])
-
-                if self.proxy.username and self.proxy.password:
-                    service_args.append(
-                        '--proxy-auth={}:{}'.format(self.proxy.username, self.proxy.password)
-                    )
-
-            dcap = dict(DesiredCapabilities.PHANTOMJS)
-            dcap["phantomjs.page.settings.userAgent"] = random_user_agent(only_desktop=True)
-
-            self.webdriver = webdriver.PhantomJS(service_args=service_args, desired_capabilities=dcap)
-            return True
-        except WebDriverException as e:
-            logger.error(e)
-        return False
 
     def handle_request_denied(self, status_code):
         """Checks whether Google detected a potentially harmful request.
 
         Whenever such potential abuse is detected, Google shows an captcha.
         This method just blocks as long as someone entered the captcha in the browser window.
-        When the window is not visible (For example when using PhantomJS), this method
+        When the window is not visible (For example when using chrome headless), this method
         makes a png from the html code and shows it to the user, which should enter it in a command
         line.
 
@@ -499,8 +486,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 except TimeoutException as e:
                     self._save_debug_screenshot()
                     content = self.webdriver.find_element_by_css_selector(selector).text
-                    raise Exception('Pagenumber={} did not appear in navigation. Got "{}" instead'\
-                                    .format(self.page_number), content)
+                    raise Exception('Pagenumber={} did not appear in navigation. Got "{}" instead'.format(self.page_number, content))
 
         elif self.search_type == 'image':
             self.wait_until_title_contains_keyword()
@@ -660,9 +646,6 @@ class DuckduckgoSelScrape(SelScrape):
     """
     Duckduckgo is a little special since new results are obtained by ajax.
     next page thus is then to scroll down.
-
-    Furthermore duckduckgo.com doesn't seem to work with Phantomjs. Maybe they block it, but I
-    don't know how ??!
 
     It cannot be the User-Agent, because I already tried this.
     """

@@ -29,8 +29,8 @@ def get_command_line(only_print_help=False):
                              'second if you have the necessary number of proxies available. ',
                         choices=('http', 'selenium', 'http-async'))
 
-    parser.add_argument('--sel-browser', choices=['firefox', 'chrome', 'phantomjs'], default='phantomjs',
-                        help='The browser frontend for selenium scraping mode. Does only make sense if --scrape-method is set to "selenium"')
+    parser.add_argument('--sel-browser', choices=['firefox', 'chrome', 'headless'], default='headless',
+                        help='The browser frontend for selenium scraping mode. Takes only effect if --scrape-method is set to "selenium"')
 
     keyword_group = parser.add_mutually_exclusive_group()
 

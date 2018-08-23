@@ -17,13 +17,6 @@ And most importantly, *I was never satisfied with it's use case.* My initial goa
 
 Because GoogleScraper has its reason to live: Gain information on how search engines see the internet. Especially when it comes to **SEO and marketing**. For this very reason I will continue to maintain this project. But to say it: GoogleScraper will never support **massive gathering of data**. If you want to know which servers are running Drupal or Wordpress, you are wrong here. If you want to know all servers with a specific string in it's html body you are also wrong. This leads us to...
 
-#### But how can I scrape the internet then :/ ?
-
-Well my son, I am working on this. Let's just say I need to learn some Rust the next weeks. Or maybe I will use C. But Rust looks sooooo neat. And it's time ot learn some concepts about computer networks and about real scraping & indexing & crawling...
-
-Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/googlescraper-260-keywords-in-a-second.html).
-
-
 ### Table of Contents
 
 1. [Installation](#install)
@@ -38,17 +31,12 @@ Look [here to get an idea how to use asynchronous mode](http://scrapeulous.com/g
 <a name="install" />
 ## Installation
 
-GoogleScraper is written in Python 3. You should install at least Python 3.4. The last major development was all done with Python3.5. So when using
-Ubuntu 15.10 and Python3.5 for instance, please install:
+GoogleScraper is written in Python 3. You should install at least Python 3.6. The last major development was all done with Python3.7. So when using Ubuntu 16.04 and Python3.7 for instance, please install Python 3 from the official packages. I use the [Anaconda Python distribution](https://anaconda.org/anaconda/python), which does work very well for me.
 
-```
-sudo apt-get install python3.5-dev
-```
+Furthermore, you need to install the Chrome Browser and also the ChromeDriver for Selenium mode. On Ubuntu 16.04 for instance,
+you certainly have to install the Chrome driver. You can download the ChromeDriver here: [ChromeDriver Downloads](https://chromedriver.storage.googleapis.com/index.html). Unzip the driver and save it somewhere and then update the path in the GoogleScraper configuration file `scrape_config.py` to the path where you saved the driver `chromedriver_path = 'Drivers/chromedriver'`
 
-Furthermore, you need to install the Chrome Browser, maybe even the ChromeDriver for Selenium mode. On Ubuntu 14.04 for instance,
-you certainly have to install the Chrome driver.
-
-You can install GoogleScraper comfortably with pip:
+You can also install GoogleScraper comfortably with pip. Right now (September 2018) this is discouraged. Please install from latest Github sources.
 
 ```
 virtualenv --python python3 env
@@ -56,7 +44,7 @@ source env/bin/activate
 pip install GoogleScraper
 ```
 
-#### Alternatively install directly from Github:
+### Alternatively install directly from Github
 
 Sometimes the newest and most awesome stuff is not available in the cheeseshop (That's how they call
 https://pypi.python.org/pypi/pip). Therefore you maybe want to install GoogleScraper from the latest source that resides in this Github repository. You can do so like this:
@@ -67,7 +55,7 @@ source env/bin/activate
 pip install git+git://github.com/NikolaiT/GoogleScraper/
 ```
 
-Please note however, that some features and examples might not work as expected. I also don't guarantee that
+Please note that some features and examples might not work as expected. I also don't guarantee that
 the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a
 usable version.
 
@@ -75,7 +63,7 @@ usable version.
 
 On windows, you need to install some extensions manually: Lxml and Chromedriver:
 
-#### lxml
+#### lxml (instructions out of date)
 
 Download the correct wheel file here: http://www.lfd.uci.edu/~gohlke/pythonlibs/#lxml
 
@@ -83,7 +71,7 @@ Then copy the downloaded file in your python root directory: C:\Python34\Scripts
 Then from this directory, issue the command in a cmd shell: ```pip install wheel_file.whl```
 Of course the file has the name as it was downloaded.
 
-#### chromedriver
+#### chromedriver (instructions out of date)
 
 Download the latest chromedriver from here: https://sites.google.com/a/chromium.org/chromedriver/downloads
 Then copy the **chromedriver.exe** in the C:\Python34\ directory.
