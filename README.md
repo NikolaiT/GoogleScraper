@@ -2,20 +2,14 @@
 
 ## New News - August 2018
 
-This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
+This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
 
-Nikolai Tschacher
+#### Goals
 
-## News
-
-GoogleScraper becomes **finally mature!** In the last months I didn't work at all on GoogleScraper. Reason for this was my overall
-unhappiness with the Project. It is a very complex project with lot's of dependencies and pitfalls where newcomers may stumble.
-
-And most importantly, *I was never satisfied with it's use case.* My initial goal was to make the whole internet searchable and give ordinary people like me independent access to the internet's information again. But this is never going to work by scraping search engines. This is the completely wrong way. Search engines cannot represent the internet and do hide information from you.
-
-#### Why continuing this Project then?
-
-Because GoogleScraper has its reason to live: Gain information on how search engines see the internet. Especially when it comes to **SEO and marketing**. For this very reason I will continue to maintain this project. But to say it: GoogleScraper will never support **massive gathering of data**. If you want to know which servers are running Drupal or Wordpress, you are wrong here. If you want to know all servers with a specific string in it's html body you are also wrong. This leads us to...
++ Remove PhantomJS support **[Done]**
++ Maybe remove Firefox support
++ Think about using https://github.com/GoogleChrome/puppeteer instead of selenium for Chrome.
++ Test all supported search engines
 
 ### Table of Contents
 

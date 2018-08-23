@@ -1,6 +1,5 @@
 # Google Scraper specific
-Drivers/
-
+Drivers/chromedriver
 
 
 # For NodeJS
