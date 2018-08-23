@@ -222,8 +222,23 @@
 
     - fix functional test issues of `test_all_search_engines_in_http_mode
         [Began: 52min], duckduckgo works. yahoo improved.
-        
-        
+
+
 ### 18.8.2018
     - Integrate Google Maps Search into GoogleScraper
-    - Integrate 
+    - Integrate [http://scrapoxy.io/](http://scrapoxy.io/) into Google Scraper
+    - Integrate Amazon Lambda into Google Scraper. Maybe don't make this feature Open Source
+        + https://stackoverflow.com/questions/49953271/running-selenium-webdriver-in-amazon-lambda-python
+        + http://robertorocha.info/setting-up-a-selenium-web-scraper-on-aws-lambda-with-python/
+    - Integrate Amazon Search and Ebay Search
+
+### 23.8.2018
+    Problem: As http://phantomjs.org/ suggests, Important: PhantomJS development is suspended until further notice (more details).
+
+    Use headless version of chrome: https://github.com/dhamaniasad/HeadlessBrowsers
+    - Selenium support for PhantomJS has been deprecated, please use headless versions of Chrome or Firefox instead
+    - warnings.warn('Selenium support for PhantomJS has been deprecated, please use headless '
+
+    **Solution**: It seems that the way to go is to use https://github.com/GoogleChrome/puppeteer a mature project with 36000 stars.
+    Thus I will deprecate usign phantomjs as the headless API. But there is a problem, puppeteer is written in NodeJS. There is a Python Port called https://github.com/miyakogi/pyppeteer , but I distrust that the Python port is the same quality as the google supported development
+    of the NodeJS version. Thus I will use https://github.com/GoogleChrome/puppeteer

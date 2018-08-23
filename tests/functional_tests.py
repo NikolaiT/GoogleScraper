@@ -5,7 +5,7 @@
 These functional tests cannot cover the whole functionality of GoogleScraper.
 
 But it is tried to cover at least the most common use cases with GoogleScraper, such that
-a basic functionality is proved to be correct. The functional tests are run on git hook pre-push time,
+a basic functionality is shown to be correct. The functional tests are run on git hook pre-push time,
 so it is enforced that only minimally stable versions are online.
 
 When testing single functions:
@@ -51,7 +51,7 @@ class GoogleScraperFunctionalTestCase(unittest.TestCase):
             'keyword': 'in this world',
             'search_engines': '*',
             'scrape_method': 'http',
-            'do_caching': True,
+            'do_caching': False,
             'num_results_per_page': 10,
             'log_level': 'WARNING',
             'print_results': 'summarize',

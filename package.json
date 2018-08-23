@@ -1,0 +1,27 @@
+{
+  "name": "GoogleScraper",
+  "version": "1.0.0",
+  "description": "Scraping Search Engines",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "dependencies": {
+    "puppeteer": "^1.7.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NikolaiT/GoogleScraper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/NikolaiT/GoogleScraper/issues"
+  },
+  "homepage": "https://github.com/NikolaiT/GoogleScraper#readme"
+}
