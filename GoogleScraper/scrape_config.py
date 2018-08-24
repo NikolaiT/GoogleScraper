@@ -244,13 +244,25 @@ fix_cache_names = False
 [SELENIUM]
 All settings that only apply for requesting with real browsers.
 """
+# which browser to use in selenium mode. Valid values = ('chrome', 'firefox')
+sel_browser = 'chrome'
 
-# which browser to use in selenium mode. Valid values=  ('chrome', 'firefox', 'headless')
-sel_browser = 'headless'
+# in which mode the browser is started. Valid values = ('normal', 'headless')
+browser_mode = 'headless'
 
 # chrome driver executable path
 # get chrome drivers here: https://chromedriver.storage.googleapis.com/index.html?path=2.41/
 chromedriver_path = 'Drivers/chromedriver'
+
+# geckodriver executable path
+# get gecko drivers here: https://github.com/mozilla/geckodriver/releases
+geckodriver_path = 'Drivers/geckodriver'
+
+# path to firefox binary
+firefox_binary_path = '/home/nikolai/firefox/firefox'
+
+# path to chromium browser binary
+chrome_binary_path = '/usr/bin/chromium-browser'
 
 # Manual captcha solving
 # If this parameter is set to a Integer, the browser waits for the user

@@ -7,7 +7,7 @@ This project is back to live after two years of abandonment. In the coming weeks
 #### Goals
 
 + Remove PhantomJS support **[Done]**
-+ Maybe remove Firefox support
++ Maybe remove Firefox support **[Done: Decision was to keep Firefox]**
 + Think about using https://github.com/GoogleChrome/puppeteer instead of selenium for Chrome.
 + Test all supported search engines
 
@@ -23,20 +23,22 @@ This project is back to live after two years of abandonment. In the coming weeks
 
 
 <a name="install" />
+
 ## Installation
 
-GoogleScraper is written in Python 3. You should install at least Python 3.6. The last major development was all done with Python3.7. So when using Ubuntu 16.04 and Python3.7 for instance, please install Python 3 from the official packages. I use the [Anaconda Python distribution](https://anaconda.org/anaconda/python), which does work very well for me.
+GoogleScraper is written in Python 3. You should install at least Python 3.6. The last major development was all done with Python 3.7. So when using Ubuntu 16.04 and Python 3.7 for instance, please install Python 3 from the official packages. I use the [Anaconda Python distribution](https://anaconda.org/anaconda/python), which does work very well for me.
 
-Furthermore, you need to install the Chrome Browser and also the ChromeDriver for Selenium mode. On Ubuntu 16.04 for instance,
-you certainly have to install the Chrome driver. You can download the ChromeDriver here: [ChromeDriver Downloads](https://chromedriver.storage.googleapis.com/index.html). Unzip the driver and save it somewhere and then update the path in the GoogleScraper configuration file `scrape_config.py` to the path where you saved the driver `chromedriver_path = 'Drivers/chromedriver'`
+Furthermore, you need to install the Chrome Browser and also the ChromeDriver for Selenium mode. Alternatively install the Firefox Browser and the geckodriver for Selenium Mode. See instructions below.
 
-You can also install GoogleScraper comfortably with pip. Right now (September 2018) this is discouraged. Please install from latest Github sources.
+You can also install GoogleScraper comfortably with pip:
 
 ```
 virtualenv --python python3 env
 source env/bin/activate
 pip install GoogleScraper
 ```
+
+Right now (September 2018) this is discouraged. Please install from latest Github sources.
 
 ### Alternatively install directly from Github
 
@@ -53,28 +55,43 @@ Please note that some features and examples might not work as expected. I also d
 the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a
 usable version.
 
-### On Windows
 
-On windows, you need to install some extensions manually: Lxml and Chromedriver:
-
-#### lxml (instructions out of date)
-
-Download the correct wheel file here: http://www.lfd.uci.edu/~gohlke/pythonlibs/#lxml
-
-Then copy the downloaded file in your python root directory: C:\Python34\Scripts\
-Then from this directory, issue the command in a cmd shell: ```pip install wheel_file.whl```
-Of course the file has the name as it was downloaded.
-
-#### chromedriver (instructions out of date)
+### Chromedriver
 
 Download the latest chromedriver from here: https://sites.google.com/a/chromium.org/chromedriver/downloads
-Then copy the **chromedriver.exe** in the C:\Python34\ directory.
 
-Then go back to C:\Python34\Scripts\ and issue the command: ```pip install GoogleScraper```
+Unzip the driver and save it somewhere and then update the `chromedriver_path` in the GoogleScraper configuration file `scrape_config.py` to the path where you saved the driver `chromedriver_path = 'Drivers/chromedriver'`
 
-This should be it.
+
+### Geckodriver
+
+Download the latest geckodriver from here: https://github.com/mozilla/geckodriver/releases
+
+Unzip the driver and save it somewhere and then update the `geckodriver_path` in the GoogleScraper configuration file `scrape_config.py` to the path where you saved the driver `geckodriver_path = 'Drivers/geckodriver'`
+
+### Update the settings for selenium and firefox/chrome
+
+Update the following settings in the GoogleScraper configuration file `scrape_config.py` to your values.
+
+```
+# chrome driver executable path
+# get chrome drivers here: https://chromedriver.storage.googleapis.com/index.html?path=2.41/
+chromedriver_path = 'Drivers/chromedriver'
+
+# geckodriver executable path
+# get gecko drivers here: https://github.com/mozilla/geckodriver/releases
+geckodriver_path = 'Drivers/geckodriver'
+
+# path to firefox binary
+firefox_binary_path = '/home/nikolai/firefox/firefox'
+
+# path to chromium browser binary
+chrome_binary_path = '/usr/bin/chromium-browser'
+```
+
 
 <a name="quick" />
+
 ## Quick Start
 
 Install as described above.
@@ -134,6 +151,7 @@ GoogleScraper -s "bing,yahoo" --keyword-file keywords.txt -m http-async -v3
 
 
 <a name="about" />
+
 ## What does GoogleScraper.py?
 
 GoogleScraper parses Google search engine results (and many other search engines *_*) easily and in a fast way. It allows you to extract all found
@@ -358,6 +376,7 @@ if __name__ == '__main__':
 ```
 
 <a name="cli-usage" />
+
 ## Direct command line usage
 
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as

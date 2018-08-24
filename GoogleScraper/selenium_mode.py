@@ -20,6 +20,8 @@ try:
     from selenium.webdriver.support.ui import WebDriverWait  # available since 2.4.0
     from selenium.webdriver.support import expected_conditions as EC  # available since 2.26.0
     from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+    from selenium.webdriver.firefox.options import Options as FirefoxOptions
+    from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 except ImportError as ie:
     print(ie)
     sys.exit('You can install missing modules with `pip3 install [modulename]`')
@@ -134,6 +136,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         SearchEngineScrape.__init__(self, config, *args, **kwargs)
 
         self.browser_type = self.config.get('sel_browser', 'chrome').lower()
+        self.browser_mode = self.config.get('browser_mode', 'headless').lower()
         self.browser_num = browser_num
         self.captcha_lock = captcha_lock
         self.scrape_method = 'selenium'
@@ -209,16 +212,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             return self._get_Chrome()
         elif self.browser_type == 'firefox':
             return self._get_Firefox()
-        elif self.browser_type == 'headless':
-            return self._get_Chrome(headless=True)
 
         return False
 
-    def _get_Chrome(self, headless=False):
+    def _get_Chrome(self):
         try:
             chrome_options = webdriver.ChromeOptions()
+            chrome_options.binary_location = ""
 
-            if headless:
+
+            if self.browser_mode == 'headless':
                 chrome_options.add_argument('headless')
                 chrome_options.add_argument('window-size=1200x600') # optional
 
@@ -238,11 +241,21 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
 
     def _get_Firefox(self):
+
         try:
+            bin_path = self.config.get('firefox_binary_path')
+            binary = FirefoxBinary(bin_path)
+            geckodriver_path = self.config.get('geckodriver_path')
+            options = FirefoxOptions()
+            profile = webdriver.FirefoxProfile()
+
+            if self.browser_mode == 'headless':
+                options.set_headless(headless=True)
+                options.add_argument('window-size=1200x600') # optional
+
             if self.proxy:
-                profile = webdriver.FirefoxProfile()
-                profile.set_preference("network.proxy.type",
-                                       1)  # this means that the proxy is user set, regardless of the type
+                # this means that the proxy is user set, regardless of the type
+                profile.set_preference("network.proxy.type", 1)
                 if self.proxy.proto.lower().startswith('socks'):
                     profile.set_preference("network.proxy.socks", self.proxy.host)
                     profile.set_preference("network.proxy.socks_port", self.proxy.port)
@@ -253,16 +266,18 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     profile.set_preference("network.proxy.http_port", self.proxy.port)
                 else:
                     raise ValueError('Invalid protocol given in proxyfile.')
+
                 profile.update_preferences()
-                self.webdriver = webdriver.Firefox(firefox_profile=profile)
-            else:
-                self.webdriver = webdriver.Firefox()
+
+            self.webdriver = webdriver.Firefox(firefox_binary=binary, firefox_options=options,
+                     executable_path=geckodriver_path, firefox_profile=profile)
             return True
+
         except WebDriverException as e:
             # reaching here is bad, since we have no available webdriver instance.
             logger.error(e)
-        return False
 
+        return False
 
     def handle_request_denied(self, status_code):
         """Checks whether Google detected a potentially harmful request.
@@ -604,7 +619,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self._set_xvfb_display()
 
         if not self._get_webdriver():
-            raise Exception('{}: Aborting due to no available selenium webdriver.'.format(self.name))
+            raise Exception('{}: Aborting: No available selenium webdriver.'.format(self.name))
 
         try:
             self.webdriver.set_window_size(400, 400)
