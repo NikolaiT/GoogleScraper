@@ -268,7 +268,10 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
                     logger.warning(e)
             else:
                 # Clean the keywords of duplicates right in the beginning
-                keywords = set([line.strip() for line in open(kwfile, 'r').read().split('\n') if line.strip()])
+                # But make sure to keep the order
+                keywords = [line.strip() for line in open(kwfile, 'r', encoding='utf-8').read().split('\n') if line.strip()]
+                # this is the fastest in Python 3.6 and 3.7: https://stackoverflow.com/questions/7961363/removing-duplicates-in-lists
+                keywords = list(dict.fromkeys(keywords))
 
     if not scrape_jobs:
         scrape_jobs = default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, pages)

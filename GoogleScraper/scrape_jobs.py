@@ -63,7 +63,7 @@ def default_scrape_jobs_for_keywords(keywords, search_engines, scrape_method, nu
     - in the specified search mode.
 
     Args:
-        keywords: A set of keywords to scrape.
+        keywords: A list of keywords to scrape.
 
     Returns:
         A dict of scrapejobs.

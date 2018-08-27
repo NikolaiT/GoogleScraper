@@ -347,9 +347,11 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         return 1, 2
 
     def detection_prevention_sleep(self):
-        # match the largest sleep range
-        self.current_delay = random.randrange(*self._largest_sleep_range(self.search_number))
-        time.sleep(self.current_delay)
+        self.current_delay = 0
+        if self.config.get('do_sleep', True):
+            # match the largest sleep range
+            self.current_delay = random.randrange(*self._largest_sleep_range(self.search_number))
+            time.sleep(self.current_delay)
 
     def after_search(self):
         """Store the results and parse em.

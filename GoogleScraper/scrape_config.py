@@ -211,9 +211,13 @@ cachedir = '.scrapecache/'
 # After how many hours should the cache be cleaned
 clean_cache_after = 48
 
+# turn off sleeping pauses alltogether.
+# Dont set this to False if you don't know what you are doing. 
+do_sleep = True
+
 # Sleeping ranges.
-# The scraper in selenium mode makes random modes every N seconds as specified in the given intervals.
-# Format=  [Every Nth second when to sleep]# ([Start range], [End range])
+# The scraper in selenium mode makes random pauses every N seconds as specified in the given intervals.
+# Format=  [Every Nth second the scraper sleeps]: ([Start range], [End range])
 sleeping_ranges = {
     1:  (1, 2),
     5:  (2, 4),
@@ -252,11 +256,11 @@ browser_mode = 'headless'
 
 # chrome driver executable path
 # get chrome drivers here: https://chromedriver.storage.googleapis.com/index.html?path=2.41/
-chromedriver_path = 'Drivers/chromedriver'
+chromedriver_path = '/home/nikolai/projects/private/Drivers/chromedriver'
 
 # geckodriver executable path
 # get gecko drivers here: https://github.com/mozilla/geckodriver/releases
-geckodriver_path = 'Drivers/geckodriver'
+geckodriver_path = '/home/nikolai/projects/private/Drivers/geckodriver'
 
 # path to firefox binary
 firefox_binary_path = '/home/nikolai/firefox/firefox'
