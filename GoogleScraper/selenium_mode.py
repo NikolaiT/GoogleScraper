@@ -326,16 +326,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 logger.info('Waiting for user to solve captcha')
                 return self._wait_until_search_input_field_appears(10 * 60 * 60)
 
-    def build_search(self):
-        """Build the search for SelScrapers"""
-        assert self.webdriver, 'Webdriver needs to be ready to build the search'
-
-        if self.config.get('search_type', 'normal') == 'image':
-            starting_point = self.image_search_locations[self.search_engine_name]
-        else:
-            starting_point = self.base_search_url
-
-        self.webdriver.get(starting_point)
 
     def _get_search_param_values(self):
         search_param_values = {}
@@ -412,7 +402,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         next_url = ''
         element = self._find_next_page_element()
 
-        if hasattr(element, 'click'):
+        if element and hasattr(element, 'click'):
             next_url = element.get_attribute('href')
             try:
                 element.click()
@@ -435,8 +425,6 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                         pass
 
         # wait until the next page was loaded
-
-
         if not next_url:
             return False
         else:
@@ -456,14 +444,19 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 # wait until the next page link is clickable
                 WebDriverWait(self.webdriver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
             except (WebDriverException, TimeoutException) as e:
+                # If we can't detect the next page element because there is no
+                # next page (for example because the search query is to unique)
+                # we need to return false
                 self._save_debug_screenshot()
-                raise Exception('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
+                logger.error('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
+                return False
 
             return self.webdriver.find_element_by_css_selector(selector)
 
         elif self.search_type == 'image':
             self.page_down()
             return True
+
 
     def wait_until_serp_loaded(self):
         """
@@ -515,6 +508,36 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         except TimeoutException:
             logger.debug(SeleniumSearchError(
                 '{}: Keyword "{}" not found in title: {}'.format(self.name, self.query, self.webdriver.title)))
+
+
+    def build_search(self):
+        """Build the search for SelScrapers"""
+        assert self.webdriver, 'Webdriver needs to be ready to build the search'
+
+        if self.config.get('search_type', 'normal') == 'image':
+            starting_url = self.image_search_locations[self.search_engine_name]
+        else:
+            starting_url = self.base_search_url
+
+        num_results = self.config.get('num_results_per_page', 10)
+
+        if self.search_engine_name == 'google':
+            if num_results not in (10, 20, 30, 50, 100):
+                raise Exception('num_results_per_page for selenium mode and search engine Google must be in (10, 20, 30, 50, 100)')
+            starting_url += 'num={}'.format(num_results)
+
+        elif self.search_engine_name == 'bing':
+            if num_results not in range(1, 100):
+                raise Exception('num_results_per_page for selenium mode and search engine Bing must be in range(1, 100)')
+            starting_url += 'count={}'.format(num_results)
+
+        elif self.search_engine_name == 'yahoo':
+            if num_results not in range(1, 100):
+                raise Exception('num_results_per_page for selenium mode and search engine Yahoo must be in range(1, 100)')
+            starting_url += 'n={}'.format(num_results)
+
+        self.webdriver.get(starting_url)
+
 
     def search(self):
         """Search with webdriver.

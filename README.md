@@ -16,9 +16,10 @@ This project is back to live after two years of abandonment. In the coming weeks
 1. [Installation](#install)
 2. [Quick Start](#quick)
 3. [Asynchronous mode](#async)
-4. [About](#about)
-5. [Command line usage](#cli-usage)
-6. [Contact](#contact)
+4. [Testing](#testing)
+5. [About](#about)
+6. [Command line usage](#cli-usage)
+7. [Contact](#contact)
 
 
 <a name="install" />
@@ -145,6 +146,19 @@ GoogleScraper -s "bing,yahoo" --keyword-file SearchData/marketing-models-brands.
 ```
 
 The results (partial results, because there were too many keywords for one IP address) can be inspected in the file [Outputs/marketing.json](Outputs/marketing.json).
+
+
+<a name="testing" />
+
+## Testing GoogleScraper
+
+GoogleScraper is hugely complex. Because GoogleScraper supports many search engines and the HTML and Javascript of those Search Providers changes frequently, it is often the case that GoogleScraper ceases to function for some search engine. To spot this, you can run **functional tests**.
+
+For example the test below runs a scraping session for Google and Bing and tests that the gathered data looks more or less okay.
+
+```
+python -m pytest Tests/functional_tests.py::GoogleScraperMinimalFunctionalTestCase
+```
 
 
 <a name="about" />
