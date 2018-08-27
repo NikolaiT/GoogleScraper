@@ -17,9 +17,8 @@ This project is back to live after two years of abandonment. In the coming weeks
 2. [Quick Start](#quick)
 3. [Asynchronous mode](#async)
 4. [About](#about)
-5. [Usage with Python](#usage)
-6. [Command line usage (read this!)](#cli-usage)
-7. [Contact](#contact)
+5. [Command line usage](#cli-usage)
+6. [Contact](#contact)
 
 
 <a name="install" />
@@ -94,7 +93,7 @@ chrome_binary_path = '/usr/bin/chromium-browser'
 
 ## Quick Start
 
-Install as described above.
+Install as described above. Make sure that you have the selenium drivers for chrome/firefox if you want to use GoogleScraper in selenium mode.
 
 See all options
 ```
@@ -103,33 +102,30 @@ GoogleScraper -h
 
 Scrape the single keyword "apple" with http mode:
 ```
-GoogleScraper -m http --keyword "apple" -v2
+GoogleScraper -m http --keyword "apple" -v info
 ```
 
-Scrape all keywords that are in keywords.txt in selenium mode (with real browsers):
+Scrape all keywords that are in the file `SearchData/5words` in selenium mode using chrome in headless mode:
 ```
-GoogleScraper -m selenium --keyword-file keywords.txt -v2
+GoogleScraper -m selenium --sel-browser chrome --browser-mode headless --keyword-file SearchData/5words -v info
 ```
 
 Scrape all keywords that are in
 + keywords.txt
 + with http mode
-+ using 10 threads
-+ scrape in the search engines google, bing and yahoo
++ using 5 threads
++ scrape in the search engines bing and yahoo
 + store the output in a JSON file
-+ increase verbosity
-+ and use a proxy file named "proxies.txt"
++ increase verbosity to the debug level
 ```
-GoogleScraper -m http --keyword-file keywords.txt --num-workers 10 --proxy-file proxies.txt --search-engines "google,bing,yahoo" --output-filename output.json -v2
-```
-
-Do an image search for the keyword "K2 mountain" on some search engines:
-
-```
-GoogleScraper -s "bing,baidu,yahoo,google,yandex" -q "K2 mountain" -t image -v2
+GoogleScraper -m http --keyword-file SearchData/some_words.txt --num-workers 5 --search-engines "bing,yahoo" --output-filename threaded-results.json -v debug
 ```
 
-Have fun :D
+Do an image search for the keyword "K2 mountain" on google:
+
+```
+GoogleScraper -s "google" -q "K2 mountain" -t image -v info
+```
 
 <a name="async" />
 
@@ -142,12 +138,13 @@ This is probably the most awesome feature of GoogleScraper. You can scrape with 
 
 Example for Asynchronous mode:
 
-Search the keywords in the keyword file **keywords.txt** on bing and yahoo. By default asynchronous mode
-spawns 100 requests at the same time. This means around 100 requests per second (depends on the actual connection...).
+Search the keywords in the keyword file [SearchData/marketing-models-brands.txt](SearchData/marketing-models-brands.txt) on bing and yahoo. By default asynchronous mode spawns 100 requests at the same time. This means around 100 requests per second (depends on the actual connection...).
 
 ```
-GoogleScraper -s "bing,yahoo" --keyword-file keywords.txt -m http-async -v3
+GoogleScraper -s "bing,yahoo" --keyword-file SearchData/marketing-models-brands.txt -m http-async -v info -o marketing.json
 ```
+
+The results (partial results, because there were too many keywords for one IP address) can be inspected [here](Output/marketing.json).
 
 
 <a name="about" />
@@ -164,7 +161,7 @@ There are unlimited *usage scenarios*:
 + Discover trends.
 + Compile lists of sites to feed your own database.
 + Many more use cases...
-+ quite easily extendable since the code is well documented
++ Quite easily extendable since the code is well documented
 
 First of all you need to understand that GoogleScraper uses **two completely different scraping approaches**:
 + Scraping with low level http libraries such as `urllib.request` or `requests` modules. This simulates the http packets sent by real browsers.
@@ -175,9 +172,9 @@ search engines have no easy way detecting it.
 
 GoogleScraper is implemented with the following techniques/software:
 
-+ Written in Python 3.4
-+ Uses multithreading/asynchronous IO. (two possible approaches, currently only multi-threading is implemented)
-+ Supports parallel google scraping with multiple IP addresses.
++ Written in Python 3.7
++ Uses multithreading/asynchronous IO.
++ Supports parallel scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2] and built in browser proxies:
   * Socks5
   * Socks4
@@ -226,158 +223,9 @@ Some interesting technologies/software to do so:
 + [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
 
 
-<a name="usage" />
-## Example Usage
-Here you can learn how to use GoogleScrape from within your own Python scripts.
-
-```python
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
-
-"""
-Shows how to control GoogleScraper programmatically.
-"""
-
-import sys
-from GoogleScraper import scrape_with_config, GoogleSearchError
-from GoogleScraper.database import ScraperSearch, SERP, Link
-
-
-### EXAMPLES OF HOW TO USE GoogleScraper ###
-
-# very basic usage
-def basic_usage():
-    # See in the config.cfg file for possible values
-    config = {
-        'SCRAPING': {
-            'use_own_ip': 'True',
-            'keyword': 'Let\'s go bubbles!',
-            'search_engines': 'yandex',
-            'num_pages_for_keyword': 1
-        },
-        'SELENIUM': {
-            'sel_browser': 'chrome',
-        },
-        'GLOBAL': {
-            'do_caching': 'False'
-        }
-    }
-
-    try:
-        sqlalchemy_session = scrape_with_config(config)
-    except GoogleSearchError as e:
-        print(e)
-
-    # let's inspect what we got
-
-    for search in sqlalchemy_session.query(ScraperSearch).all():
-        for serp in search.serps:
-            print(serp)
-            for link in serp.links:
-                print(link)
-
-
-# simulating a image search for all search engines that support image search
-# then download all found images :)
-def image_search():
-    target_directory = 'images/'
-
-    # See in the config.cfg file for possible values
-    config = {
-        'SCRAPING': {
-            'keyword': 'beautiful landscape', # :D hehe have fun my dear friends
-            'search_engines': 'yandex,google,bing,baidu,yahoo', # duckduckgo not supported
-            'search_type': 'image',
-            'scrapemethod': 'selenium'
-        }
-    }
-
-    try:
-        sqlalchemy_session = scrape_with_config(config)
-    except GoogleSearchError as e:
-        print(e)
-
-    image_urls = []
-    search = sqlalchemy_session.query(ScraperSearch).all()[-1]
-
-    for serp in search.serps:
-        image_urls.extend(
-            [link.link for link in serp.links]
-        )
-
-    print('[i] Going to scrape {num} images and saving them in "{dir}"'.format(
-        num=len(image_urls),
-        dir=target_directory
-    ))
-
-    import threading,requests, os, urllib
-
-    class FetchResource(threading.Thread):
-        """Grabs a web resource and stores it in the target directory"""
-        def __init__(self, target, urls):
-            super().__init__()
-            self.target = target
-            self.urls = urls
-
-        def run(self):
-            for url in self.urls:
-                url = urllib.parse.unquote(url)
-                with open(os.path.join(self.target, url.split('/')[-1]), 'wb') as f:
-                    try:
-                        content = requests.get(url).content
-                        f.write(content)
-                    except Exception as e:
-                        pass
-                    print('[+] Fetched {}'.format(url))
-
-    # make a directory for the results
-    try:
-        os.mkdir(target_directory)
-    except FileExistsError:
-        pass
-
-    # fire up 100 threads to get the images
-    num_threads = 100
-
-    threads = [FetchResource('images/', []) for i in range(num_threads)]
-
-    while image_urls:
-        for t in threads:
-            try:
-                t.urls.append(image_urls.pop())
-            except IndexError as e:
-                break
-
-    threads = [t for t in threads if t.urls]
-
-    for t in threads:
-        t.start()
-
-    for t in threads:
-        t.join()
-
-    # that's it :)
-
-### MAIN FUNCTION ###
-
-if __name__ == '__main__':
-
-    usage = 'Usage: {} [basic|image]'.format(sys.argv[0])
-    if len(sys.argv) != 2:
-        print(usage)
-    else:
-        arg = sys.argv[1]
-        if arg == 'basic':
-            basic_usage()
-        elif arg == 'image':
-            image_search()
-        else:
-            print(usage)
-```
-
 <a name="cli-usage" />
 
-## Direct command line usage
+## More detailed Explanation
 
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
 the following:
@@ -427,7 +275,9 @@ In case you want to use GoogleScraper.py in *http* mode (which means that raw ht
 ```
 GoogleScraper -m http -p 1 -n 25 -q "white light"
 ```
+
 <a name="contact" />
+
 ## Contact
 
 If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].

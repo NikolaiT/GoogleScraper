@@ -1,0 +1,1281 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+<head>
+    <title>fooood - Ask.com Web-Suche</title>
+    <link REL="shortcut icon" HREF="http://sp.de.ask.com/sh/i/a14/favicon/favicon.ico">
+    
+
+<script type="text/javascript" charset="utf-8">
+    (function(G,o,O,g,L,e){G[g]=G[g]||function(){(G[g]['q']=G[g]['q']||[]).push( arguments)},G[g]['t']=1*new Date;L=o.createElement(O),e=o.getElementsByTagName( O)[0];L.async=1;L.src='//www.google.com/adsense/search/async-ads.js'; e.parentNode.insertBefore(L,e)})(window,document,'script','_googCsa');
+</script>
+
+<script type="text/javascript" charset="utf-8">
+var ask = ask || {};
+ask.CSA = {};
+
+(function(){
+    var _logInConsole = false,
+        _csaStartTime = new Date(),         _csaResponseTime = null,
+        _atfReady = false,
+        _domReady = false,
+        _syncAds = false,
+        _showSerpTimeoutCleared = false,
+        _showSerpTimeoutLength = 2000,
+        _showSerpTimer = null,
+        _log = function(){
+            if(('false' === 'true') && window.console && console.log) {
+                console.log(Array.prototype.slice.call(arguments));
+            }
+        },
+                _domCallbacks = [],
+                        _csaCallbacksObjects = [];
+
+        ask.CSA.startTime = _csaStartTime;
+    ask.CSA.responseReceived = false;
+    ask.CSA.adsShown = false;
+    ask.CSA.responseTime = null;     ask.CSA.adsShownTime = null;     ask.CSA.domReadyTime = null;     ask.CSA.serpShownTime = null;     ask.CSA.serpVisible = false;
+    ask.CSA.showSerpTimeoutFired = false;
+    ask.CSA.showSerpTimeoutLength = _showSerpTimeoutLength;
+    ask.CSA.showSerpStartTime = null;
+    ask.CSA.numTopAds = null;
+    ask.CSA.numBottomAds = null;
+    ask.CSA.numRightAds = null;
+    ask.CSA.adDepth = null;
+    ask.CSA.serpHiddenPreAds = null;
+    ask.CSA.serpShownPostAds = null;
+    ask.CSA.syncAdsRenderingWithResults = null;
+    ask.CSA.viewportHeight = null;
+    ask.CSA.viewportWidth = null;
+    ask.CSA.centerRailHeight = null;
+    ask.CSA.centerRailWidth = null;
+    ask.CSA.rightRailHeight = null;
+    ask.CSA.rightRailWidth = null;
+    ask.CSA.csaHeight = null;
+    ask.CSA.csaWidth = null;
+    ask.CSA.adContentRatio = null;
+    ask.CSA.optimizeAdRequest = null;
+
+    
+    
+    ask.CSA.addCSALoadCallback = function(adsCb, timeoutCb, timeoutValue){
+        _log("addCSALoadCallback", adsCb, timeoutCb, timeoutValue);
+        var callbackObj = null;
+
+        if(typeof adsCb !== "function") {
+            return;
+        }
+
+        callbackObj = { adsCb: adsCb, timeoutCb: timeoutCb, timeoutValue: timeoutValue, timeout: null };
+
+        if(ask.CSA.adsShown) {
+                        adsCb();
+        } else {
+
+            if(typeof timeoutCb === "function" && timeoutValue > 0) {
+
+                callbackObj.timeout = setTimeout(function(){
+                                        var idx = _csaCallbacksObjects.indexOf(callbackObj);
+                    if(idx > -1) {
+                        handleCallbackTimeout(callbackObj);
+                    }
+                }, timeoutValue);
+
+            }
+
+                        _csaCallbacksObjects.push(callbackObj);
+        }
+    };
+
+        ask.CSA.startShowSerpTimeout = function(){
+        _log("startShowSerpTimeout", _showSerpTimeoutLength);
+        _showSerpTimer = setTimeout(handleSerpTimeout, _showSerpTimeoutLength);
+        ask.CSA.showSerpStartTime = new Date() - _csaStartTime;
+    };
+
+        ask.CSA.domReady = function(){
+        _log("domReady");
+        _domReady = true;
+        ask.CSA.domReadyTime = new Date() - _csaStartTime;
+        invokeCallbacks(_domCallbacks);
+    };
+
+        ask.CSA.atfReady = function(){
+        _log("atfReady");
+        _atfReady = true;
+        ask.CSA.atfReadyTime = new Date() - _csaStartTime;
+        if (_syncAds) {
+            addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{display:block;}');
+        }
+    };
+
+        ask.CSA.syncAds = function(sync){
+        _log("syncAds");
+        ask.CSA.syncAdsRenderingWithResults = _syncAds = sync;
+        if (_syncAds) {
+            addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{display:none;}');
+        }
+    };
+
+    ask.CSA.showSerp = makeSerpVisible;
+
+    ask.CSA.handleTopAdsLoaded = function(containerName, adsLoaded){
+        _log("handleTopAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock1["colorBackground"]);
+
+        ask.CSA.adsShown = true;
+        ask.CSA.adsShownTime = new Date() - _csaStartTime;
+
+        makeSerpVisible();
+
+        fireCSACallbacks();
+    };
+
+    ask.CSA.handleNoTopAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleBottomAdsLoaded = function(containerName, adsLoaded){
+        _log("handleBottomAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock2["colorBackground"]);
+    };
+
+    ask.CSA.handleRightAdsLoaded = function(containerName, adsLoaded){
+        _log("handleRightAdsLoaded " + adsLoaded);
+
+        addBackgroundColor(adsLoaded, containerName, ask.CSA.adblock3["colorBackground"]);
+    };
+
+    ask.CSA.handleNoBottomAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleNoRightAdsLoaded = noAdLoadedCallback;
+
+    ask.CSA.handleCSAResponse = function(numAdsMap) {
+        _log("handleCSAResponse " + numAdsMap);
+        
+        ask.CSA.responseTime = new Date() - _csaStartTime;
+
+        if (numAdsMap["magic1"] != undefined) {
+            ask.CSA.numTopAds = numAdsMap["magic1"];
+            ask.CSA.adDepth = ask.CSA.numTopAds;
+        }
+
+        if (numAdsMap["magic2"] != undefined) {
+            ask.CSA.numBottomAds = numAdsMap["magic2"];
+        }
+
+        if (ask.CSA.adDepth < ask.CSA.numBottomAds) {
+            ask.CSA.adDepth = ask.CSA.numBottomAds;
+        }
+
+        if (numAdsMap["magic3"] != undefined) {
+            ask.CSA.numRightAds = numAdsMap["magic3"];
+        }
+
+        if(_domReady) {
+            processAdResponse();
+        } else {
+            _domCallbacks.push(processAdResponse);
+        }
+    };
+
+    function processAdResponse(){
+        _log("processAdResponse");
+
+        if (ask.CSA.numTopAds > 0 || ask.CSA.numBottomAds > 0) {
+
+            var img = new Image();
+            var matchImg = 'http://de.ask.com/match?c=a&qid=6E0D4EA031995A19A3B5F812E36DC3F7&o=312&l=dir&ip=5dce413f&page=1&ld=&q=fooood&cl=aj-de&ac=0&qsrc=0&dqi=&ch=de-web' + '&topAds=' + ask.CSA.numTopAds + '&botAds=' + ask.CSA.numBottomAds + '&dr=' + ask.CSA.responseTime + '&lodid=eu&loaid=a16&losid=de&lid=&rightAds='+ask.CSA.numRightAds;
+
+            _log(matchImg);
+            img.src = matchImg;
+        }
+
+        ask.CSA.responseReceived = true;
+
+                setCSAMetaDataCookie();
+
+            }
+
+    function isSerpVisible() {
+                var visible = false,
+            selectors = ["#midblock", "#rightblock", "#mobile-footer", ".mobile-web-results", ".hcsa"],
+            elems = null;
+
+        for(var i = 0; i < selectors.length; i++) {
+            if(visible) continue;
+
+            try{
+                elems = document.querySelectorAll(selectors[i]);
+            } catch(e) {
+                _log("Error fetching serp elements: " + e);
+            }
+
+            if(elems) {
+                for(var j = 0; j < elems.length; j++) {
+                    visible=(visible || isVisible(elems[j]));
+                }
+            }
+        }
+
+        return visible;
+    }
+
+    function isVisible(elem) {
+        var outOfFlow = (elem.offsetWidth !== 0 || elem.offsetHeight !== 0),
+            invisible = false;
+        try {
+            invisible = (window.getComputedStyle(elem).getPropertyValue("visibility") === "hidden");
+        } catch(e) {
+            _log("Error getting style of elem: " + e);
+        }
+
+        return outOfFlow || invisible;
+    }
+
+    function addCssText(css) {
+        var head = document.getElementsByTagName('head')[0];
+        var style = document.createElement('style');
+        style.type = 'text/css';
+        if (style.styleSheet) {
+            style.styleSheet.cssText = css;
+        } else {
+            style.appendChild(document.createTextNode(css));
+        }
+        head.appendChild(style);
+    }
+
+    function makeSerpVisible() {
+        if(ask.CSA.serpVisible) return;
+        _log("makeSerpVisible");
+        addCssText('#midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa{visibility:visible;}');
+
+                if (!_showSerpTimeoutCleared) {
+            clearTimeout(_showSerpTimer);
+            _showSerpTimeoutCleared = true;
+        }
+
+        ask.CSA.serpVisible = true;
+        ask.CSA.serpShownTime = new Date() - _csaStartTime;
+    }
+
+        function setCSAMetaDataCookie(){
+        document.cookie = 'adDepth=' + ask.CSA.adDepth + ";path=/;domain=.ask.com";
+        document.cookie = 'ad_cnt=' + (ask.CSA.numTopAds + ask.CSA.numBottomAds) + ";path=/;domain=.ask.com";
+    }
+
+    function updateMonitoringHash(){
+        _log("updateMonitoringHash");
+        var topAds = ask.CSA.numTopAds || 0,
+            bottomAds = ask.CSA.numBottomAds || 0,
+                rightAds = ask.CSA.numRightAds || 0,
+            hash = "num_ads_top=" + topAds +
+                    "&num_ads_bottom=" + bottomAds +
+                        "&num_ads_right=" + rightAds +
+                    "&total_num_ads=" + (topAds + bottomAds) +
+                    "&content_hidden_pre_ads=" + (ask.CSA.serpHiddenPreAds ? 1 : 0) +
+                    "&content_shown_post_ads=" + (ask.CSA.serpShownPostAds ? 1 : 0) +
+                    "&ads_response_time_ms=" + ask.CSA.responseTime;
+        window.location.hash = hash;
+    }
+
+    function updateMonitoringElement(){
+        _log("updateMonitoringElement");
+        var topAds = ask.CSA.numTopAds || 0,
+                bottomAds = ask.CSA.numBottomAds || 0,
+                rightAds = ask.CSA.numRightAds || 0,
+                body = document.getElementsByTagName("body")[0],
+                elem = document.createElement("div");
+
+                elem.setAttribute("id", "csa-monitor-data");
+        elem.setAttribute("style", "visibility: hidden;");
+        elem.setAttribute("data-num_ads_top", topAds);
+        elem.setAttribute("data-num_ads_bottom", bottomAds);
+        elem.setAttribute("data-num_ads_right", rightAds);
+        elem.setAttribute("data-total_num_ads", topAds + bottomAds + rightAds);
+        elem.setAttribute("data-content_hidden_pre_ads", ask.CSA.serpHiddenPreAds ? 1 : 0);
+        elem.setAttribute("data-content_shown_post_ads", ask.CSA.serpShownPostAds ? 1 : 0);
+        elem.setAttribute("data-ads_response_time_ms", ask.CSA.responseTime);
+
+                body.appendChild(elem);
+    }
+
+    function noAdLoadedCallback(containerName, adsLoaded) {
+        _log("noAdLoadedCallback");
+
+        function process(){
+            var adContainer = document.getElementById(containerName);
+
+            if(adContainer)
+                adContainer.style.display = "none";
+
+            makeSerpVisible();
+        }
+
+        if(_domReady) {
+            process();
+        } else {
+            _domCallbacks.push(process);
+        }
+
+    }
+
+    function addBackgroundColor(adsLoaded, containerName, shadeSelector) {
+        var adElement = document.getElementById(containerName);
+        if (adsLoaded && adElement) {
+            adElement.style.backgroundColor = shadeSelector;
+        }
+    }
+
+    function handleCallbackTimeout(callbackObj) {
+        _log("handleCallbackTimeout", callbackObj);
+        clearTimeout(callbackObj.timeout);
+        callbackObj.timeoutCb();
+    }
+
+    function handleSerpTimeout() {
+        _log("handleSerpTimeout");
+        makeSerpVisible();
+        ask.CSA.showSerpTimeoutFired = true;
+        _showSerpTimeoutCleared = true;
+    }
+
+    function fireCSACallbacks(){
+        _log("fireCSACallbacks");
+        var csaCallbacks = [];
+
+                for(var i = 0; i < _csaCallbacksObjects.length; i++) {
+            csaCallbacks.push(_csaCallbacksObjects[i].adsCb);
+            clearTimeout(_csaCallbacksObjects[i].timeout);
+        }
+
+                _csaCallbacksObjects = [];
+        _log("csaCallbacks: ", csaCallbacks);
+        invokeCallbacks(csaCallbacks);
+    }
+
+    function invokeCallbacks(callbacks) {
+        if(callbacks.length) {
+            for(var i = 0; i < callbacks.length; i++) {
+                if(typeof callbacks[i] == "function") {
+                    _log("invoking callback " + i);
+                    try{
+                        callbacks[i].call(null);
+                    } catch(e){
+                                            }
+                }
+            }
+                        callbacks.splice(0, callbacks.length);
+        }
+    }
+
+    //reduce the ad call by 1 if the client is a android tablet and meets orientation and size criteria
+    ask.CSA.optimizeAdRequest = function optimizeAdRequest(adblock) {
+        var h = (Math.max(document.documentElement.clientHeight, window.innerHeight || 0));
+        var w = (Math.max(document.documentElement.clientWidth, window.innerWidth || 0));
+        var enabledForOrientation = "" === "true" ? true : h > w;
+        var enabled = "";
+        if(enabled === "true" && 800 > h && enabledForOrientation) {
+            if(adblock && typeof adblock.maxTop !== "undefined") {
+                adblock.maxTop -= 1;
+            }
+        }
+    }
+
+})();
+
+
+
+_googCsa('jsLoadedCallback', function () {
+
+    var pageOptions = ask.CSA.pageOptions = {"instantPreviews":false,"adPage":"1","sellerRatings":true,"attributionSpacingBelow":7,"location":false,"plusOnes":false,"query":"fooood","numRepeated":"5","domainLinkAboveDescription":true,"adtest":"off","rightHandAttribution":true,"offerExtension":false,"hl":"de","heightConstrained":true,"oe":"utf-8","adsafe":"medium","attributionText":"Anzeigen","pubId":"aj-de","isAndroidTablet":false,"ie":"utf-8","siteLinks":true,"linkTarget":"_blank","channel":"de-web","clickToCall":false};
+    if (pageOptions) {
+        pageOptions['adsResponseCallback'] = ask.CSA.handleCSAResponse;
+    }
+
+    var adblock1 = ask.CSA.adblock1 = {"lineHeightDomainLink":"16","colorAttribution":"#666666","colorBackground":"#FFFFFF","colorDomainLink":"#0E7744","colorTitleLink":"#3300B5","width":"99.5%","clicktrackUrl":"http://de.ask.com/clk?pos=top&q=fooood&qid=6E0D4EA031995A19A3B5F812E36DC3F7&ip=5dce413f&o=312&l=dir&qsrc=0&page=1&dqi=&cl=aj-de&ch=de-web&c=a&p_uid=&p_clk_id=&lpurl=http%3A%2F%2Fde.ask.com%2Fweb%3Fq%3Dfooood%26qsrc%3D0%26o%3D312%26l%3Ddir%26qo%3DhomepageSearchBox&lp_ref_url=&anxu=http%3A%2F%2Fde.ask.com%2Fweb&pl=4788yc%3D4MPkDp%26H3V%3D3zKW%26od%3D9nhQb%26%2B%25%3DEo5GAVM%2Bkvd%25U4MJJaPXVEsUMGzdowX9%26Hk%3D6rVDItS%26IM%3DYDlxo0HeUoKX0z2%2BN%26sc8F%3D5D-TA%26Dxy%3DcR-AUw%265K%3DhDE91s%26tS1%3D%267V%3DEhm7TQimLIK%26JS%3DthaR2%26ksf%3DB3%26kf%3D7z%2B%262X%3DA%26Yc%3D%26wRe%3D%26s%3DWfd&up=36b9q%3DqUyRzd%26n6%3Dv6P%260m%3Dpeq%26R2.5St3a0%3DQFB%266Y.Rcrebz%3DAH-Vk%26T4.udoGZW%25qPa4TK%3D%25M-q72%26t%3DdvTibm","fontSizeDomainLink":"13","clickableBackgrounds":true,"colorText":"#333333","fontSizeDescription":"13","lineHeightDescription":"16","fontSizeTitle":"15","fontSizeAttribution":"10","maxTop":"5","container":"magic1","verticalSpacing":"9","lineHeightTitle":"18","longerHeadlines":true};
+    if (adblock1) {
+        adblock1['noAdLoadedCallback'] = ask.CSA.handleNoTopAdsLoaded;
+        adblock1['adLoadedCallback'] = ask.CSA.handleTopAdsLoaded;
+    }
+
+            var adblock2 = ask.CSA.adblock2 = {"lineHeightDomainLink":"16","colorAttribution":"#666666","colorBackground":"#FFFFFF","colorDomainLink":"#0E7744","colorTitleLink":"#3300B5","width":"99.5%","number":"5","clicktrackUrl":"http://de.ask.com/clk?pos=bottom&q=fooood&qid=6E0D4EA031995A19A3B5F812E36DC3F7&ip=5dce413f&o=312&l=dir&qsrc=0&page=1&dqi=&cl=aj-de&ch=de-web&c=a&p_uid=&p_clk_id=&lpurl=http%3A%2F%2Fde.ask.com%2Fweb%3Fq%3Dfooood%26qsrc%3D0%26o%3D312%26l%3Ddir%26qo%3DhomepageSearchBox&lp_ref_url=&anxu=http%3A%2F%2Fde.ask.com%2Fweb&pl=f7a8qV%3DF0Ezb%2B%26vOr%3Djl3r%26cY%3DYRExy%26B2%3Dkhu6ek%2B7XtzCtx6Jhb8tqbJYfLNPS9%25f%269t%3Df7iiQFd%26VS%3DGZ6CEhYhGFxXiPl9D%26G553%3De2-Nu%26Msq%3DEZ-3Lu%26%25J%3D89HENu%26vVL%3D%26FV%3Dd2s40wWhomU%26D3%3D8Z4yD%26yhu%3D%2BN%26%252%3DDRX%26js%3Do%26H3%3D%260cX%3D%26P%3Dm9V&up=e499j%3DRicgY%2B%2604%3DRyo%26tG%3DpOr%26%25y.ApK7F5%3D4f5%26H%2B.ZEApRY%3DfP-7H%266%25.cz9LddptBrRT4%3Do7-oXe%26k%3DaT4p7kCLE","fontSizeDomainLink":"13","clickableBackgrounds":true,"colorText":"#333333","fontSizeDescription":"13","lineHeightDescription":"16","fontSizeTitle":"15","fontSizeAttribution":"10","container":"magic2","verticalSpacing":"9","lineHeightTitle":"18","longerHeadlines":true};
+        if (adblock2) {
+            adblock2['noAdLoadedCallback'] = ask.CSA.handleNoBottomAdsLoaded;
+            adblock2['adLoadedCallback'] = ask.CSA.handleBottomAdsLoaded;
+        }
+    
+    
+    var pl_rqnum = parseInt(adblock1.maxTop);
+    var blocks = ['ads',pageOptions,adblock1];
+
+    if (typeof adblock2 != 'undefined' && null != adblock2) {
+        pl_rqnum = pl_rqnum + parseInt(adblock2.number);
+        blocks.push(adblock2);
+    }
+    if (typeof adblock3 != 'undefined' && null != adblock3) {
+        pl_rqnum = pl_rqnum + parseInt(adblock3.number);
+        blocks.push(adblock3);
+    }
+
+    /* ********* if android tablet, modify the ad request here ************** */
+    if(typeof ask.CSA.optimizeAdRequest === "function" && pageOptions.isAndroidTablet === true) {
+        ask.CSA.optimizeAdRequest(adblock1);
+    }
+
+    window['backfillParam'] = window.backfillParam || {};
+    window['backfillParam']['pl_hex'] = adblock1.colorBackground ? adblock1.colorBackground : "#FFFFFF";
+    window['backfillParam']['pl_cl'] = pageOptions.pubId;
+    window['backfillParam']['pl_ch'] = pageOptions.channel;
+    window['backfillParam']['pl_type'] = 'csa';
+    window['backfillParam']['pl_rp'] = (pageOptions.numRepeated) ? true : false;
+    window['backfillParam']['pl_clksp'] = adblock1.clickableBackgrounds;
+    window['backfillParam']['pl_rqnum'] = pl_rqnum;
+    window['backfillParam']['pl_timeout'] = ask.CSA.showSerpTimeoutLength ? ask.CSA.showSerpTimeoutLength : 0;
+
+    try {
+        _googCsa.apply(null, blocks);
+    } catch (err) {
+        ask.CSA.showSerp();
+    }
+});
+
+
+</script>
+<style type="text/css">
+    </style>
+<noscript>
+    <style type="text/css">
+        #midblock,#rightblock,#mobile-footer,.mobile-web-results,.hcsa {
+            visibility:visible !important;
+        }
+    </style>
+</noscript>
+
+    <link href="http://saservice.uk.ask.com/c/css/sas-250ff81acb8aa5af302dc5405b6565019d7dbfe5.css" rel="stylesheet" type="text/css"/>
+    <script type="text/javascript">
+    var WZInfo = WZInfo||{};
+    var ss=function(){},cs=function(){};
+    var _docReadyFns = [];
+    $j = function(){return {ready:function(fn){_docReadyFns.push(fn);}};};
+
+    window.onload = function() {
+        for (var i = 0; i < _docReadyFns.length; i++) {
+            var fn = _docReadyFns[i];
+            if (typeof fn === 'function') fn.call(document, $j);
+        }
+    };
+
+    var ASKINT = ASKINT || {};
+    ASKINT.cfg = (function() {
+        return {
+            "ldomain":"http://de.ask.com" ,
+            "_ldomain":"de.ask.com"
+        };
+    })();
+
+        ASKINT.mapConstants = {
+        staticDomain:"http://sp.de.ask.com/",
+        ldDomain:"http://de.ask.com/",
+        mapProxyDomain:"http://mapx.iad.ask.com/",
+        userIP:"93.206.65.63",
+        channel:"web",
+        key: "AhD-mAuYvCfDIibv1ZaAqV5u5ETUovGCddVt7gAw-sbKtySC-mr9l4exFjSC4xbH",
+                cultureCode: "de",
+                isIE6: false    };
+
+    
+        var ENABLE_AD_CONTENT_RATIO = true;
+</script>            <link type="text/css" rel="stylesheet" href="/st/c/css/ask_web-61e8ab95b556c717bf1ee7216f2f48f3172323dc.css">
+        <style>
+        .vid_btn, .vid_btn2 {
+            background: url(http://sp.de.ask.com/sh/i/a10f/btn_play.png) no-repeat scroll 0 0 transparent;
+        }
+        .speech {
+            background-image: url(http://sp.de.ask.com/de/a16/Ask16HP_Germany_SPRITE.png);
+        }
+        #logo{
+            background-image: url(http://sp.de.ask.com/de/a16/Ask16HP_Germany_SPRITE.png);
+                            background-position:-113px 0;
+                    }
+                                    .hcsa {
+                visibility:hidden;
+            }
+                    </style>
+
+</head>
+<body class="a16 firefox de_DE">
+<div class="c2n">
+    
+    <style type="text/css">
+        .a16 .c2n {
+            height: 103px;
+        }
+    </style>
+    
+        <div id="nav" class="ur">
+                
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+            
+
+        
+
+        
+
+
+        <div id="a16Cnb">
+            <div class="a16nb">
+                <div class="lm">
+                                                                    <div class="mi smi">
+                    <div style="float:left;">Antworten</div>
+            <div style="clear:both;"></div>
+            </div>
+                        
+                                    <div class="mi ">
+                    <a onmousedown="uaction(this,{up:'4e38%=tVjMCV&C=6iceI6&E6=W&mW=skqDsm8hqm&uT=YKLY88BYds&6P=x&av=tgaj8pA+X'});" style="display:block;" href="http://de.ask.com/pictures?qsrc=167&qo=channelNavigation&q=fooood&o=312&l=dir">
+                <div class="tu" style="float:left;">Bilder</div>
+                <div style="clear:both;"></div>
+            </a>
+            </div>
+    
+                    
+                                    <div class="mi ">
+                    <a onmousedown="uaction(this,{up:'7e79k=RtUqVU&F=%BzN8p&kc=C&OR=ee3KXpZwFw&Eb=2Wff6fxb%v&vW=t&6t=ngSTNzZpi'});" style="display:block;" href="http://de.ask.com/youtube?qsrc=167&qo=channelNavigation&q=fooood&o=312&l=dir">
+                <div class="tu" style="float:left;">Video</div>
+                <div style="clear:both;"></div>
+            </a>
+            </div>
+    
+                    
+                </div>
+
+            </div>
+        </div>
+        <div style="clear:both;"></div>
+    </div>
+
+        
+<div id="top_search">
+    <div id="logo" class="ur">
+                    <a onmousedown="uaction(this,{up:'d948H=UsT4yG&b=7MdPs4&UH=p&Ro=6yqk7jDe54&x5=D+imOgFBWl&FI=f&OC=A0xWs+Ghx'});" title="http://de.ask.com" href="http://de.ask.com/?o=312&l=dir&qsrc=14137&qo=channelNavigation">
+                <span style="display:none">askLogo</span>
+            </a>
+                    
+    </div>
+        <div id="searchBox" name="searchBoxContainer" class="ur">
+        <form id="topform" action="/web">
+                <input id="qsrc_top" type="hidden" value="1" name="qsrc">
+                <input id="origin" type="hidden" value="312" name="o">
+                <input id="partnerID" type="hidden" value="dir" name="l">
+                <input id="qo" type="hidden" value="serpSearchTopBox" name="qo">
+                                <input id="top_q_comm"  data-ordinal="3" class="sb-wr ac_input" type="text" style="border-color: rgb(211, 211, 211);" value="fooood" name="q" autocomplete="off" maxlength="2048">
+            <input id="sbut" class="cssButton" type="submit" value="Suchen">
+
+        </form>
+
+                    <div class="qatextserp"></div>
+            </div>
+</div>
+</div>
+    
+<div class="c2c fh">
+    <div id="midblock" class="c2 hcsa">
+        
+
+
+
+        <div class="ccmid" id="ccbar">
+        <div class="ccpd">
+            <div class="ccbox">Durch die Nutzung unserer Dienste erklären Sie sich damit einverstanden, dass wir Cookies setzen.                <a onmousedown="uaction(this,{up:'14697=LaoMhWK3b&E=9WarAT&qt=C&lv=3QB3eGtvnu&4V=7GuOrRwCK2&bh=g&yP=K+mOcuAQ'});" href="http://sp.de.ask.com/de/a11/docs/legal/cookies.shtml" style="color: #3300B5" class="ur">Mehr erfahren</a>
+            </div>
+            <div class="ccok">
+                <input id="ccok" class="ccButton ur" type="button" value="OK" onclick="ASKINT.cookiecompliance.setEUCookie(event,5,'OK')"></div>
+            <div style="clear:both;"></div>
+        </div>
+    </div>
+            
+            
+
+        
+
+        
+    <div id="spell-check-result" class="ur">
+        <span class="txt_lg b">Meinten Sie:</span>
+                <a class="title txt_lg b" href="http://de.ask.com/web?q=food&qsrc=19&qo=spellCheck&sm=&advc=&advl=&dm=&o=312&l=dir" onmousedown="pk(this,{en:'ss',b:'sck',up:'81c8L=HHosmlPRI8&c=8XBWc5&Jn=P&IT=HSTxy51Z8n&Ww=xfnEC&%E=6',tp:'top',ex:'ss_mt%3Dfood%26sc_mt%3Dfood'})">food</a>
+    </div>
+<div id="magic1" class="ad-top"></div>
+<script>
+    window['backfillParam'] = window['backfillParam'] || {};
+            window['backfillParam']['pl_tmodn'] = 2;
+        ask.CSA.startShowSerpTimeout();
+</script>
+    
+
+<div id="teoma-results" class="rmwi content-mid" style="clear:both;">
+    <div id="lindm" class="stm">
+        
+                
+             
+                                    
+            <div class="wresult tsrc_tled">
+                                                                    <div class="ptbs ur">
+    <div id="r_t0">
+        <div>
+                                                  <div class="txt_lg b">food food <KW>fooood</KW>. - Imgfave</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b0">
+        <span id="r$ordinal_u" class="txt3" style="">imgfave.com/collection/115381/food-food-fooood</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        food food <KW>fooood</KW>. collection on imgfave. Check it out and share your own 
+inspiration!
+                    <a id="r0_t2" href="http://imgfave.com/collection/115381/food-food-fooood" onmousedown="pk(this,{en:'te',b:'a001',up:'1489E=QtXISmHucL&1=lRNX7I&yF=i&%g=iI8vqDNhPq5d&HI=wqkMP&HS=6',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                         </div>
+</div>
+
+
+
+    <div class="midTitle" style="padding:10px 30px 0 10px;">
+        <span class="b txt_lg sectionheader"></span>
+    </div>
+
+
+<div id="teoma-results" class="rmwi content-mid" style="clear:both;">
+    <div id="lindm" class="stm">
+        
+                
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t0">
+        <div>
+                                                  <div class="txt_lg b"><KW>fooood</KW>:) - Imgfave</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b0">
+        <span id="r$ordinal_u" class="txt3" style="">imgfave.com/collection/50805/fooood</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        <KW>fooood</KW>:) collection on imgfave. Check it out and share your own inspiration!
+                    <a id="r0_t2" href="http://imgfave.com/collection/50805/fooood" onmousedown="pk(this,{en:'te',b:'a002',up:'0d089=I0Iw1fbJy7cezJEs&o=RQwL47&fR=N&T2=PL9maj2kLQsv&LT=00tLj&C0=Z',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t1">
+        <div>
+                                                  <div class="txt_lg b"><KW>FOOOOD</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b1">
+        <span id="r$ordinal_u" class="txt3" style="">hard-boiled-kpop.tumblr.com/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        None of the photos are mine unless stated otherwise.
+                    <a id="r1_t2" href="http://hard-boiled-kpop.tumblr.com/" onmousedown="pk(this,{en:'te',b:'a003',up:'ef89C=54yVRb4XWQ%ezdJa&5=38U+SE&d4=+&Lw=TCok+DKIJvHd&NS=O0B0N&Qh=p',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t2">
+        <div>
+                                                  <div class="txt_lg b">i talk to food: <KW>fooood</KW> reviews</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b2">
+        <span id="r$ordinal_u" class="txt3" style="">www.italktofood.com/2012/02/fooood-reviews.html</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        2 Feb 2012 <KW>...</KW> <KW>fooood</KW> reviews. Ello loves! I quickly wanted to share with you a few tasty foods 
+that I have been munching on lately. I love finding new snacks.
+                    <a id="r2_t2" href="http://www.italktofood.com/2012/02/fooood-reviews.html" onmousedown="pk(this,{en:'te',b:'a004',up:'5c58M=qA7Qj3FIq3LU2QfN&q=%xvnwT&W4=r&Km=Ay4nwi32GZyS&gb=+2yfz&jE=E',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t3">
+        <div>
+                                                  <div class="txt_lg b">Healthy And Nourished Again &#55357;&#56845; (@clean_andmean) &#8226; Instagram <KW>...</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b3">
+        <span id="r$ordinal_u" class="txt3" style="">instagram.com/clean_andmean</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        Healthy And Nourished Again &#55357;&#56845;. 139 posts; 1485 followers; 332 following. Annie 
+Strachan 17 NZ &#10022; Fuel your body &#55357;&#56490; Nourish your soul &#55356;&#57161; Private account&nbsp;...
+                    <a id="r3_t2" href="http://instagram.com/clean_andmean" onmousedown="pk(this,{en:'te',b:'a005',up:'9939W=rhnjU24qEekOYb5P&9=ADCU0k&2s=V&Do=YVqhVuXJ%X6k&TT=mamBv&7J=A',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t4">
+        <div>
+                                                  <div class="txt_lg b">Laura Callaghan Illustration: <KW>Fooood</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b4">
+        <span id="r$ordinal_u" class="txt3" style="">lauralaurapicturedrawer.blogspot.com/2012/08/fooood.htm...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        10 Aug 2012 <KW>...</KW> <KW>Fooood</KW>. Lately I&#39;ve been messing around with some food illustrations. These 
+three were just testing the waters to see what would happen if I&nbsp;...
+                    <a id="r4_t2" href="http://lauralaurapicturedrawer.blogspot.com/2012/08/fooood.html" onmousedown="pk(this,{en:'te',b:'a006',up:'89a8F=MHRVJP0XWuGiBYLn&6=WBg70w&RS=C&Ys=tmSFuNpsJ9vt&n2=HPLKH&hW=P',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t5">
+        <div>
+                                                  <div class="txt_lg b"><KW>FOOOOD</KW>!!! Life Is Beautiful Culinary Lineup Is HERE! &#171; X107.5</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b5">
+        <span id="r$ordinal_u" class="txt3" style="">x1075lasvegas.cbslocal.com/2014/06/23/fooood-life-is-be...</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        23 Jun 2014 <KW>...</KW> The Life Is Beautiful Festival is an amazing display of music and art, but the 
+culinary aspect should not be forgotten. Not only can you listen to&nbsp;...
+                    <a id="r5_t2" href="http://x1075lasvegas.cbslocal.com/2014/06/23/fooood-life-is-beautiful-culinary-lineup-is-here/" onmousedown="pk(this,{en:'te',b:'a007',up:'c4e9D=zEdAbrzg9LwdBNWQ&X=f+bUKx&aD=L&v9=hPZCpt+DQ1ZO&J2=WdnPK&JV=T',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t6">
+        <div>
+                                                  <div class="txt_lg b">Hottest table (best <KW>fooood</KW>) in DF? - Mexico - Chowhound</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b6">
+        <span id="r$ordinal_u" class="txt3" style="">chowhound.chow.com/topics/442671</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        Hi! We are a couple, both 30, celebrating our engagement. We are staying at the 
+Condesa DF and have vacationed in Mexico City before.
+                    <a id="r6_t2" href="http://chowhound.chow.com/topics/442671" onmousedown="pk(this,{en:'te',b:'a008',up:'d4f8z=05duwlrbhbbdxRmZ&B=0hxcch&Nx=3&O5=JXMXjwpp%3A7&n8=R7j1V&f5=e',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t7">
+        <div>
+                                                  <div class="txt_lg b"><KW>Fooood</KW> 10/7 - WMCN</div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b7">
+        <span id="r$ordinal_u" class="txt3" style="">wmcn.fm/playlist/2014/10/7/11/15/</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        7 Oct 2014 <KW>...</KW> <KW>Fooood</KW> 10/7. Will Kent-Daggett, Miles Margulies, David Clingman. mission: Like 
+many college radio stations, WMCN is limited only by our DJs&#39;&nbsp;...
+                    <a id="r7_t2" href="http://wmcn.fm/playlist/2014/10/7/11/15/" onmousedown="pk(this,{en:'te',b:'a009',up:'3299X=cmPZvLlK8DsMfe3r&g=hsUTm1&Yi=0&90=DAMxqP%EwW8U&6x=eopUe&ZC=x',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                    
+            
+                                    
+            <div class="wresult tsrc_tled">
+                                                    <div class="ptbs ur">
+    <div id="r_t8">
+        <div>
+                                                  <div class="txt_lg b">dontgobreakinmyheart_ Pink, Dancinggg, tanning, horses, <KW>fooood</KW> <KW>...</KW></div>
+                                     </div>
+    </div>
+    <div class="durl" id="r_b8">
+        <span id="r$ordinal_u" class="txt3" style="">www.pof.com/viewprofile.aspx?profile_id=81447885</span>
+    </div>
+    <div class="abstract txt3" id="r$ordinal_a" style="">
+        Norfolk Virginia, Wellll tits.. Yes I&#39;m really 19 hahah . Umm hey I&#39;m Amy I&#39;m from 
+Oklahoma, just moved here to va about 4 months ago, not exactly sure what it is&nbsp;...
+                    <a id="r8_t2" href="http://www.pof.com/viewprofile.aspx?profile_id=81447885" onmousedown="pk(this,{en:'te',b:'a010',up:'7e48e=irsjWogbMVBp7ekj&e=4Q4WXp&tk=t&wX=B25ZgggC+s2u&uc=SFvMw&Zk=G',ex:'tsrc%3Dtled'})"         target="_blank"
+    
+ class="tdn title dsib">Mehr lesen &raquo;</a>
+            </div>
+</div>
+                </div>
+                        </div>
+</div>
+
+
+
+
+<div id="magic2"></div>
+<script>
+    window['backfillParam'] = window['backfillParam'] || {};
+            window['backfillParam']['pl_bmodn'] = 5;
+    </script>
+  
+         <div id="paging" class="p20">
+                        <div style="margin: 0 10px 0 0" class="dsi">
+                                                            <div class="pgc pgcsel"><div class="pg">1</div></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=2&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">2</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=3&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">3</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=4&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">4</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=5&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">5</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=6&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">6</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=7&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">7</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=8&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">8</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=9&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">9</a></div>
+                
+                                                <div class="pgc"><a href="http://de.ask.com/web?q=fooood&page=10&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir" class="pg title">10</a></div>
+                
+                        </div>
+                            <div style="padding:1px 0 0 8px;float:left">
+                                        <a class="txt3 title l_nu" href="http://de.ask.com/web?q=fooood&page=2&amp;qid=6E0D4EA031995A19A3B5F812E36DC3F7&amp;qsrc=0&amp;o=312&amp;l=dir">Weitere&#160;&#187;</a>
+                </div>
+                        <div class="cl"></div>
+         </div>
+  
+    </div>
+    <div id="rightblock" class="c1 hcsa">
+                <div class="rrmod content-right" id="rrQnA">
+         <div class="sectionheader">Beliebte Fragen</div>
+
+                      <div id="r_t0" class="rrQItem ptbs txt3 rr-div tsrc_answ">
+                    <div class="ofh ur">
+                                                <div class="fl grey b">F:&nbsp;</div>
+                                                    <div class="ofh b">Welche Nahrungsmittel sind Junk Foo...</div>
+                        
+                    </div>
+                    <div class="ofh ur">
+                                                <div class="fl grey b">A:&nbsp;</div>
+                        <div class="ofh">
+                            Pizza, Hamburger, Pommes Frittes, Nudeln, Dosas&#8230; alles Frittierte.
+                            <a id="r0_t" class="title" style="text-decoration:none;"         target="_blank"
+    
+ href="http://de.answers.com/Q/Welche_Nahrungsmittel_sind_Junk_Food" onmousedown="pk(this,{en:'pqa',b:'qai',up:'a2498=1RV&r=N1V1l&ZI=j&DP=bYtjn3H6t&Ih=ScbNtRzGX%&%T=u',ec:'3'})"     
+>Mehr lesen &raquo;</a>
+                        </div>
+                    </div>
+                    <div class="pl16" $style>
+                        <span class="b pr5 grey">Quelle: </span>
+                        <span class="attrib">de.answers.com</span>
+                    </div>
+             </div>
+                      <div id="r_t1" class="rrQItem ptbs txt3 rr-div tsrc_answ">
+                    <div class="ofh ur">
+                                                <div class="fl grey b">F:&nbsp;</div>
+                                                    <div class="ofh b">Welche Gefahren bringt 'Fast Food'</div>
+                        
+                    </div>
+                    <div class="ofh ur">
+                                                <div class="fl grey b">A:&nbsp;</div>
+                        <div class="ofh">
+                            garkeine.
+                            <a id="r1_t" class="title" style="text-decoration:none;"         target="_blank"
+    
+ href="http://de.answers.com/Q/Welche_Gefahren_bringt_%27Fast_Food%27" onmousedown="pk(this,{en:'pqa',b:'qai',up:'7ef8h=OFm&p=9+UQc&v+=7&WO=4H9PAPFaY&Cv=AVgcUISc%6&Kt=w',io:'1',ec:'3'})"     
+>Mehr lesen &raquo;</a>
+                        </div>
+                    </div>
+                    <div class="pl16" $style>
+                        <span class="b pr5 grey">Quelle: </span>
+                        <span class="attrib">de.answers.com</span>
+                    </div>
+             </div>
+                      <div id="r_t2" class="rrQItem ptbs txt3 rr-div tsrc_answ">
+                    <div class="ofh ur">
+                                                <div class="fl grey b">F:&nbsp;</div>
+                                                    <div class="ofh b">Wie sagt man 'fast food' auf deutsc...</div>
+                        
+                    </div>
+                    <div class="ofh ur">
+                                                <div class="fl grey b">A:&nbsp;</div>
+                        <div class="ofh">
+                            &quot;. Fastfood. &quot; oder &quot;. schnelle Nahrung. &quot;.
+                            <a id="r2_t" class="title" style="text-decoration:none;"         target="_blank"
+    
+ href="http://de.answers.com/Q/Wie_sagt_man_%27fast_food%27_auf_deutsch" onmousedown="pk(this,{en:'pqa',b:'qai',up:'8539f=Mfh&m=wHLH5&V4=P&l2=2++NH2mPf&sX=SuIrKCQitn&au=h',io:'2',ec:'3'})"     
+>Mehr lesen &raquo;</a>
+                        </div>
+                    </div>
+                    <div class="pl16" $style>
+                        <span class="b pr5 grey">Quelle: </span>
+                        <span class="attrib">de.answers.com</span>
+                    </div>
+             </div>
+             </div>
+    </div>
+</div>
+<div class="clr"></div>
+<div id="shadow"></div>
+<div id="serp_ftr" class="txt2">
+    <div class="pb10 ur">
+    
+    <a onmousedown="uaction(this,{up:'4b082=z5LFFVqEq&k=CCZlJq&8a=k&Yf=Q6kLamp%xz&dp=y6Z7ewnEXU&v0=W&zC=4ms+4hGQb'});" href="http://sp.de.ask.com/de/a11/docs/legal/privacy.shtml" class="link grey ur" onmousedown="return ct(this,43491)" target="_top">Datenschutz</a>
+    <span class="separator">&middot;</span>
+    <a onmousedown="uaction(this,{up:'bcb84=J2nNurcRW&r=zU%4SN&Yr=E&oM=GyRXC101yn&UX=96JioHcwHd&px=e&5B=gf%dXLxYL'});" href="http://sp.de.ask.com/de/a11/docs/legal/terms.shtml" class="link grey ur" onmousedown="return ct(this,43491)" target="_top">Nutzungsbedingungen</a>
+        <span class="pl30">&#169; 2015 Ask.com</span>
+</div>
+</div>
+
+            <script src="/st/c/js/ask_web-ae7f613049a9abb43eaa9e4461ff2121a7534454.js" type="text/javascript"></script>
+        
+
+
+<script type="text/javascript">
+    ASKINT.ssCfg = (function(){
+
+        return {
+                                        "topOffset":2,
+                                    
+            "channel":"web",
+            "path":"web",
+            "disableTurnOffLink":"true",
+            "disableSS": false,
+            "server":"ssde.dub.ask.com/solr",
+            "ldomain":"http://de.ask.com/",
+            "ssBold":"'false'",
+            "clearSearchHistory":"",
+            "max":"",
+            "ssFromQueryHistory":"false",
+            "queryHistory":"",
+            "txtTurnOffSuggestions": "Schalten Sie Vorschläge",
+            "queryHistoryContentColor":"",
+            "ssContentColor":"'false'",
+            "ssContentColorCode": "",
+            "ssItems":"",
+            "cid":"ask",
+            "token":"c3dcb4c4daa0ab7469f227817bd411b0",
+            "lang":"de",
+            "appendParams":(function(){
+                var appendParams = new Array();
+
+                return appendParams;
+            })()
+        };
+    })();
+
+</script>
+            
+<script type="text/javascript">
+    var WZInfo = window.WZInfo || {};
+    WZInfo.pickRedirectPrefix = "http://wzeu.ask.com/r?t=p&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&id=6E0D4EA031995A19A3B5F812E36DC3F7&q=fooood&p=1&qs=0&ac=24&g=4c68Lp68TjoJM1&ocq=0&ocp=0&ocu=0&ocf=0&qa1=0&cu.wz=0&en=&io=&b=&tp=&ec=&ex=&pt=&u=";
+    WZInfo.pickNonRedirectPrefix = "http://wzeu.ask.com/i/b.html?t=p&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&id=6E0D4EA031995A19A3B5F812E36DC3F7&q=fooood&p=1&qs=0&ac=24&g=ef98fXji7UQsHE&ocq=0&ocp=0&ocu=0&ocf=0&qa1=0&cu.wz=0&en=&io=&b=&tp=&ec=&ex=&pt=&u=";
+    WZInfo.ctRedirectPrefix = "http://wzeu.ask.com/r?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&ti=1&ai=&u=";
+    WZInfo.ctPrefix = "http://wzeu.ask.com/i/b.html?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&ti=1&ai=&u=";
+    WZInfo.impressionURL = "http://wzeu.ask.com/i/i.gif?t=a&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&ti=2&ai=&ord=2586125&cu.wz=0";
+
+                var UInfo = window.UInfo || {};
+        UInfo.pl = "90c8jE=+mf6pj&Q7o=fo97&XJ=Pd%3b&Hi=xIi%+yHXAsPfRi59mKOFdw9WNTVA720O&6%=PpZL8LD&+T=y68kj8LJ8d87w6I2D&FdFQ=XX-75&c+t=08-wvC&11=A3gIZb&OKG=ZRNOEwb-y6oK.nSIEEpJ-%xNN3&za=Igw3%tbXhXq&SJ=eQP7f&OwY=eu&Mt=65W&Qc=c&YE=&0Eq=&B=ygx";
+        </script>
+
+
+                
+                    <script type="text/javascript">
+var _AnemoneParams2 = {
+	appId: 'T2_AskInt',
+	appVersion: 'ff36838',
+	appDate: '2015-01-14T10:13:00Z',
+    serverName: 'askint041dub.io.askjeeves.info',
+	uniqueUser: '997A092C-6A97-4676-A334-897CF87FAAFA',
+	backFillRequired: true,
+    suppressCookies: false,
+	eventId: '64EF224F-5A96-445F-ABFF-2144AD974E09',
+    browserLanguage: 'en-us',
+    maxSession: 30,
+	domain: '.ask.com',
+	url: '/ulog',
+	logPageView: false
+};
+</script>
+<script type="text/javascript" src="/st/c/js/ask_unified-846e61d9870534b40a64bd4c1252bf1d0f50c43f.js"></script>
+            <script type="text/javascript">
+        var ask = ask || {};
+
+        (function(){
+            var _timedOut = false,
+                    _fullPayload = window.backfillParam || {},                     _timeFromSerpStart = null,
+                                _adsLoggingTimeout = null,
+                    _dynamicLoggingTimeout = null;
+
+        
+
+            try{
+                _timeFromSerpStart = ((new Date() - ask.CSA.startTime) - ask.CSA.showSerpStartTime);
+                            _adsLoggingTimeout = parseInt('2000') - _timeFromSerpStart;
+                _dynamicLoggingTimeout = Math.max(_adsLoggingTimeout, 1);
+            }catch(e){
+                            _dynamicLoggingTimeout = 2000;
+            }
+
+            function mixinCSAAdData(payload){
+                var externalData = {
+                    csaInfo: {
+                                            domTime: ask.CSA.domReadyTime ? ask.CSA.domReadyTime : 0,
+                                            adsResponseTime: ask.CSA.responseTime ? ask.CSA.responseTime : 0,
+                                            adsShownTime: ask.CSA.adsShownTime ? ask.CSA.adsShownTime : 0,
+                                            serpShownTime: ask.CSA.serpShownTime ? ask.CSA.serpShownTime : 0,
+                                            supplement: _timedOut,
+                                            serpTimedOut: !!ask.CSA.showSerpTimeoutFired,
+                                            serpTimeoutStartTime: ask.CSA.showSerpStartTime ? ask.CSA.showSerpStartTime : 0,
+                                            pageReadyTime: ask.CSA.atfReadyTime ? ask.CSA.atfReadyTime : 0,
+                                            dynamicTimeout: _dynamicLoggingTimeout
+                    }
+                };
+                if (ENABLE_AD_CONTENT_RATIO) {
+                                    externalData.csaInfo.viewportHeight = ask.CSA.viewportHeight ? ask.CSA.viewportHeight : 0;
+                                    externalData.csaInfo.viewportWidth = ask.CSA.viewportWidth ? ask.CSA.viewportWidth : 0;
+                                    externalData.csaInfo.adContentRatio = ask.CSA.adContentRatio ? ask.CSA.adContentRatio : 0;
+                                    externalData.csaInfo.csaHeight = ask.CSA.csaHeight ? ask.CSA.csaHeight : 0;
+                                    externalData.csaInfo.csaWidth = ask.CSA.csaWidth ? ask.CSA.csaWidth : 0;
+                                    externalData.csaInfo.centerRailHeight = ask.CSA.centerRailHeight ? ask.CSA.centerRailHeight : 0;
+                                    externalData.csaInfo.centerRailWidth = ask.CSA.centerRailWidth ? ask.CSA.centerRailWidth : 0;
+                                    externalData.csaInfo.rightRailHeight = ask.CSA.rightRailHeight ? ask.CSA.rightRailHeight : 0;
+                                    externalData.csaInfo.rightRailWidth = ask.CSA.rightRailWidth ? ask.CSA.rightRailWidth : 0;
+                }
+                payload.pl_time = ask.CSA.responseTime ? ask.CSA.responseTime : 0;
+                payload.pl_tnum = ask.CSA.numTopAds ? ask.CSA.numTopAds : 0;
+                payload.pl_bnum = ask.CSA.numBottomAds ? ask.CSA.numBottomAds : 0;
+                payload.pl_rrnum = ask.CSA.numRightAds ? ask.CSA.numRightAds : 0;
+                payload.pl_rnum = parseInt(payload.pl_tnum) + parseInt(payload.pl_bnum) + parseInt(payload.pl_rrnum);
+
+                try{
+                    mixinNavigationTimingInfo(externalData);
+
+                    payload.pl_edata = JSON.stringify(externalData);
+                }catch(e){
+                                }
+            }
+
+                        function mixinNavigationTimingInfo(eData) {
+                if (typeof window.performance === 'undefined') {
+                    return;
+                }
+
+                var navInfo = eData["navInfo"] = {},
+                    csaInfo = eData.csaInfo,
+                    timing = window.performance.timing,
+                    navigation = window.performance.navigation,
+                    navStart = timing.navigationStart;
+
+                navInfo.redirectCount = navigation.redirectCount;
+                navInfo.navType = navigation.type;
+                csaInfo.csaStartTime = (ask.CSA.startTime.getTime() - navStart);
+
+                for (var k in timing) {
+                    if (timing.hasOwnProperty(k)) {
+                                                navInfo[k] = Math.max((timing[k] - navStart), 0);
+                    }
+                }
+            }
+
+            if (ask && ask.CSA) {
+                ask.CSA.addCSALoadCallback(function(){
+                                                    var payload = _timedOut ? { pl_supplement: true } : _fullPayload;
+                    if(typeof ask.CSA.calculateAdContentMetrics === "function") {
+                        ask.CSA.calculateAdContentMetrics();
+                    }
+                    mixinCSAAdData(payload);
+
+                    logBackfillEvent(payload);
+                }, function(){
+                                    _timedOut = true;
+
+                    logBackfillEvent(_fullPayload);
+                }, _dynamicLoggingTimeout);
+            } else {
+                logBackfillEvent(_fullPayload);
+            }
+
+            function logBackfillEvent(payload) {
+                if (ask && typeof ask.scriptLoader != "undefined") {
+                                        ask.scriptLoader.ready("unified", logEvent);
+                } else {
+                                        logEvent();
+                }
+
+                function logEvent(){
+                    payload['anxi'] = JSUtil.defaultVal(_AnemoneParams2.eventId, '');
+                    _Anemone.logEvent('BackFill', payload);
+                }
+            }
+        })();
+    </script>
+            <script type="text/javascript">
+    var st = new Image();
+    st.height = 1;
+    st.width = 1;
+    st.id = "SessionTracker";
+    st.src = "http://wzeu.ask.com/i/i.gif?t=v&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&p=%2Fweb&rf=0&ord=2540811&cu.wz=0";
+</script>
+<noscript>
+    <img src="http://wzeu.ask.com/i/i.gif?t=v&d=eu&s=de&c=a&app=a16&dqi=&askid=&l=dir&o=312&oo=0&sv=0a6d021b&ip=5dce413f&p=%2Fweb&rf=0&ord=2540811&cu.wz=0" height=1 width=1 id="SessionTracker" />
+</noscript>
+            
+    <span style="display:none">
+    <script type="text/javascript">
+        function addEvent(obj, evType, fn){
+            if (obj.addEventListener){
+                obj.addEventListener(evType, fn, false);
+                return true;
+            } else if (obj.attachEvent){
+                var r = obj.attachEvent("on"+evType, fn);
+                return r;
+            } else {
+                return false;
+            }
+        }
+
+        function comScore(){
+            var host = (("https:" == document.location.protocol) ? "https://sb" : "http://b");
+            var headTag = document.getElementsByTagName("head")[0];
+            var scanalytics = document.createElement("script");
+            scanalytics.setAttribute("type", "text/javascript");
+            scanalytics.setAttribute("async", "true");
+            scanalytics.setAttribute("src", host + ".scorecardresearch.com/beacon.js");
+            scanalytics.onload = scanalytics.onreadystatechange = function(){
+                try {
+                    COMSCORE.beacon({
+                        c1:2,
+                        c2:6034776,
+                        c3:"",
+                        c4:"",
+                        c5:"",
+                        c6:"",
+                        c15:""
+                    });
+                } catch(err) {
+                }
+            };
+            headTag.appendChild(scanalytics);
+        }
+        addEvent(window, 'load', comScore);
+        </script>
+    <noscript> <img src="http://b.scorecardresearch.com/p?c1=2&c2=6034776&c3=&c4=&c5=&c6=&c15=&cj=1" /> </noscript>
+</span>
+
+<script type="text/javascript">
+    var ask = ask || {},
+        sp = sp || {};
+    sp.site = '';
+    sp.gls_top = parseInt('$gslTop');
+    sp.gls_bottom = parseInt('$gslBottom');
+    sp.ad_count = (window['google_ads']) ? window['google_ads'].length : (sp.gls_top + sp.gls_bottom);
+    ask.adsPixelTimeout = 2000;
+
+    function initPixel(cb, cbTimeout) {
+        if (ask && ask.CSA) {
+            ask.CSA.addCSALoadCallback(function() {
+                cb(true);
+            }, function(){
+                cbTimeout();
+            }, ask.adsPixelTimeout);
+        } else {
+            cb(false);
+        }
+    }
+
+    function createDummyAdNodes(){
+        var numAds = (ask.CSA.numTopAds + ask.CSA.numBottomAds),
+            wrapperId = "ad_clone_wrapper",
+            adTemplate = "<div class='spl_ad_plus'><a/></div>",
+            elem = "<div id='" + wrapperId + "'/>";
+
+        $j(document.body).append(elem);
+        var wrapper = $j("#" + wrapperId)
+        wrapper.css("visibility", "hidden");
+
+        for(var i=0; i<numAds; i++) {
+            wrapper.append(adTemplate);
+        }
+    }
+
+    $j(document).ready(function(){
+        if (ask && ask.CSA && typeof ask.CSA.domReady == "function") {
+            ask.CSA.domReady();
+        }
+    });
+</script>
+
+
+
+
+
+
+
+    
+    
+</body>
+</html>
+
+    
+

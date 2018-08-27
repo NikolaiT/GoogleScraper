@@ -100,7 +100,7 @@ DEBUG = 10,
 NOTSET = 0
     '''
 
-    parser.add_argument('-v', '--verbosity', '--loglevel', '--log-level',
+    parser.add_argument('-v', '--verbosity', '--loglevel',
                         dest='log_level', default='INFO', type = str.lower,
                          choices=['debug', 'info', 'warning', 'warn', 'error', 'critical', 'fatal'], help=loglevel_help)
 
