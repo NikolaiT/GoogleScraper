@@ -144,7 +144,7 @@ Search the keywords in the keyword file [SearchData/marketing-models-brands.txt]
 GoogleScraper -s "bing,yahoo" --keyword-file SearchData/marketing-models-brands.txt -m http-async -v info -o marketing.json
 ```
 
-The results (partial results, because there were too many keywords for one IP address) can be inspected [here](Output/marketing.json).
+The results (partial results, because there were too many keywords for one IP address) can be inspected in the file [Outputs/marketing.json](Outputs/marketing.json).
 
 
 <a name="about" />
