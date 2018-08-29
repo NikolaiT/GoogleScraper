@@ -81,6 +81,7 @@ typings/
 # Python
 
 # test data
+tests/
 tests/data/tmp/*
 
 google_scraper.db
