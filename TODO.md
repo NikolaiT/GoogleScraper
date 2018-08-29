@@ -246,7 +246,14 @@ of the NodeJS version. Thus I will use https://github.com/GoogleChrome/puppeteer
 Alternative to using puppeteer: use selenium with chrome headless:
 https://duo.com/decipher/driving-headless-chrome-with-python
 
-### 27.8.23
+### 27.8.18
 
-+ Write functional test for Google and Bing
++ Write functional test for Google and Bing [DONE]
 + Think about integrating https://2captcha.com/2captcha-api#rates
+
+### 29.8.18
+
++ Add possibility to change search settings to selenium mode for Google
+  + Change country/region
+  + Change language
+  + Change number of search results

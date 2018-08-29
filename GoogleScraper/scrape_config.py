@@ -99,6 +99,18 @@ search_engines = ['google', ]
 # The google base search url
 google_search_url = 'https://www.google.com/search?'
 
+# Search Settings for Google Scraping in Selenium Mode
+# 10, 20, 30, 50, 100
+google_selenium_num_results = 100 
+# Private results help find more relevant content for you, including content and connections that only you can see.
+google_selenium_personalization = False
+# use a country code such as US, DE, GB, CH, ...
+google_selenium_region = 'DE' 
+google_selenium_safe_search = False
+# the language for google search results
+google_selenium_language = 'English'
+
+
 # The yandex base search url
 yandex_search_url = 'http://yandex.ru/yandsearch?'
 
@@ -275,7 +287,7 @@ chrome_binary_path = '/usr/bin/chromium-browser'
 # Set to False to disable.
 # If the captcha isn't solved in the specified time interval, the browser instance
 # with the current proxy is discarded.
-manual_captcha_solving = False
+manual_captcha_solving = True
 
 # Xvfb display option
 # You should start xvfb on your own before this option has any effect.

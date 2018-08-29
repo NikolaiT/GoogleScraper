@@ -279,7 +279,16 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         return False
 
-    def handle_request_denied(self, status_code):
+
+    def malicious_request_detected(self):
+        """Checks whether a malicious request was detected.
+        """
+        needles = self.malicious_request_needles[self.search_engine_name]
+
+        return needles and needles['inurl'] in self.webdriver.current_url \
+                and needles['inhtml'] in self.webdriver.page_source
+
+    def handle_request_denied(self):
         """Checks whether Google detected a potentially harmful request.
 
         Whenever such potential abuse is detected, Google shows an captcha.
@@ -297,11 +306,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         # selenium webdriver objects have no status code :/
         super().handle_request_denied('400')
 
-        needles = self.malicious_request_needles[self.search_engine_name]
-
-        if needles and needles['inurl'] in self.webdriver.current_url \
-                and needles['inhtml'] in self.webdriver.page_source:
-
+        if self.malicious_request_detected():
             if self.config.get('manual_captcha_solving', False):
                 with self.captcha_lock:
                     import tempfile
@@ -309,17 +314,14 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                     tf = tempfile.NamedTemporaryFile('wb')
                     tf.write(self.webdriver.get_screenshot_as_png())
                     import webbrowser
-
                     webbrowser.open('file://{}'.format(tf.name))
-                    solution = input('enter the captcha please...')
-                    self.webdriver.find_element_by_name('submit').send_keys(solution + Keys.ENTER)
+                    solution = input('Please solve the captcha in the browser! Enter any key when done...')
+                    tf.close()
                     try:
-                        self.search_input = WebDriverWait(self.webdriver, 5).until(
+                        self.search_input = WebDriverWait(self.webdriver, 7).until(
                             EC.visibility_of_element_located(self._get_search_input_field()))
                     except TimeoutException:
                         raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
-                    tf.close()
-
             else:
                 # Just wait until the user solves the captcha in the browser window
                 # 10 hours if needed :D
@@ -370,6 +372,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         except TimeoutException as e:
             logger.error('{}: TimeoutException waiting for search input field: {}'.format(self.name, e))
             return False
+
 
     def _wait_until_search_param_fields_appears(self, max_wait=5):
         """Waits until the search input field contains the query.
@@ -678,6 +681,82 @@ The following functionality may differ in particular:
     - _handle_request_denied()
     - wait_until_serp_loaded()
 """
+
+
+class GoogleSelScrape(SelScrape):
+    """
+    Add Google Settings via this subclass.
+    """
+
+    def __init__(self, *args, **kwargs):
+        SelScrape.__init__(self, *args, **kwargs)
+        self.largest_id = 0
+
+    def build_search(self):
+        """
+        Specify google page settings according to config.
+
+        Doing this automatically often provocates a captcha question.
+        This is highly sensitive.
+        """
+        super().build_search()
+        # assume we are on the normal google search page right now
+        self.webdriver.get('https://www.google.com/preferences?hl=en')
+
+        time.sleep(1)
+
+        # wait until we see the settings
+        element = WebDriverWait(self.webdriver, 7).until(EC.presence_of_element_located((By.NAME, 'safeui')))
+
+        try:
+            if self.config.get('google_selenium_safe_search', False):
+                if self.webdriver.find_element_by_name('safeui').get_attribute('value') != 'on':
+                    self.webdriver.find_element_by_name('safeui').click()
+
+            try:
+                if self.config.get('google_selenium_personalization', False):
+                    self.webdriver.find_element_by_css_selector('#pson-radio > div:first-child').click()
+                else:
+                    self.webdriver.find_element_by_css_selector('#pson-radio > div:nth-child(2)').click()
+            except WebDriverException as e:
+                logger.warning('Cannot set personalization settings.')
+
+            time.sleep(1)
+
+            # set the region
+            try:
+                self.webdriver.find_element_by_id('regionanchormore').click()
+            except WebDriverException as e:
+                logger.warning('Regions probably already expanded.')
+
+            region = self.config.get('google_selenium_region', 'US')
+            self.webdriver.find_element_by_css_selector('div[data-value="{}"]'.format(region)).click()
+
+            # set the number of results
+            num_results = self.config.get('google_selenium_num_results', 10)
+            self.webdriver.find_element_by_id('result_slider').click()
+            # reset
+            for i in range(5):
+                self.webdriver.find_element_by_id('result_slider').send_keys(Keys.LEFT)
+            # move to desicred result
+            for i in range((num_results//10)-1):
+                time.sleep(.25)
+                self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
+
+            time.sleep(1)
+
+            # save settings
+            self.webdriver.find_element_by_css_selector('#form-buttons div:first-child').click()
+            # accept alert
+            self.webdriver.switch_to.alert.accept()
+
+            time.sleep(2)
+
+            self.handle_request_denied()
+
+        except WebDriverException as e:
+            logger.error(e)
+            raise e
 
 
 class DuckduckgoSelScrape(SelScrape):
