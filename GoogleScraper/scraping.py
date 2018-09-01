@@ -78,7 +78,7 @@ def get_base_search_url_by_search_engine(config, search_engine_name, search_mode
     """
     assert search_mode in SEARCH_MODES, 'search mode "{}" is not available'.format(search_mode)
 
-    specific_base_url = config.get('{}_{}_search_url'.format(search_mode, search_engine_name), None)
+    specific_base_url = config.get('{}_{}_search_url'.format(search_mode, search_engine_name), None) 
 
     if not specific_base_url:
         specific_base_url = config.get('{}_search_url'.format(search_engine_name), None)
@@ -90,9 +90,8 @@ def get_base_search_url_by_search_engine(config, search_engine_name, search_mode
             ips = file.read().split('\n')
             random_ip = random.choice(ips)
             return random_ip
-
-    return specific_base_url
-
+    specific_base_url += "&source=lnt&tbs=cdr%3A1%2Ccd_min%3A3%2F1%2F2015%2Ccd_max%3A11%2F1%2F2015&tbm=&"
+    return specific_base_url 
 
 class SearchEngineScrape(metaclass=abc.ABCMeta):
     """Abstract base class that represents a search engine scrape.

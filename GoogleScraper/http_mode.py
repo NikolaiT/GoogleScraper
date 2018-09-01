@@ -44,6 +44,12 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
         # state by some hard coded needles.
         search_params['hl'] = 'en'
         search_params['q'] = query
+        #+ "&tbs=cdr%3A1%2Ccd_min%3A2015%2Ccd_max%3A2016&tbm="
+        '''
+        search_params['tbs'] ='cdr:1'
+        search_params['cd_min'] = '2015'
+        search_params['cd_max'] = '2016'
+        '''
         # only set when other num results than 10.
         if num_results_per_page != 10:
             search_params['num'] = str(num_results_per_page)
@@ -75,6 +81,17 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
                 'source': 'lnms',
                 'sa': 'X'
             })
+        #TEST
+
+
+        '''
+        search_params.update({
+            'tbs' : 'cdr:1',
+            'cd_min': '3/2/2015',
+            'cd_max': '3/2/2016'
+        })
+        '''
+
 
     elif search_engine == 'yandex':
         search_params['text'] = query
@@ -157,6 +174,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         self.scrape_method = 'http'
 
         # get the base search url based on the search engine.
+        #+ "&source=lnt&tbs=cdr%3A1%2Ccd_min%3A2015%2Ccd_max%3A2016&tbm=
         self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
 
         super().instance_creation_info(self.__class__.__name__)
@@ -256,7 +274,16 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
         success = True
 
         self.build_search()
+        #"tbs=cdr%3A1%2Ccd_min%3A2016%2Ccd_max%3A2015&ei=kdsMWtn0NumD0gLdvYWQDA&"
+        '''
+        self.headers['User-Agent'] = random_user_agent(only_desktop=True)
+        super().detection_prevention_sleep()
+        super().keyword_info()
+        print self.base_search_url + urlencode(self.search_params)
+        sys.exit()
+        '''
 
+        
         if rand:
             self.headers['User-Agent'] = random_user_agent(only_desktop=True)
 
@@ -291,6 +318,7 @@ class HttpScrape(SearchEngineScrape, threading.Timer):
                 success = False
 
         super().after_search()
+        
 
         return success
 
