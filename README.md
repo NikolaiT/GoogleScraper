@@ -2,6 +2,8 @@
 
 ## New News - August 2018
 
+For questions you can [contact me on my wegpage](https://incolumitas.com/) and write me an email there.
+
 This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
 
 #### Goals
@@ -9,7 +11,7 @@ This project is back to live after two years of abandonment. In the coming weeks
 + Remove PhantomJS support **[Done]**
 + Maybe remove Firefox support **[Done: Decision was to keep Firefox]**
 + Think about using https://github.com/GoogleChrome/puppeteer instead of selenium for Chrome.
-+ Test all supported search engines
++ Test all supported search engines [Partly Done]
 
 ### Table of Contents
 

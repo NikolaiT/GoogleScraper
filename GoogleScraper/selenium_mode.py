@@ -59,7 +59,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
     next_page_selectors = {
         'google': '#pnnext',
-        'yandex': '.pager__button_kind_next',
+        'yandex': '.pager__item_kind_next',
         'bing': '.sb_pagN',
         'yahoo': '#pg-next',
         'baidu': '.n',
@@ -474,7 +474,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             if self.search_engine_name == 'google':
                 selector = '#navcnt td.cur'
             elif self.search_engine_name == 'yandex':
-                selector = '.pager__item_current_yes font font'
+                selector = '.pager__item_current_yes'
             elif self.search_engine_name == 'bing':
                 selector = 'nav li a.sb_pagS'
             elif self.search_engine_name == 'yahoo':
@@ -497,7 +497,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 except TimeoutException as e:
                     self._save_debug_screenshot()
                     content = self.webdriver.find_element_by_css_selector(selector).text
-                    raise Exception('Pagenumber={} did not appear in navigation. Got "{}" instead'.format(self.page_number, content))
+                    logger.error('Pagenumber={} did not appear in navigation. Got "{}" instead'.format(self.page_number, content))
 
         elif self.search_type == 'image':
             self.wait_until_title_contains_keyword()
@@ -700,63 +700,68 @@ class GoogleSelScrape(SelScrape):
         This is highly sensitive.
         """
         super().build_search()
-        # assume we are on the normal google search page right now
-        self.webdriver.get('https://www.google.com/preferences?hl=en')
 
-        time.sleep(1)
-
-        # wait until we see the settings
-        element = WebDriverWait(self.webdriver, 7).until(EC.presence_of_element_located((By.NAME, 'safeui')))
-
-        try:
-            if self.config.get('google_selenium_safe_search', False):
-                if self.webdriver.find_element_by_name('safeui').get_attribute('value') != 'on':
-                    self.webdriver.find_element_by_name('safeui').click()
-
-            try:
-                if self.config.get('google_selenium_personalization', False):
-                    self.webdriver.find_element_by_css_selector('#pson-radio > div:first-child').click()
-                else:
-                    self.webdriver.find_element_by_css_selector('#pson-radio > div:nth-child(2)').click()
-            except WebDriverException as e:
-                logger.warning('Cannot set personalization settings.')
+        if self.config.get('google_selenium_search_settings', False):
+            # assume we are on the normal google search page right now
+            self.webdriver.get('https://www.google.com/preferences?hl=en')
 
             time.sleep(1)
 
-            # set the region
+            if self.config.get('google_selenium_manual_settings', False):
+                return input('Press any Key after search settings completed...')
+
+            # wait until we see the settings
+            element = WebDriverWait(self.webdriver, 7).until(EC.presence_of_element_located((By.NAME, 'safeui')))
+
             try:
-                self.webdriver.find_element_by_id('regionanchormore').click()
+                if self.config.get('google_selenium_safe_search', False):
+                    if self.webdriver.find_element_by_name('safeui').get_attribute('value') != 'on':
+                        self.webdriver.find_element_by_name('safeui').click()
+
+                try:
+                    if self.config.get('google_selenium_personalization', False):
+                        self.webdriver.find_element_by_css_selector('#pson-radio > div:first-child').click()
+                    else:
+                        self.webdriver.find_element_by_css_selector('#pson-radio > div:nth-child(2)').click()
+                except WebDriverException as e:
+                    logger.warning('Cannot set personalization settings.')
+
+                time.sleep(1)
+
+                # set the region
+                try:
+                    self.webdriver.find_element_by_id('regionanchormore').click()
+                except WebDriverException as e:
+                    logger.warning('Regions probably already expanded.')
+
+                region = self.config.get('google_selenium_region', 'US')
+                self.webdriver.find_element_by_css_selector('div[data-value="{}"]'.format(region)).click()
+
+                # set the number of results
+                num_results = self.config.get('google_selenium_num_results', 10)
+                self.webdriver.find_element_by_id('result_slider').click()
+                # reset
+                for i in range(5):
+                    self.webdriver.find_element_by_id('result_slider').send_keys(Keys.LEFT)
+                # move to desicred result
+                for i in range((num_results//10)-1):
+                    time.sleep(.25)
+                    self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
+
+                time.sleep(1)
+
+                # save settings
+                self.webdriver.find_element_by_css_selector('#form-buttons div:first-child').click()
+                # accept alert
+                self.webdriver.switch_to.alert.accept()
+
+                time.sleep(2)
+
+                self.handle_request_denied()
+
             except WebDriverException as e:
-                logger.warning('Regions probably already expanded.')
-
-            region = self.config.get('google_selenium_region', 'US')
-            self.webdriver.find_element_by_css_selector('div[data-value="{}"]'.format(region)).click()
-
-            # set the number of results
-            num_results = self.config.get('google_selenium_num_results', 10)
-            self.webdriver.find_element_by_id('result_slider').click()
-            # reset
-            for i in range(5):
-                self.webdriver.find_element_by_id('result_slider').send_keys(Keys.LEFT)
-            # move to desicred result
-            for i in range((num_results//10)-1):
-                time.sleep(.25)
-                self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
-
-            time.sleep(1)
-
-            # save settings
-            self.webdriver.find_element_by_css_selector('#form-buttons div:first-child').click()
-            # accept alert
-            self.webdriver.switch_to.alert.accept()
-
-            time.sleep(2)
-
-            self.handle_request_denied()
-
-        except WebDriverException as e:
-            logger.error(e)
-            raise e
+                logger.error(e)
+                raise e
 
 
 class DuckduckgoSelScrape(SelScrape):

@@ -99,16 +99,28 @@ search_engines = ['google', ]
 # The google base search url
 google_search_url = 'https://www.google.com/search?'
 
+# whether to change the search settings prior to scraping
+# when this is set to False google will search with 
+# the default search settings that your browser supports
+google_selenium_search_settings = False
+
+# the following options only take effect when 
+# google_selenium_search_settings is set to True
+
 # Search Settings for Google Scraping in Selenium Mode
 # 10, 20, 30, 50, 100
-google_selenium_num_results = 100 
+google_selenium_num_results = 100
 # Private results help find more relevant content for you, including content and connections that only you can see.
 google_selenium_personalization = False
 # use a country code such as US, DE, GB, CH, ...
-google_selenium_region = 'DE' 
+google_selenium_region = 'DE'
 google_selenium_safe_search = False
 # the language for google search results
 google_selenium_language = 'English'
+
+# manually select search settings
+# only possible in visible browsers
+google_selenium_manual_settings = False
 
 
 # The yandex base search url

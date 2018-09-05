@@ -477,19 +477,19 @@ class YandexParser(Parser):
     # @TODO: In december 2015, I saw that yandex only shows the number of search results in the search input field
     # with javascript. One can scrape it in plain http mode, but the values are hidden in some javascript and not
     # accessible with normal xpath/css selectors. A normal text search is done.
-    num_results_search_selectors = ['.serp-adv .serp-item__wrap > strong', '.input__found_visibility_visible font font::text']
+    num_results_search_selectors = ['.serp-list .serp-adv__found::text', '.input__found_visibility_visible font font::text']
 
     page_number_selectors = ['.pager__group .button_checked_yes span::text']
 
     normal_search_selectors = {
         'results': {
             'de_ip': {
-                'container': 'div.serp-list',
-                'result_container': 'div.serp-item',
-                'link': 'a.serp-item__title-link::attr(href)',
-                'snippet': 'div.serp-item__text::text',
-                'title': 'a.serp-item__title-link::text',
-                'visible_link': 'a.serp-url__link::attr(href)'
+                'container': '.serp-list',
+                'result_container': '.serp-item',
+                'link': 'a.link::attr(href)',
+                'snippet': 'div.text-container::text',
+                'title': 'div.organic__url-text::text',
+                'visible_link': '.typo_type_greenurl::text'
             }
         }
     }
