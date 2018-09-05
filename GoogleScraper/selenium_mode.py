@@ -7,6 +7,7 @@ import json
 import datetime
 import time
 import math
+import random
 import re
 import sys
 import os
@@ -304,24 +305,23 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             MaliciousRequestDetected when there was not way to stp Google From denying our requests.
         """
         # selenium webdriver objects have no status code :/
-        super().handle_request_denied('400')
-
         if self.malicious_request_detected():
+
+            super().handle_request_denied('400')
+
             if self.config.get('manual_captcha_solving', False):
                 with self.captcha_lock:
-                    import tempfile
-
-                    tf = tempfile.NamedTemporaryFile('wb')
-                    tf.write(self.webdriver.get_screenshot_as_png())
-                    import webbrowser
-                    webbrowser.open('file://{}'.format(tf.name))
                     solution = input('Please solve the captcha in the browser! Enter any key when done...')
-                    tf.close()
                     try:
                         self.search_input = WebDriverWait(self.webdriver, 7).until(
                             EC.visibility_of_element_located(self._get_search_input_field()))
                     except TimeoutException:
-                        raise MaliciousRequestDetected('Requesting with this ip is not possible at the moment.')
+                        raise MaliciousRequestDetected('Requesting with this IP address or cookies is not possible at the moment.')
+
+            elif self.config.get('captcha_solving_service', False):
+                # implement request to manual captcha solving service such 
+                # as https://2captcha.com/
+                pass
             else:
                 # Just wait until the user solves the captcha in the browser window
                 # 10 hours if needed :D
@@ -451,7 +451,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 # next page (for example because the search query is to unique)
                 # we need to return false
                 self._save_debug_screenshot()
-                logger.error('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
+                logger.warning('{}: Cannot locate next page element: {}'.format(self.name, str(e)))
                 return False
 
             return self.webdriver.find_element_by_css_selector(selector)
@@ -496,8 +496,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             until(EC.text_to_be_present_in_element((By.CSS_SELECTOR, selector), str(self.page_number)))
                 except TimeoutException as e:
                     self._save_debug_screenshot()
-                    content = self.webdriver.find_element_by_css_selector(selector).text
-                    logger.error('Pagenumber={} did not appear in navigation. Got "{}" instead'.format(self.page_number, content))
+                    logger.warning('Pagenumber={} did not appear in serp. Maybe there is only one result for this query?'.format(self.page_number))
 
         elif self.search_type == 'image':
             self.wait_until_title_contains_keyword()
@@ -556,9 +555,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                 self.status = 'Malicious request detected'
                 return
 
-            if self.search_input is False:
-                # @todo: pass status_code
-                self.search_input = self.handle_request_denied()
+            # check if request denied
+            self.handle_request_denied()
 
             if self.search_input:
                 self.search_input.clear()
@@ -705,7 +703,7 @@ class GoogleSelScrape(SelScrape):
             # assume we are on the normal google search page right now
             self.webdriver.get('https://www.google.com/preferences?hl=en')
 
-            time.sleep(1)
+            time.sleep(random.randint(2,5))
 
             if self.config.get('google_selenium_manual_settings', False):
                 return input('Press any Key after search settings completed...')
@@ -726,7 +724,7 @@ class GoogleSelScrape(SelScrape):
                 except WebDriverException as e:
                     logger.warning('Cannot set personalization settings.')
 
-                time.sleep(1)
+                time.sleep(random.randint(2,5))
 
                 # set the region
                 try:
@@ -748,14 +746,14 @@ class GoogleSelScrape(SelScrape):
                     time.sleep(.25)
                     self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
 
-                time.sleep(1)
+                time.sleep(random.randint(2,5))
 
                 # save settings
                 self.webdriver.find_element_by_css_selector('#form-buttons div:first-child').click()
                 # accept alert
                 self.webdriver.switch_to.alert.accept()
 
-                time.sleep(2)
+                time.sleep(random.randint(2,5))
 
                 self.handle_request_denied()
 

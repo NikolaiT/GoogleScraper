@@ -101,7 +101,7 @@ google_search_url = 'https://www.google.com/search?'
 
 # whether to change the search settings prior to scraping
 # when this is set to False google will search with 
-# the default search settings that your browser supports
+# the default search settings that your (selenium) browser supports
 google_selenium_search_settings = False
 
 # the following options only take effect when 
@@ -217,7 +217,7 @@ proxy_info_url = 'http://ipinfo.io/json'
 base_search_url = 'http://www.google.com/search'
 
 # Whether caching shall be enabled
-do_caching = False
+do_caching = True
 
 # Whether the whole html files should be cached or
 # if the file should be stripped from unnecessary data like javascripts, comments, ...
@@ -300,6 +300,13 @@ chrome_binary_path = '/usr/bin/chromium-browser'
 # If the captcha isn't solved in the specified time interval, the browser instance
 # with the current proxy is discarded.
 manual_captcha_solving = True
+
+
+# captch solving service
+
+# enable captcha solving service
+captcha_solving_service = False
+# @TODO: Integrate https://2captcha.com/ 
 
 # Xvfb display option
 # You should start xvfb on your own before this option has any effect.

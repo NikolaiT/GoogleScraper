@@ -257,3 +257,14 @@ https://duo.com/decipher/driving-headless-chrome-with-python
   + Change country/region
   + Change language
   + Change number of search results
+
+
+### 05.09.2018
+
++ Implement reliable google "request denied" detection [Halfway done, more testing required]
+  + Code something that detects when google asks for it's recaptcha v2
+  + Scraping 300 keywords with selenium mode and 5 browser instaces is no problem after initialling inputing a captcha
+  + Test 10 simultaenous browsers and 1000 keywords (50 cities plus suffixes ('best coffee', 'best restaurant', 'best dentist', 'best hairdresser'))
+
++ Integrate captcha solving service such as https://2captcha.com/
++ Look for good captcha solving services such as https://2captcha.com/   
