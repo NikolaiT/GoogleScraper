@@ -5,6 +5,7 @@ import random
 import time
 import os
 import abc
+import math
 
 from GoogleScraper.proxies import Proxy
 from GoogleScraper.database import db_Proxy
@@ -170,7 +171,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         # the keywords that couldn't be scraped by this worker
         self.missed_keywords = set()
 
-        # the number of keywords
+        # the number of queries to scrape
         self.num_keywords = len(self.jobs)
 
         # The actual keyword that is to be scraped next
@@ -232,13 +233,19 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.requested_at = None
 
         # The name of the scraper
-        self.name = '[{}]'.format(self.search_engine_name) + self.__class__.__name__
+        self.scraper_name = '{}-{}'.format(self.__class__.__name__, self.search_engine_name)
 
         # How long to sleep (in seconds) after every n-th request
         self.sleeping_ranges = dict()
         self.sleeping_ranges = self.config.get(
             '{search_engine}_sleeping_ranges'.format(search_engine=self.search_engine_name),
             self.config.get('sleeping_ranges'))
+
+        assert sum(self.sleeping_ranges.keys()) == 100, 'The sum of the keys of sleeping_ranges must be 100!'
+
+        # compute sleeping ranges
+        self.sleeping_times = self._create_random_sleeping_intervals(self.num_keywords)
+        logger.debug('Sleeping ranges: {}'.format(self.sleeping_times))
 
         # the default timeout
         self.timeout = 5
@@ -306,7 +313,7 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         logger.info(
             '[{thread_name}][{ip}]]Keyword: "{keyword}" with {num_pages} pages, slept {delay} seconds before '
             'scraping. {done}/{all} already scraped.'.format(
-                thread_name=self.name,
+                thread_name=self.scraper_name,
                 ip=self.requested_by,
                 keyword=self.query,
                 num_pages=self.pages_per_keyword,
@@ -327,31 +334,51 @@ class SearchEngineScrape(metaclass=abc.ABCMeta):
         self.cache_manager.cache_results(self.parser, self.query, self.search_engine_name, self.scrape_method, self.page_number,
                       db_lock=self.db_lock)
 
-    def _largest_sleep_range(self, search_number):
-        """Sleep a given amount of time dependent on the number of searches done.
+    def _create_random_sleeping_intervals(self, number_of_searches):
+        """Sleep a given amount of time as a function of the number of searches done.
 
         Args:
-            search_number: How many searches the worker has done yet.
+            number_of_searches: How many searches the worker has to process.
 
         Returns:
-            A range tuple which defines in which range the worker should sleep.
+            A list of tuples (intervals) of sleep ranges for everey search number.
         """
+        n = sum(self.sleeping_ranges.keys())
+        assert n == 100
+        assert number_of_searches >= 0
 
-        assert search_number >= 0
-        if search_number != 0:
-            s = sorted(self.sleeping_ranges.keys(), reverse=True)
-            for n in s:
-                if search_number % n == 0:
-                    return self.sleeping_ranges[n]
-        # sleep one second
-        return 1, 2
+        # if there are more searches than 100, multiply with the factor
+        x = math.ceil(number_of_searches/n)
+
+        sleeping_times = []
+
+        for key, value in self.sleeping_ranges.items():
+            for i in range(key):
+                sleeping_times.append(random.randrange(*value))
+
+        sleeping_times = sleeping_times*x
+
+        # randomly shuffle the whole thing
+        random.shuffle(sleeping_times)
+
+        return sleeping_times
+
 
     def detection_prevention_sleep(self):
         self.current_delay = 0
         if self.config.get('do_sleep', True):
-            # match the largest sleep range
-            self.current_delay = random.randrange(*self._largest_sleep_range(self.search_number))
+            self.current_delay = self.sleeping_times[self.search_number]
             time.sleep(self.current_delay)
+
+        if self.config.get('do_sleep', True):
+            try:
+                sleep_range = self.config.get('fixed_sleeping_ranges', {})[self.search_number]
+                self.current_delay = random.randrange(*sleep_range)
+                time.sleep(self.current_delay)
+            except KeyError as ke:
+                # normal case
+                pass
+
 
     def after_search(self):
         """Store the results and parse em.

@@ -268,3 +268,8 @@ https://duo.com/decipher/driving-headless-chrome-with-python
 
 + Integrate captcha solving service such as https://2captcha.com/
 + Look for good captcha solving services such as https://2captcha.com/   
+
+### 07.09.2018
+
++ fix sleeping ranges
++ add option to sleep X minutes after N scrapes.

@@ -703,10 +703,14 @@ class GoogleSelScrape(SelScrape):
             # assume we are on the normal google search page right now
             self.webdriver.get('https://www.google.com/preferences?hl=en')
 
-            time.sleep(random.randint(2,5))
+            time.sleep(random.randint(1,4))
 
             if self.config.get('google_selenium_manual_settings', False):
                 return input('Press any Key after search settings completed...')
+
+
+            oldsize = self.webdriver.get_window_size()
+            self.webdriver.maximize_window()
 
             # wait until we see the settings
             element = WebDriverWait(self.webdriver, 7).until(EC.presence_of_element_located((By.NAME, 'safeui')))
@@ -724,7 +728,7 @@ class GoogleSelScrape(SelScrape):
                 except WebDriverException as e:
                     logger.warning('Cannot set personalization settings.')
 
-                time.sleep(random.randint(2,5))
+                time.sleep(random.randint(1,4))
 
                 # set the region
                 try:
@@ -732,34 +736,44 @@ class GoogleSelScrape(SelScrape):
                 except WebDriverException as e:
                     logger.warning('Regions probably already expanded.')
 
-                region = self.config.get('google_selenium_region', 'US')
-                self.webdriver.find_element_by_css_selector('div[data-value="{}"]'.format(region)).click()
+                try:
+                    region = self.config.get('google_selenium_region', 'US')
+                    self.webdriver.find_element_by_css_selector('div[data-value="{}"]'.format(region)).click()
+                except WebDriverException as e:
+                    logger.warning('Cannot set region settings.')
 
                 # set the number of results
-                num_results = self.config.get('google_selenium_num_results', 10)
-                self.webdriver.find_element_by_id('result_slider').click()
-                # reset
-                for i in range(5):
-                    self.webdriver.find_element_by_id('result_slider').send_keys(Keys.LEFT)
-                # move to desicred result
-                for i in range((num_results//10)-1):
-                    time.sleep(.25)
-                    self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
+                try:
+                    num_results = self.config.get('google_selenium_num_results', 10)
+                    self.webdriver.find_element_by_id('result_slider').click()
+                    # reset
+                    for i in range(5):
+                        self.webdriver.find_element_by_id('result_slider').send_keys(Keys.LEFT)
+                    # move to desicred result
+                    for i in range((num_results//10)-1):
+                        time.sleep(.25)
+                        self.webdriver.find_element_by_id('result_slider').send_keys(Keys.RIGHT)
+                except WebDriverException as e:
+                    logger.warning('Cannot set number of results settings.')
 
-                time.sleep(random.randint(2,5))
+                time.sleep(random.randint(1,4))
 
                 # save settings
                 self.webdriver.find_element_by_css_selector('#form-buttons div:first-child').click()
+                time.sleep(1)
                 # accept alert
                 self.webdriver.switch_to.alert.accept()
 
-                time.sleep(random.randint(2,5))
+                time.sleep(random.randint(1,4))
 
                 self.handle_request_denied()
 
             except WebDriverException as e:
-                logger.error(e)
+                logger.error('Unable to set google page settings')
+                wait = input('waiting...')
                 raise e
+
+            driver.set_window_size(oldsize['width'], oldsize['height'])
 
 
 class DuckduckgoSelScrape(SelScrape):
