@@ -277,4 +277,11 @@ https://duo.com/decipher/driving-headless-chrome-with-python
 
 ### 08.09.2018
  
-+ Parce Google Map Recommondations 
++ Parce Google Map Recommondations [DONE]
++ Minimize resouce consumation in selenium scraping with chrome
+	- https://stackoverflow.com/questions/49008008/chrome-headless-puppeteer-too-much-cpu
+	- https://news.ycombinator.com/item?id=14103503
+	- https://news.ycombinator.com/item?id=14103503
+	- Added
+	```
+	``` 

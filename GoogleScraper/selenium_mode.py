@@ -221,10 +221,24 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             chrome_options = webdriver.ChromeOptions()
             chrome_options.binary_location = ""
 
+            # save resouces, options are experimental
+            # See here:
+            # https://news.ycombinator.com/item?id=14103503
+            # https://stackoverflow.com/questions/49008008/chrome-headless-puppeteer-too-much-cpu
+            chrome_options.add_arguments("test-type")
+            chrome_options.add_arguments('--js-flags="--expose-gc --max-old-space-size=500"')
+            chrome_options.add_arguments('--enable-precise-memory-info')
+            chrome_options.add_arguments('--disable-default-apps')
+            chrome_options.add_argument('--disable-extensions')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--incognito')
+            chrome_options.add_argument('--disable-application-cache')
+
 
             if self.browser_mode == 'headless':
                 chrome_options.add_argument('headless')
-                chrome_options.add_argument('window-size=1200x600') # optional
+                #chrome_options.add_argument('window-size=1200x600') # optional
 
             if self.proxy:
                 chrome_options.add_argument(
@@ -252,7 +266,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
             if self.browser_mode == 'headless':
                 options.set_headless(headless=True)
-                options.add_argument('window-size=1200x600') # optional
+                #options.add_argument('window-size=1200x600') # optional
 
             if self.proxy:
                 # this means that the proxy is user set, regardless of the type
