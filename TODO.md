@@ -271,5 +271,10 @@ https://duo.com/decipher/driving-headless-chrome-with-python
 
 ### 07.09.2018
 
-+ fix sleeping ranges
-+ add option to sleep X minutes after N scrapes.
++ fix sleeping ranges [DONE]
++ add option to sleep X minutes after N scrapes. [DONE]
+
+
+### 08.09.2018
+ 
++ Parce Google Map Recommondations 

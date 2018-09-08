@@ -211,11 +211,9 @@ class Parser():
 
                     serp_result['rank'] = index + 1
 
-                    # only add items that have not None links.
-                    # Avoid duplicates. Detect them by the link.
+                    # Avoid duplicates. Duplicates are serp_result elemnts where the 'link' and 'title' are identical
                     # If statement below: Lazy evaluation. The more probable case first.
-                    if 'link' in serp_result and serp_result['link'] and \
-                            not [e for e in self.search_results[result_type] if e['link'] == serp_result['link']]:
+                    if not [e for e in self.search_results[result_type] if (e['link'] == serp_result['link'] and e['title'] == serp_result['title']) ]:
                         self.search_results[result_type].append(serp_result)
                         self.num_results += 1
 
@@ -394,6 +392,18 @@ class GoogleParser(Parser):
                 'snippet': '.ads-creative::text',
                 'title': 'h3 > a:first-child::text',
                 'visible_link': '.ads-visurl cite::text',
+            }
+        },
+        # those css selectors are probably not worth much
+        'maps_local': {
+            'de_ip': {
+                'container': '#center_col',
+                'result_container': '.ccBEnf > div',
+                'link': 'link::attr(href)',
+                'snippet': 'div.rl-qs-crs-t::text',
+                'title': 'div[role="heading"] span::text',
+                'rating': 'span.BTtC6e::text',
+                'num_reviews': '.rllt__details::text',
             }
         },
         'ads_aside': {

@@ -224,7 +224,7 @@ proxy_info_url = 'http://ipinfo.io/json'
 base_search_url = 'http://www.google.com/search'
 
 # Whether caching shall be enabled
-do_caching = True
+do_caching = False
 
 # Whether the whole html files should be cached or
 # if the file should be stripped from unnecessary data like javascripts, comments, ...
