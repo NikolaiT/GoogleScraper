@@ -91,6 +91,8 @@ def check_detection(config, search_engine_name):
     else:
         raise NotImplementedError('Detection check only implemented for Google Right now.')
 
+    browser.quit()
+
     return status
 
 

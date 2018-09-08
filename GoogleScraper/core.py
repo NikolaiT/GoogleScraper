@@ -195,8 +195,9 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     if search_engine_name:
         from GoogleScraper.selenium_mode import check_detection
         code, status = check_detection(config, search_engine_name)
-        logger.info(status)
-        return code
+        logger.debug(status)
+        print(code)
+        return
 
     init_outfile(config, force_reload=True)
 
