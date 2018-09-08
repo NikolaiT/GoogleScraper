@@ -225,10 +225,10 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             # See here:
             # https://news.ycombinator.com/item?id=14103503
             # https://stackoverflow.com/questions/49008008/chrome-headless-puppeteer-too-much-cpu
-            chrome_options.add_arguments("test-type")
-            chrome_options.add_arguments('--js-flags="--expose-gc --max-old-space-size=500"')
-            chrome_options.add_arguments('--enable-precise-memory-info')
-            chrome_options.add_arguments('--disable-default-apps')
+            chrome_options.add_argument("test-type")
+            chrome_options.add_argument('--js-flags="--expose-gc --max-old-space-size=500"')
+            chrome_options.add_argument('--enable-precise-memory-info')
+            chrome_options.add_argument('--disable-default-apps')
             chrome_options.add_argument('--disable-extensions')
             chrome_options.add_argument('--disable-gpu')
             chrome_options.add_argument('--no-sandbox')
