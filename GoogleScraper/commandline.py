@@ -84,6 +84,10 @@ def get_command_line(only_print_help=False):
                              'because GoogleScrape comes shipped with a thoroughly commented configuration file named '
                              '"scrape_config.py"')
 
+    parser.add_argument('--check-detection', type=str, dest='check_detection', action='store',
+                        help='Check if the given search engine blocked you from scrapign. Often detection can be determined'
+                         'if you have to solve a captcha.')
+
     parser.add_argument('--simulate', action='store_true', default=False, required=False,
                         help='''If this flag is set, the scrape job and its estimated length will be printed.''')
 

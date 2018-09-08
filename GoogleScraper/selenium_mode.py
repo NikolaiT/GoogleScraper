@@ -35,6 +35,65 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class NotSupportedException(Exception):
+    pass
+
+
+def check_detection(config, search_engine_name):
+    """
+    Checks whether the search engine specified by search_engine_name 
+    blocked us.
+    """
+    status = ''
+    chromedriver = config.get('chromedriver_path', '/usr/bin/chromedriver')
+
+    options = webdriver.ChromeOptions()
+    options.add_argument('headless')
+    options.add_argument('window-size=1200x600')
+
+    browser = webdriver.Chrome(chrome_options=options, executable_path=chromedriver)
+
+    if search_engine_name == 'google': 
+        url = get_base_search_url_by_search_engine(config, 'google', 'selenium')
+        browser.get(url)
+
+        def check(browser, status):
+            needles = SearchEngineScrape.malicious_request_needles['google']
+
+            if needles['inurl'] in browser.current_url and needles['inhtml'] in browser.page_source:
+                status += 'Google is asking for a captcha! '
+                code = 'DETECTED'
+            else:
+                status += 'No captcha prompt detected. '
+                code = 'UNDETECTED'
+
+            return (code, status)
+
+        search_input = None
+        try:
+            search_input = WebDriverWait(browser, 5).until(
+                EC.visibility_of_element_located((By.NAME, 'q')))
+            status += 'Got a search input field. '
+        except TimeoutException:
+            status += 'No search input field located after 5 seconds. '
+            return check(browser, status)
+
+        try:
+            # random query
+            search_input.send_keys('President of Finland'+ Keys.ENTER)
+            status += 'Google Search successful! '
+        except WebDriverException:
+            status += 'Cannot make a google search! '
+            return check(browser, status)
+
+        return check(browser, status)
+
+    else:
+        raise NotImplementedError('Detection check only implemented for Google Right now.')
+
+    return status
+
+
 def get_selenium_scraper_by_search_engine_name(config, search_engine_name, *args, **kwargs):
     """Get the appropriate selenium scraper for the given search engine name.
 
@@ -142,6 +201,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         self.captcha_lock = captcha_lock
         self.scrape_method = 'selenium'
 
+        # number of tabs per instance
+        self.number_of_tabs = self.config.get('num_tabs', 1)
+
         self.xvfb_display = self.config.get('xvfb_display', None)
 
         self.search_param_values = self._get_search_param_values()
@@ -149,6 +211,40 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
         super().instance_creation_info(self.__class__.__name__)
+
+
+    def switch_to_tab(self, tab_number):
+        """Switch to tab identified by tab_number
+
+        https://stackoverflow.com/questions/46425797/opening-link-in-the-new-tab-and-switching-between-tabs-selenium-webdriver-pyt
+        https://gist.github.com/lrhache/7686903
+        """
+        assert tab_number < self.number_of_tabs
+
+        first_link = first_result.find_element_by_tag_name('a')
+
+        # Save the window opener (current window, do not mistaken with tab... not the same)
+        main_window = browser.current_window_handle
+
+        # Open the link in a new tab by sending key strokes on the element
+        # Use: Keys.CONTROL + Keys.SHIFT + Keys.RETURN to open tab on top of the stack 
+        first_link.send_keys(Keys.CONTROL + Keys.RETURN)
+
+        # Switch tab to the new tab, which we will assume is the next one on the right
+        browser.find_element_by_tag_name('body').send_keys(Keys.CONTROL + Keys.TAB)
+            
+        # Put focus on current window which will, in fact, put focus on the current visible tab
+        browser.switch_to_window(main_window)
+
+        # do whatever you have to do on this page, we will just got to sleep for now
+        sleep(2)
+
+        # Close current tab
+        browser.find_element_by_tag_name('body').send_keys(Keys.CONTROL + 'w')
+
+        # Put focus on current window which will be the window opener
+        browser.switch_to_window(main_window)
+
 
     def set_proxy(self):
         """Install a proxy on the communication channel."""
@@ -323,7 +419,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
             super().handle_request_denied('400')
 
-            if self.config.get('manual_captcha_solving', False):
+            # only solve when in non headless mode
+            if self.config.get('manual_captcha_solving', False) and self.config.get('browser_mode') != 'headless':
                 with self.captcha_lock:
                     solution = input('Please solve the captcha in the browser! Enter any key when done...')
                     try:

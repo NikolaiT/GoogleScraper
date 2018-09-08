@@ -348,6 +348,11 @@ captcha_solving_service = False
 # will set environment variable $DISPLAY to it
 xvfb_display = None
 
+
+# how many tabs per instance
+num_tabs = 1
+
+
 """
 [HTTP]
 All settings that target the raw http packet scraping mode.

@@ -155,7 +155,8 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
         parse_cmd_line: Whether to get options from the command line or not.
         config_from_dict: Configuration that is passed when GoogleScraper is called as library.
     Returns:
-        A database session to the results when return_results is True. Else, nothing.
+        A database session to the results when return_results is True.
+        A status code can be returned.
     """
     external_config_file_path = cmd_line_args = None
 
@@ -189,6 +190,13 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
         except:
             pass
         return
+
+    search_engine_name = config.get('check_detection', None)
+    if search_engine_name:
+        from GoogleScraper.selenium_mode import check_detection
+        code, status = check_detection(config, search_engine_name)
+        logger.info(status)
+        return code
 
     init_outfile(config, force_reload=True)
 
