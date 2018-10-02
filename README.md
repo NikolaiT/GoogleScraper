@@ -1,30 +1,28 @@
 # GoogleScraper - Scraping search engines professionally
 
-## New News - August 2018
+## [Scrapeulous.com](https://scrapeulous.com/) - Scraping Service
+
+GoogleScraper is a open source tool and will remain a open source tool in the future.
+
+Some people however would want to quickly have a paid service that lets them scrape some data from Google or
+any other search engine. For this reason, I created the web service [scrapeulous.com](https://scrapeulous.com/).
+
+## August/September 2018
 
 For questions you can [contact me on my wegpage](https://incolumitas.com/) and write me an email there.
 
 This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
 
-#### Goals
-
-+ Remove PhantomJS support **[Done]**
-+ Maybe remove Firefox support **[Done: Decision was to keep Firefox]**
-+ Think about using https://github.com/GoogleChrome/puppeteer instead of selenium for Chrome.
-+ Test all supported search engines [Partly Done]
 
 ### Table of Contents
 
-1. [Installation](#install)
-2. [Quick Start](#quick)
-3. [Asynchronous mode](#async)
+1. [Installation](#installation)
+2. [Quick Start](#quick-start)
+3. [Asynchronous mode](#Asynchronous-mode)
 4. [Testing](#testing)
 5. [About](#about)
-6. [Command line usage](#cli-usage)
+6. [Command line usage](#command-line-usage)
 7. [Contact](#contact)
-
-
-<a name="install" />
 
 ## Installation
 
@@ -92,8 +90,6 @@ chrome_binary_path = '/usr/bin/chromium-browser'
 ```
 
 
-<a name="quick" />
-
 ## Quick Start
 
 Install as described above. Make sure that you have the selenium drivers for chrome/firefox if you want to use GoogleScraper in selenium mode.
@@ -130,8 +126,6 @@ Do an image search for the keyword "K2 mountain" on google:
 GoogleScraper -s "google" -q "K2 mountain" -t image -v info
 ```
 
-<a name="async" />
-
 ## Asynchronous mode
 
 This is probably the most awesome feature of GoogleScraper. You can scrape with thousands of requests per second if either
@@ -150,8 +144,6 @@ GoogleScraper -s "bing,yahoo" --keyword-file SearchData/marketing-models-brands.
 The results (partial results, because there were too many keywords for one IP address) can be inspected in the file [Outputs/marketing.json](Outputs/marketing.json).
 
 
-<a name="testing" />
-
 ## Testing GoogleScraper
 
 GoogleScraper is hugely complex. Because GoogleScraper supports many search engines and the HTML and Javascript of those Search Providers changes frequently, it is often the case that GoogleScraper ceases to function for some search engine. To spot this, you can run **functional tests**.
@@ -161,9 +153,6 @@ For example the test below runs a scraping session for Google and Bing and tests
 ```
 python -m pytest Tests/functional_tests.py::GoogleScraperMinimalFunctionalTestCase
 ```
-
-
-<a name="about" />
 
 ## What does GoogleScraper.py?
 
@@ -239,8 +228,6 @@ Some interesting technologies/software to do so:
 + [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
 
 
-<a name="cli-usage" />
-
 ## More detailed Explanation
 
 Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
@@ -291,8 +278,6 @@ In case you want to use GoogleScraper.py in *http* mode (which means that raw ht
 ```
 GoogleScraper -m http -p 1 -n 25 -q "white light"
 ```
-
-<a name="contact" />
 
 ## Contact
 

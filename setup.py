@@ -11,12 +11,15 @@ version = re.search(
 
 requirements = [r for r in open('requirements.txt', 'r').read().split('\n') if r]
 
+# https://dustingram.com/articles/2018/03/16/markdown-descriptions-on-pypi
+
 setup(name='GoogleScraper',
       version=version,
       description='A module to scrape and extract links, titles and descriptions from various search engines. Supports google,bing,yandex and many more.',
       long_description=open('README.md').read(),
+      long_description_content_type="text/markdown",
       author='Nikolai Tschacher',
-      author_email='admin@incolumitas.com',
+      author_email='nikolai@tschacher.ch',
       url='http://incolumitas.com',
       py_modules=['usage'],
       packages=['GoogleScraper'],

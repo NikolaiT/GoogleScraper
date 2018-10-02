@@ -13,6 +13,7 @@ import sys
 import os
 
 try:
+    from fake_useragent import UserAgent
     from selenium import webdriver
     from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.common.exceptions import ElementNotVisibleException
@@ -210,6 +211,8 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.search_param_values = self._get_search_param_values()
 
+        self.user_agent = UserAgent()
+
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
         super().instance_creation_info(self.__class__.__name__)
@@ -323,8 +326,11 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             # See here:
             # https://news.ycombinator.com/item?id=14103503
             # https://stackoverflow.com/questions/49008008/chrome-headless-puppeteer-too-much-cpu
+            # https://engineering.21buttons.com/crawling-thousands-of-products-using-aws-lambda-80332e259de1
             chrome_options.add_argument("test-type")
             chrome_options.add_argument('--js-flags="--expose-gc --max-old-space-size=500"')
+            chrome_options.add_argument(
+                'user-agent={}'.format(self.user_agent.random))
             chrome_options.add_argument('--enable-precise-memory-info')
             chrome_options.add_argument('--disable-default-apps')
             chrome_options.add_argument('--disable-extensions')
@@ -361,6 +367,9 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             geckodriver_path = self.config.get('geckodriver_path')
             options = FirefoxOptions()
             profile = webdriver.FirefoxProfile()
+
+            options.add_argument(
+                'user-agent={}'.format(self.user_agent.random))
 
             if self.browser_mode == 'headless':
                 options.set_headless(headless=True)

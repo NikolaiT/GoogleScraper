@@ -297,6 +297,9 @@ def main(return_results=False, parse_cmd_line=True, config_from_dict=None):
     if config.get('num_results_per_page') > 100:
         raise WrongConfigurationError('Not more that 100 results per page available for searches.')
 
+    if config.get('num_results_per_page') < 10:
+        raise WrongConfigurationError('num_results_per_page must be 10,20,30,40,50 or 100 with Google and in the range(10,100) with other search engines.')
+
     proxies = []
 
     if proxy_db:
