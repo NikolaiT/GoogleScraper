@@ -1,9 +1,10 @@
 GoogleScraper Tutorial - How to scrape 1000 keywords with Google
 ================================================================
 
-::
+The orginal article can be found on my blog:
+`original article <https://incolumitas.com/2018/09/05/googlescraper-tutorial/>`__.
 
-    Tutorial that teaches how to use GoogleScraper to scrape 1000 keywords with 10 selenium browsers. 
+Tutorial that teaches how to use GoogleScraper to scrape 1000 keywords with 10 selenium browsers. 
 
 In this tutorial we are going to show users how to use
 `GoogleScraper <https://github.com/NikolaiT/GoogleScraper>`__.

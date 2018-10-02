@@ -10,7 +10,9 @@ Welcome to GoogleScraper's documentation!
    :maxdepth: 2
    :caption: Contents:
 
-
+   README
+   google-scraper-tutorial
+   
 
 Indices and tables
 ==================
