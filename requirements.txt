@@ -7,3 +7,4 @@ PyMySql
 sqlalchemy
 aiohttp
 fake_useragent
+recommonmark
