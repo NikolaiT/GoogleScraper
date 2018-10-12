@@ -106,7 +106,7 @@ search_engines = ['google', ]
 google_search_url = 'https://www.google.com/search?'
 
 # whether to change the search settings prior to scraping
-# when this is set to False google will search with 
+# when this is set to False google will search with
 # the default search settings that your (selenium) browser supports
 google_selenium_search_settings = False
 
@@ -115,7 +115,7 @@ google_selenium_search_settings = False
 # when this is set, google won't block you as likely
 google_selenium_manual_settings = False
 
-# the following options only take effect when 
+# the following options only take effect when
 # google_selenium_search_settings is set to True
 
 # Search Settings for Google Scraping in Selenium Mode
@@ -243,13 +243,13 @@ cachedir = '.scrapecache/'
 clean_cache_after = 48
 
 # turn off sleeping pauses alltogether.
-# Dont set this to False if you don't know what you are doing. 
+# Dont set this to False if you don't know what you are doing.
 do_sleep = True
 
 # Sleeping distribution.
 # Sleep a given amount of time as a function of the number of searches done.
 # The scraper in selenium mode makes random pauses at certain times.
-# Please add integer keys to sleeping_ranges such that the sum of 
+# Please add integer keys to sleeping_ranges such that the sum of
 # the keys amounts to 100. Then the key defines the probability of how many times
 # this sleeping range occurs in a total of 100 searches.
 # For example:
@@ -340,7 +340,7 @@ manual_captcha_solving = True
 
 # enable captcha solving service
 captcha_solving_service = False
-# @TODO: Integrate https://2captcha.com/ 
+# @TODO: Integrate https://2captcha.com/
 
 # Xvfb display option
 # You should start xvfb on your own before this option has any effect.

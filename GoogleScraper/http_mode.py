@@ -59,7 +59,7 @@ def get_GET_params_for_search_engine(query, search_engine, page_number=1, num_re
                 'source': 'hp',
                 # 'sa': 'X',
                 'biw': 1920,
-                'bih': 881
+                'bih': 979,
             })
         elif search_type == 'video':
             search_params.update({

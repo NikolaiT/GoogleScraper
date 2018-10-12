@@ -42,7 +42,7 @@ class NotSupportedException(Exception):
 
 def check_detection(config, search_engine_name):
     """
-    Checks whether the search engine specified by search_engine_name 
+    Checks whether the search engine specified by search_engine_name
     blocked us.
     """
     status = ''
@@ -54,7 +54,7 @@ def check_detection(config, search_engine_name):
 
     browser = webdriver.Chrome(chrome_options=options, executable_path=chromedriver)
 
-    if search_engine_name == 'google': 
+    if search_engine_name == 'google':
         url = get_base_search_url_by_search_engine(config, 'google', 'selenium')
         browser.get(url)
 
@@ -173,7 +173,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
     }
 
     image_search_locations = {
-        'google': 'https://www.google.com/imghp',
+        'google': 'https://www.google.com/imghp?tbm=isch',
         'yandex': 'http://yandex.ru/images/',
         'bing': 'https://www.bing.com/?scope=images',
         'yahoo': 'http://images.yahoo.com/',
@@ -232,12 +232,12 @@ class SelScrape(SearchEngineScrape, threading.Thread):
         main_window = browser.current_window_handle
 
         # Open the link in a new tab by sending key strokes on the element
-        # Use: Keys.CONTROL + Keys.SHIFT + Keys.RETURN to open tab on top of the stack 
+        # Use: Keys.CONTROL + Keys.SHIFT + Keys.RETURN to open tab on top of the stack
         first_link.send_keys(Keys.CONTROL + Keys.RETURN)
 
         # Switch tab to the new tab, which we will assume is the next one on the right
         browser.find_element_by_tag_name('body').send_keys(Keys.CONTROL + Keys.TAB)
-            
+
         # Put focus on current window which will, in fact, put focus on the current visible tab
         browser.switch_to_window(main_window)
 
@@ -441,7 +441,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
                         raise MaliciousRequestDetected('Requesting with this IP address or cookies is not possible at the moment.')
 
             elif self.config.get('captcha_solving_service', False):
-                # implement request to manual captcha solving service such 
+                # implement request to manual captcha solving service such
                 # as https://2captcha.com/
                 pass
             else:
