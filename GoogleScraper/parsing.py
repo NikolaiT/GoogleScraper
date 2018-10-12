@@ -418,6 +418,12 @@ class GoogleParser(Parser):
                 'result_container': '.rg_bx',
                 'link': 'a.rg_l::attr(href)',
                 'snippet': '.a-no-hover-decoration::text',
+            },
+            'de_ip_http_mode': {
+                'container': '#search',
+                'result_container': '.rg_bx',
+                'link': 'a.rg_l::attr(href)',
+                'snippet': '.a-no-hover-decoration::text',
             }
         }
     }
