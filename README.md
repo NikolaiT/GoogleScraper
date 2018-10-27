@@ -221,7 +221,7 @@ has a unique behaviour. Therefore it's almost impossible to simulate such a brow
 dynamic nature of Javascript makes it impossible to scrape undetected.
 
 This cries for an alternative approach, that automates a **real** browser with Python. Best would be to control the Chrome browser since Google has the least incentives to restrict capabilities for their own native browser.
-Hence I need a way to automate Chrome with Python and controlling several independent instances with different proxies set. Then the output of result grows linearly with the number of used proxies...
+Hence I need a way to automate Chrome with Python and controlling several independent instances with different proxies set. Then the output of result grows linearly with the number of used proxies.....
 
 Some interesting technologies/software to do so:
 + [Selenium](https://pypi.python.org/pypi/selenium)
@@ -258,7 +258,7 @@ After the scraping you'll automatically have a new sqlite3 database in the named
 GoogleScraper --shell
 ```
 
-It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
+It should not be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
 bit higher (in the top of the script file).
 
 If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with proxies in it and with the following format:
