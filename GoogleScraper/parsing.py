@@ -355,9 +355,9 @@ class GoogleParser(Parser):
             'us_ip': {
                 'container': '#center_col',
                 'result_container': 'div.g ',
-                'link': 'h3.r > a:first-child::attr(href)',
+                'link': 'div.r > a:first-child::attr(href)',
                 'snippet': 'div.s span.st::text',
-                'title': 'h3.r > a:first-child::text',
+                'title': 'div.r > a > h3::text',
                 'visible_link': 'cite::text'
             },
             'de_ip': {
@@ -380,9 +380,9 @@ class GoogleParser(Parser):
             'us_ip': {
                 'container': '#center_col',
                 'result_container': 'li.ads-ad',
-                'link': 'h3.r > a:first-child::attr(href)',
+                'link': 'div.r > a:first-child::attr(href)',
                 'snippet': 'div.s span.st::text',
-                'title': 'h3.r > a:first-child::text',
+                'title': 'div.r > a > h3::text',
                 'visible_link': '.ads-visurl cite::text',
             },
             'de_ip': {
