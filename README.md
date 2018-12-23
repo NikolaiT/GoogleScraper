@@ -7,6 +7,23 @@ GoogleScraper is a open source tool and will remain a open source tool in the fu
 Some people however would want to quickly have a paid service that lets them scrape some data from Google or
 any other search engine. For this reason, I created the web service [scrapeulous.com](https://scrapeulous.com/).
 
+## Switching from Python to Javascript/puppeteer: https://www.npmjs.com/package/se-scraper
+
+Last State: **December 2018**
+
+There are several reasons why I won't continue to put much effort into this project.
+
+1. Python is not the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This project uses Selenium. Selenium is kind of old and outdated.
+2. Scraping in 2019 is almost completely reduced to controlling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anit-bot mechanisms. And this project still supports raw http requests.
+3. Scraping should be parallelized in the cloud or among a set of dedicated machines. GoogleScraper cannot handle such use cases without significant effort.
+4. This project is extremely buggy.
+
+For this reason I am going to continue developing a scraping library named https://www.npmjs.com/package/se-scraper in Javascript which runs on top of puppeteer.
+
+You can download the app here: https://www.npmjs.com/package/se-scraper
+
+It supports a wide range of different search engines and is much more efficient than GoogleScraper. The code base is also much less complex without threading/queueing and complex logging capabilities.
+
 ## August/September 2018
 
 For questions you can [contact me on my wegpage](https://incolumitas.com/) and write me an email there.
