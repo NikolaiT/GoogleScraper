@@ -4,12 +4,18 @@
 
 GoogleScraper is a open source tool and will remain a open source tool in the future.
 
-Some people however would want to quickly have a paid service that lets them scrape some data from Google or
+Also the modern successor of GoogleScraper, the node tool [se-scraper](https://github.com/NikolaiT/se-scraper), will remain open source and free.
+
+Some people however would want to quickly have a service that lets them scrape some data from Google or
 any other search engine. For this reason, I created the web service [scrapeulous.com](https://scrapeulous.com/).
 
-## Switching from Python to Javascript/puppeteer: https://www.npmjs.com/package/se-scraper
+## Switching from Python to Javascript/puppeteer
 
-Last State: **December 2018**
+Last State: **Feburary 2019**
+
+The successor of GoogleScraper can be [found here](https://github.com/NikolaiT/se-scraper)
+
+This means that I won't maintain this project anymore. All new development goes in the above project.
 
 There are several reasons why I won't continue to put much effort into this project.
 

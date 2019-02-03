@@ -13,7 +13,6 @@ import sys
 import os
 
 try:
-    from fake_useragent import UserAgent
     from selenium import webdriver
     from selenium.common.exceptions import TimeoutException, WebDriverException
     from selenium.common.exceptions import ElementNotVisibleException
@@ -211,7 +210,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
 
         self.search_param_values = self._get_search_param_values()
 
-        self.user_agent = UserAgent()
+        self.user_agent = random_user_agent()
 
         # get the base search url based on the search engine.
         self.base_search_url = get_base_search_url_by_search_engine(self.config, self.search_engine_name, self.scrape_method)
@@ -330,7 +329,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             chrome_options.add_argument("test-type")
             chrome_options.add_argument('--js-flags="--expose-gc --max-old-space-size=500"')
             chrome_options.add_argument(
-                'user-agent={}'.format(self.user_agent.random))
+                'user-agent={}'.format(self.user_agent))
             chrome_options.add_argument('--enable-precise-memory-info')
             chrome_options.add_argument('--disable-default-apps')
             chrome_options.add_argument('--disable-extensions')
@@ -369,7 +368,7 @@ class SelScrape(SearchEngineScrape, threading.Thread):
             profile = webdriver.FirefoxProfile()
 
             options.add_argument(
-                'user-agent={}'.format(self.user_agent.random))
+                'user-agent={}'.format(self.user_agent))
 
             if self.browser_mode == 'headless':
                 options.set_headless(headless=True)

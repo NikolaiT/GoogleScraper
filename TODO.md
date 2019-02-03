@@ -290,3 +290,10 @@ https://duo.com/decipher/driving-headless-chrome-with-python
 
 
 + Add detection check
+
+
+### 4.2.2019
+
+- removed some broken fake_useragent dependency
+- checked that it still works
+- updated readme
