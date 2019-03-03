@@ -1,5 +1,8 @@
 # GoogleScraper - Scraping search engines professionally
 
+[![pypi](https://img.shields.io/pypi/v/GoogleScraper.svg?style=for-the-badge)](https://github.com/NikolaiT/GoogleScraper)
+[![Donate](https://img.shields.io/badge/donate-paypal-blue.svg?style=for-the-badge)](https://www.paypal.me/incolumitas)
+
 ## [Scrapeulous.com](https://scrapeulous.com/) - Scraping Service
 
 GoogleScraper is a open source tool and will remain a open source tool in the future.
