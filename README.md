@@ -1,4 +1,8 @@
-# GoogleScraper - Scraping search engines professionally
+# [The successor of GoogleScraper is se-scraper](https://github.com/NikolaiT/se-scraper)
+
+
+## GoogleScraper - Scraping search engines professionally
+
 
 [![pypi](https://img.shields.io/pypi/v/GoogleScraper.svg?style=for-the-badge)](https://github.com/NikolaiT/GoogleScraper)
 [![Donate](https://img.shields.io/badge/donate-paypal-blue.svg?style=for-the-badge)](https://www.paypal.me/incolumitas)
