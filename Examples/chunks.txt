@@ -9,7 +9,7 @@
 " and sets; as well as generator expressions"
 "[37] The standard library has two modules (itertools and functools) that implement functional tools borrowed from Haskell and Standard ML"
 "[38]The core philosophy of the language is summarized by the document "PEP 20 (The Zen of Python)""
-" which includes aphorisms such as:[39]    Beautiful is better than ugly    Explicit is better than implicit    Simple is better than complex    Complex is better than complicated    Readability countsRather than requiring all desired functionality to be built into the language's core"
+" which includes aphorisms such as:[39]    Beautiful is better than ugly    Explicit is better than implicit    Simple is better than complex    Complex is better than complicated    Readability counts  Rather than requiring all desired functionality to be built into the language's core"
 " Python was designed to be highly extensible"
 " Python can also be embedded in existing applications that need a programmable interface"
 " This design of a small core language with a large standard library and an easily extensible interpreter was intended by Van Rossum from the very start because of his frustrations with ABC (which espoused the opposite mindset)"
