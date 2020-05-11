@@ -1,4 +1,4 @@
-# [The successor of GoogleScraper is se-scraper](https://github.com/NikolaiT/se-scraper)
+# [The maintained successor of GoogleScraper is the general purpose crawling infrastructure](https://github.com/NikolaiT/Crawling-Infrastructure)
 
 
 ## GoogleScraper - Scraping search engines professionally
