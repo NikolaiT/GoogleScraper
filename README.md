@@ -11,7 +11,7 @@
 
 GoogleScraper is a open source tool and will remain a open source tool in the future.
 
-Also the modern successor of GoogleScraper, the node tool [se-scraper](https://github.com/NikolaiT/se-scraper), will remain open source and free.
+Also the modern successor of GoogleScraper, the general purpose [crawling infrastructure](https://github.com/NikolaiT/Crawling-Infrastructure), will remain open source and free.
 
 Some people however would want to quickly have a service that lets them scrape some data from Google or
 any other search engine. For this reason, I created the web service [scrapeulous.com](https://scrapeulous.com/).
