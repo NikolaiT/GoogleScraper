@@ -9,7 +9,7 @@
 
 ## [Scrapeulous.com](https://scrapeulous.com/) - Scraping Service
 
-GoogleScraper is a open source tool and will remain a open source tool in the future.
+GoogleScraper is an open source tool and will remain an open source tool in the future.
 
 Also the modern successor of GoogleScraper, the general purpose [crawling infrastructure](https://github.com/NikolaiT/Crawling-Infrastructure), will remain open source and free.
 
@@ -27,7 +27,7 @@ This means that I won't maintain this project anymore. All new development goes 
 There are several reasons why I won't continue to put much effort into this project.
 
 1. Python is not the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This project uses Selenium. Selenium is kind of old and outdated.
-2. Scraping in 2019 is almost completely reduced to controlling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anit-bot mechanisms. And this project still supports raw http requests.
+2. Scraping in 2019 is almost completely reduced to controlling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anti-bot mechanisms. And this project still supports raw http requests.
 3. Scraping should be parallelized in the cloud or among a set of dedicated machines. GoogleScraper cannot handle such use cases without significant effort.
 4. This project is extremely buggy.
 
