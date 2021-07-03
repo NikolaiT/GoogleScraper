@@ -22,12 +22,12 @@ Last State: **Feburary 2019**
 
 The successor of GoogleScraper can be [found here](https://github.com/NikolaiT/se-scraper)
 
-This means that I won't maintain this project anymore. All new development goes in the above project.
+This means that I won't maintain this project anymore. All new development goes into the above project.
 
 There are several reasons why I won't continue to put much effort into this project.
 
-1. Python is not the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This project uses Selenium. Selenium is kind of old and outdated.
-2. Scraping in 2019 is almost completely reduced to controlling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anit-bot mechanisms. And this project still supports raw http requests.
+1. Python is not the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. Puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This project uses Selenium. Selenium is kind of old and outdated.
+2. Scraping in 2019 is almost completely reduced to controlling web browsers. There is no more need to scrape directly on the HTTP protocol level. It's too buggy and too easy to fend off by anti-bot mechanisms. And this project still supports raw http requests.
 3. Scraping should be parallelized in the cloud or among a set of dedicated machines. GoogleScraper cannot handle such use cases without significant effort.
 4. This project is extremely buggy.
 
@@ -41,7 +41,7 @@ It supports a wide range of different search engines and is much more efficient 
 
 For questions you can [contact me on my wegpage](https://incolumitas.com/) and write me an email there.
 
-This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
+This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all the functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
 
 
 ### Table of Contents
@@ -58,7 +58,7 @@ This project is back to live after two years of abandonment. In the coming weeks
 
 GoogleScraper is written in Python 3. You should install at least Python 3.6. The last major development was all done with Python 3.7. So when using Ubuntu 16.04 and Python 3.7 for instance, please install Python 3 from the official packages. I use the [Anaconda Python distribution](https://anaconda.org/anaconda/python), which does work very well for me.
 
-Furthermore, you need to install the Chrome Browser and also the ChromeDriver for Selenium mode. Alternatively install the Firefox Browser and the geckodriver for Selenium Mode. See instructions below.
+Furthermore, you need to install the Chrome Browser and also the ChromeDriver for Selenium mode. Alternatively, install the Firefox Browser and the Geckodriver for Selenium Mode. See instructions below.
 
 You can also install GoogleScraper comfortably with pip:
 
@@ -246,12 +246,10 @@ a real physical user agent. I am pretty sure that it must be possible to handle 
 
 As mentioned above, there are several drawbacks when scraping with `urllib.request` or `requests` modules and doing the networking on my own:
 
-Browsers are ENORMOUSLY complex software systems. Chrome has around 8 millions line of code and firefox even 10 LOC. Huge companies invest a lot of money to push technology forward (HTML5, CSS3, new standards) and each browser
-has a unique behaviour. Therefore it's almost impossible to simulate such a browser manually with HTTP requests.  This means Google has numerous ways to detect anomalies and inconsistencies in the browsing usage. Alone the
-dynamic nature of Javascript makes it impossible to scrape undetected.
+Browsers are ENORMOUSLY complex software systems. Chrome has around 8 millions lines of code and firefox even 10 LOC. Huge companies invest a lot of money to push technology forward (HTML5, CSS3, new standards) and each browser has a unique behaviour. Therefore it's almost impossible to simulate such a browser manually with HTTP requests.  This means Google has numerous ways to detect anomalies and inconsistencies in browsing usage. Alone the dynamic nature of Javascript makes it impossible to scrape undetected.
 
-This cries for an alternative approach, that automates a **real** browser with Python. Best would be to control the Chrome browser since Google has the least incentives to restrict capabilities for their own native browser.
-Hence I need a way to automate Chrome with Python and controlling several independent instances with different proxies set. Then the output of result grows linearly with the number of used proxies...
+This cries for an alternative approach, that automates a **real** browser with Python. The best would be to control the Chrome browser since Google has the least incentives to restrict capabilities for their own native browser.
+Hence, I need a way to automate Chrome with Python and control several independent instances with different proxies set. Then the output of the result grows linearly with the number of used proxies...
 
 Some interesting technologies/software to do so:
 + [Selenium](https://pypi.python.org/pypi/selenium)
@@ -266,9 +264,7 @@ the following:
 GoogleScraper --keyword-file /tmp/keywords --search-engine bing --num-pages-for-keyword 3 --scrape-method selenium
 ```
 
-Here *sel* marks the scraping mode as 'selenium'. This means GoogleScraper.py scrapes with real browsers. This is pretty powerful, since
-you can scrape long and a lot of sites (Google has a hard time blocking real browsers). The argument of the flag `--keyword-file` must be a file with keywords separated by
-newlines. So: For every google query one line. Easy, isnt' it?
+Here *sel* marks the scraping mode as 'selenium'. This means GoogleScraper.py scrapes with real browsers. This is pretty powerful, since you can scrape long and a lot of sites (Google has a hard time blocking real browsers). The argument of the flag `--keyword-file` must be a file with keywords separated by newlines. So: For every google query one line. Easy, isn't it?
 
 Furthermore, the option `--num-pages-for-keyword` means that GoogleScraper will fetch 3 consecutive pages for each keyword.
 
@@ -288,10 +284,9 @@ After the scraping you'll automatically have a new sqlite3 database in the named
 GoogleScraper --shell
 ```
 
-It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
-bit higher (in the top of the script file).
+It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little bit higher (at the top of the script file).
 
-If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with proxies in it and with the following format:
+If you want, you can specify the flag `--proxy-file`. As an argument you need to pass a file with proxies in it and with the following format:
 
 ```
 protocol proxyhost:proxyport username:password
