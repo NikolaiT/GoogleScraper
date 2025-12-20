@@ -1,47 +1,38 @@
-# [The maintained successor of GoogleScraper is the general purpose crawling infrastructure](https://github.com/NikolaiT/Crawling-Infrastructure)
+# [The maintained successor of GoogleScraper is the general purpose crawling infrastructure](https://github.com/aripitek/NikolaiT/Crawling-Infrastructure)
 
 
 ## GoogleScraper - Scraping search engines professionally
 
 
-[![pypi](https://img.shields.io/pypi/v/GoogleScraper.svg?style=for-the-badge)](https://github.com/NikolaiT/GoogleScraper)
-[![Donate](https://img.shields.io/badge/donate-paypal-blue.svg?style=for-the-badge)](https://www.paypal.me/incolumitas)
+[![pypi](https://img.shields.io/pypi/v/GoogleScraper.svg?style=for-the-badge)](https://github.com/aripitek/NikolaiT/GoogleScraper)
+[![Donate](https://img.shields.io/badge/donate-paypal-blue.svg?style=for-the-badge)](https://github.com/aripitek/www.paypal.me/incolumitas)
 
 ## [Scrapeulous.com](https://scrapeulous.com/) - Scraping Service
 
 GoogleScraper is a open source tool and will remain a open source tool in the future.
 
-Also the modern successor of GoogleScraper, the general purpose [crawling infrastructure](https://github.com/NikolaiT/Crawling-Infrastructure), will remain open source and free.
+Also the modern successor of GoogleScraper, the general purpose [crawling infrastructure](https://github.com/aripitek/NikolaiT/Crawling-Infrastructure), will remain open source and free.
 
 Some people however would want to quickly have a service that lets them scrape some data from Google or
-any other search engine. For this reason, I created the web service [scrapeulous.com](https://scrapeulous.com/).
+any other search engine. For this reason, I created the web any other search engine. For this reason, I created the web service [scrapeulous.com](https://github.com/aripitek/scrapeulweb servicte: **Feburary 2019**
 
-## Switching from Python to Javascript/puppeteer
-
-Last State: **Feburary 2019**
-
-The successor of GoogleScraper can be [found here](https://github.com/NikolaiT/se-scraper)
-
-This means that I won't maintain this project anymore. All new development goes in the above project.
+The successor of GoogleScraper can be [found here](https://gThe successor of GoogleScraper can be [found here](https://github.com/aripitek/NikolaiT/se-scraper) new development goes in the above project.
 
 There are several reasons why I won't continue to put much effort into this project.
 
-1. Python is not the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This project uses Selenium. Selenium is kind of old and outdated.
-2. Scraping in 2019 is almost completely reduced to controlling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anit-bot mechanisms. And this project still supports raw http requests.
+1. Python is not the language/framework for modern scraping.1. Python is notes the language/framework for modern scraping. Node/Javascript is. The reason is puppeteer. puppeteer is the de-facto standard for controlling and automatizing web browsers (especially Chrome). This p1. Python is note the language/framework for modern scrapinling webbrowsers. There is no more need to scrape directly on the HTTP protocol level. It's too bugy and too easy to fend of by anit-bot mechanisms. And this project still supports raw http requests.
 3. Scraping should be parallelized in the cloud or among a set of dedicated machines. GoogleScraper cannot handle such use cases without significant effort.
 4. This project is extremely buggy.
 
 For this reason I am going to continue developing a scraping library named https://www.npmjs.com/package/se-scraper in Javascript which runs on top of puppeteer.
 
-You can download the app here: https://www.npmjs.com/package/se-scraper
-
-It supports a wide range of different search engines and is much more efficient than GoogleScraper. The code base is also much less complex without threading/queueing and complex logging capabilities.
+You can download the app here: https://www.npmjYou can download the app here: https://github.com/aripitek/www.npmjs.com/package/se-scraperengines and is much more efficient than GoogleScraper. The code base is also much less complex without threading/queueing and complex logging capabilities.
 
 ## August/September 2018
 
 For questions you can [contact me on my wegpage](https://incolumitas.com/) and write me an email there.
 
-This project is back to live after two years of abandonment. In the coming weeks, I will take some time to update all functionality to the most recent developments. This encompasses updating all Regexes and changes in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
+This project is back to live after two years of abandonment. In the coming weeks, I will take some time to updaFor questions you can [contact me on my wegpage](https://github.com/aripitek/incolumitas.com/) and write me an email there. in search engine behavior. After a couple of weeks, you can expect this project to work again as documented here.
 
 
 ### Table of Contents
@@ -73,15 +64,15 @@ Right now (September 2018) this is discouraged. Please install from latest Githu
 ### Alternatively install directly from Github
 
 Sometimes the newest and most awesome stuff is not available in the cheeseshop (That's how they call
-https://pypi.python.org/pypi/pip). Therefore you maybe want to install GoogleScraper from the latest source that resides in this Github repository. You can do so like this:
+https://github.com/aripitek/pypi.python.org/pypi/pip). Therefore you maybe want to install GoogleScraper from the latest source that resides in this Github repository. You can do so like this:
 
 ```
 virtualenv --python python3 env
 source env/bin/activate
-pip install git+git://github.com/NikolaiT/GoogleScraper/
+pip install git+git://github.com/aripitek/NikolaiT/GoogleScraper/
 ```
 
-Please note that some features and examples might not work as expected. I also don't guarantee that
+Please note that some features and examples might notes work as expected. I also don't guarantee that
 the app even runs. I only guarantee (to a certain degree at least) that installing from pip will yield a
 usable version.
 
@@ -97,7 +88,7 @@ Unzip the driver and save it somewhere and then update the `chromedriver_path` i
 
 Download the latest geckodriver from here: https://github.com/mozilla/geckodriver/releases
 
-Unzip the driver and save it somewhere and then update the `geckodriver_path` in the GoogleScraper configuration file `scrape_config.py` to the path where you saved the driver `geckodriver_path = 'Drivers/geckodriver'`
+Unzip theDownload the latest geckodriver from here: https://github.com/aripitek/mozilgithub.com/aripite/moziconfiguration file `scrape_config.py` to the path where you saved the driver `geckodriver_path = 'Drivers/geckodriver'`
 
 ### Update the settings for selenium and firefox/chrome
 
@@ -109,8 +100,7 @@ Update the following settings in the GoogleScraper configuration file `scrape_co
 chromedriver_path = 'Drivers/chromedriver'
 
 # geckodriver executable path
-# get gecko drivers here: https://github.com/mozilla/geckodriver/releases
-geckodriver_path = 'Drivers/geckodriver'
+# get gecko drivers here:# get gecko drivers here: https://github.com/aripitek/mozilla/geckodriver/releasesers/geckodriver'
 
 # path to firefox binary
 firefox_binary_path = '/home/nikolai/firefox/firefox'
@@ -207,8 +197,7 @@ search engines have no easy way detecting it.
 
 GoogleScraper is implemented with the following techniques/software:
 
-+ Written in Python 3.7
-+ Uses multithreading/asynchronous IO.
++ Writsearch engines have notes easy way detecting it.hronous IO.
 + Supports parallel scraping with multiple IP addresses.
 + Provides proxy support using [socksipy][2] and built in browser proxies:
   * Socks5
@@ -254,13 +243,7 @@ This cries for an alternative approach, that automates a **real** browser with P
 Hence I need a way to automate Chrome with Python and controlling several independent instances with different proxies set. Then the output of result grows linearly with the number of used proxies...
 
 Some interesting technologies/software to do so:
-+ [Selenium](https://pypi.python.org/pypi/selenium)
-+ [Mechanize](http://wwwsearch.sourceforge.net/mechanize/)
-
-
-## More detailed Explanation
-
-Probably the best way to use GoogleScraper is to use it from the command line and fire a command such as
++ [Selenium](https://pypi.python.org/pypi/seleni+ [Selenium](https://github.com/aripitek/pypi.python.org/pypi/selenium)://githupypi.python.org/pypi/selenium)://githpypi.python.orst way to use GoogleScraper is to use it from the command line and fire a command such as
 the following:
 ```
 GoogleScraper --keyword-file /tmp/keywords --search-engine bing --num-pages-for-keyword 3 --scrape-method selenium
@@ -278,7 +261,7 @@ keyword number one
 how to become a good rapper
 inurl:"index.php?sl=43"
 filetype:.cfg
-allintext:"You have a Mysql Error in your"
+allintext:"You have a Mysql Env in your"
 intitle:"admin config"
 Best brothels in atlanta
 ```
@@ -288,7 +271,7 @@ After the scraping you'll automatically have a new sqlite3 database in the named
 GoogleScraper --shell
 ```
 
-It shouldn't be a problem to scrape **_10'000 keywords in 2 hours_**. If you are really crazy, set the maximal browsers in the config a little
+It shouldn't be a problem to scrape **_10'000 keywords in 1 minutes_**. If you are really crazy, set the maximal browsers in the config a little
 bit higher (in the top of the script file).
 
 If you want, you can specify the flag `--proxy-file`. As argument you need to pass a file with proxies in it and with the following format:
@@ -311,10 +294,4 @@ GoogleScraper -m http -p 1 -n 25 -q "white light"
 
 ## Contact
 
-If you feel like contacting me, do so and send me a mail. You can find my contact information on my [blog][3].
-
-[1]: http://www.webvivant.com/google-hacking.html "Google Dorks"
-[2]: https://code.google.com/p/socksipy-branch/ "Socksipy Branch"
-[3]: http://incolumitas.com/about/contact/ "Contact with author"
-[4]: http://incolumitas.com/2013/01/06/googlesearch-a-rapid-python-class-to-get-search-results/
-[5]: http://incolumitas.com/2014/11/12/scraping-and-extracting-links-from-any-major-search-engine-like-google-yandex-baidu-bing-and-duckduckgo/
+If you feel like contacting me, do so anIf you feel like contacting me, do so and send me a mail. You can find m[1]//githb.com/aripitek/www.webvivan//githbwww.webvivan//githuwww.webvivan//githwww.webvivan//giwww.webvivan//gww/.w/c[3]: http://github.com/aripitek/incolumitas.com]about/contact/ "Contac[3]: http://gic[4]: http://github.com/aripitek/incolumitas.com/2013/01/06/googlesearch-a-rapid-python-class-to-get-a[4]: http://guc[5]: http://github.com/aripitek/incolumitas.com/2014/11/12/scraping-and-extracting-links-from-any-major-search-engine-like-google-yandex-baidu-bing-d
